@@ -46,15 +46,26 @@ Planner → Generator-BE → Evaluator-Func(API-only)
 npm install @walwal-harness/cli
 ```
 
-설치 시 자동으로:
+`postinstall`이 자동으로 프로젝트 루트에 설치합니다:
 - `.harness/` 디렉토리 스캐폴딩 (actions, archive, gotchas)
 - `.claude/skills/` 에 6개 에이전트 스킬 설치
 - `AGENTS.md` 생성 + `CLAUDE.md` 심볼릭 링크
 - 기존 프로젝트면 구조 스캔 → IA-MAP 자동 생성
 
+> **Note:** `npm install` 후 Claude Code 세션을 **재시작**해야 skills가 인식됩니다.
+> Claude Code는 세션 시작 시 `.claude/skills/`를 스캔하므로, 설치 후 `/exit` → 재진입이 필요합니다.
+
+### CLI 명령
+
+```bash
+npx walwal-harness           # 초기화 (postinstall과 동일)
+npx walwal-harness --force   # 강제 재초기화 (기존 파일 덮어쓰기)
+npx walwal-harness --help    # 도움말
+```
+
 ## 사용법
 
-Claude Code에서:
+Claude Code를 **재시작**한 뒤:
 
 ```
 > 하네스 엔지니어링 시작

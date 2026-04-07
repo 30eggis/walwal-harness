@@ -13,13 +13,43 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const PROJECT_ROOT = process.cwd();
 const PKG_ROOT = path.resolve(__dirname, '..');
-const HARNESS_DIR = path.join(PROJECT_ROOT, '.harness');
-const CLAUDE_SKILLS_DIR = path.join(PROJECT_ROOT, '.claude', 'skills');
-
 const isAuto = process.argv.includes('--auto');
 const isForce = process.argv.includes('--force');
+const isHelp = process.argv.includes('--help') || process.argv.includes('-h');
+
+// ─────────────────────────────────────────
+// Resolve project root
+// ─────────────────────────────────────────
+// During `npm install` postinstall, cwd is the dependency's own directory
+// inside node_modules, NOT the consumer project root.
+// We detect this and walk up to find the actual project root.
+function resolveProjectRoot() {
+  let cwd = process.cwd();
+
+  // If we're running inside node_modules, walk up to the project root
+  // e.g. /project/node_modules/@walwal-harness/cli → /project
+  const nmIndex = cwd.indexOf(path.sep + 'node_modules' + path.sep);
+  if (nmIndex !== -1) {
+    return cwd.substring(0, nmIndex);
+  }
+
+  // Also handle case where cwd IS a node_modules child (no trailing sep match)
+  if (cwd.includes(`${path.sep}node_modules`)) {
+    const parts = cwd.split(path.sep);
+    const nmIdx = parts.indexOf('node_modules');
+    if (nmIdx > 0) {
+      return parts.slice(0, nmIdx).join(path.sep);
+    }
+  }
+
+  // npx or direct invocation — cwd is the project root
+  return cwd;
+}
+
+const PROJECT_ROOT = resolveProjectRoot();
+const HARNESS_DIR = path.join(PROJECT_ROOT, '.harness');
+const CLAUDE_SKILLS_DIR = path.join(PROJECT_ROOT, '.claude', 'skills');
 
 // ─────────────────────────────────────────
 // Utility
@@ -254,14 +284,52 @@ function checkPlaywrightMcp() {
 }
 
 // ─────────────────────────────────────────
+// Help
+// ─────────────────────────────────────────
+function showHelp() {
+  const pkg = require(path.join(PKG_ROOT, 'package.json'));
+  console.log(`
+╔══════════════════════════════════════╗
+║     walwal-harness v${pkg.version.padEnd(16)}║
+║     AI Agent Harness Engineering     ║
+╚══════════════════════════════════════╝
+
+Usage:
+  npx walwal-harness           Initialize project for harness engineering
+  npx walwal-harness --force   Re-initialize (overwrites existing files)
+  npx walwal-harness --help    Show this help
+
+What it does:
+  1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
+  2. Installs skills to .claude/skills/ (dispatcher, planner, generators, evaluators)
+  3. Copies helper scripts to scripts/
+  4. Creates AGENTS.md + CLAUDE.md symlink
+  5. Checks Playwright MCP configuration
+
+After init:
+  1. Restart Claude Code session (exit and re-enter) for skills to load
+  2. Say "하네스 엔지니어링 시작" or invoke /harness-dispatcher
+`);
+}
+
+// ─────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────
 function main() {
+  if (isHelp) {
+    showHelp();
+    return;
+  }
+
+  const pkg = require(path.join(PKG_ROOT, 'package.json'));
   console.log('');
   console.log('╔══════════════════════════════════════╗');
-  console.log('║     walwal-harness v1.0.0            ║');
+  console.log(`║     walwal-harness v${pkg.version.padEnd(16)}║`);
   console.log('║     AI Agent Harness Engineering     ║');
   console.log('╚══════════════════════════════════════╝');
+  console.log('');
+
+  log(`Project root: ${PROJECT_ROOT}`);
   console.log('');
 
   scaffoldHarness();
@@ -273,8 +341,23 @@ function main() {
   console.log('');
   log('═══ Initialization Complete ═══');
   log('');
-  log('Start with: "하네스 엔지니어링 시작"');
-  log('Or invoke:  /harness-dispatcher');
+
+  if (isAuto) {
+    // postinstall context — Claude Code is likely already running
+    log('╔═══════════════════════════════════════════════════════════╗');
+    log('║  IMPORTANT: Restart Claude Code for skills to activate!  ║');
+    log('║                                                          ║');
+    log('║  Claude Code discovers skills at session startup.        ║');
+    log('║  Type /exit, then re-enter this directory to begin.      ║');
+    log('║                                                          ║');
+    log('║  Then say: "하네스 엔지니어링 시작"                        ║');
+    log('║  Or invoke: /harness-dispatcher                          ║');
+    log('╚═══════════════════════════════════════════════════════════╝');
+  } else {
+    log('Next steps:');
+    log('  1. Restart Claude Code session (/exit → re-enter directory)');
+    log('  2. Say "하네스 엔지니어링 시작" or invoke /harness-dispatcher');
+  }
   console.log('');
 }
 
