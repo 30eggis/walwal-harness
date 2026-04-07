@@ -1,0 +1,108 @@
+{
+  "harness": {
+    "name": "6-Agent Production Harness",
+    "version": "3.0.0",
+    "description": "Dispatcher + NestJS MSA + React/Next.js + Playwright 기반 실무 하네스",
+    "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
+  },
+  "agents": {
+    "dispatcher": {
+      "role": "사용자 요청 분석 → 파이프라인 결정 (FE-ONLY / BE-ONLY / FULLSTACK)",
+      "prompt_file": "prompts/dispatcher.md",
+      "outputs": ["actions/pipeline.json"],
+      "triggers_next": "planner",
+      "always_first": true
+    },
+    "planner": {
+      "role": "제품 사양 + API 계약서 + 서비스 분할 설계",
+      "prompt_file": "prompts/planner.md",
+      "outputs": [
+        "actions/plan.md",
+        "actions/feature-list.json",
+        "actions/api-contract.json"
+      ],
+      "triggers_next": ["generator-backend", "generator-frontend"]
+    },
+    "generator-backend": {
+      "role": "NestJS MSA 서비스 구현, API 엔드포인트, DB 스키마",
+      "prompt_file": "prompts/generator-backend.md",
+      "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
+      "outputs": ["code:backend", "actions/sprint-contract.md"],
+      "triggers_next": "generator-frontend",
+      "order": 1
+    },
+    "generator-frontend": {
+      "role": "React/Next.js UI 컴포넌트, 상태관리, API 연동",
+      "prompt_file": "prompts/generator-frontend.md",
+      "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
+      "outputs": ["code:frontend", "actions/sprint-contract.md"],
+      "triggers_next": "evaluator-functional",
+      "order": 2
+    },
+    "evaluator-functional": {
+      "role": "Playwright로 E2E 기능 검증, API 응답/DB 상태 확인",
+      "prompt_file": "prompts/evaluator-functional.md",
+      "tools": ["playwright:browser_*"],
+      "inputs": ["actions/sprint-contract.md"],
+      "outputs": ["actions/evaluation-functional.md"],
+      "on_fail": "generator-backend OR generator-frontend (결함 위치에 따라)",
+      "on_pass": "evaluator-visual"
+    },
+    "evaluator-visual": {
+      "role": "디자인 일관성, 반응형, 접근성, AI슬롭 감지",
+      "prompt_file": "prompts/evaluator-visual.md",
+      "tools": ["playwright:browser_take_screenshot", "playwright:browser_resize", "playwright:browser_snapshot"],
+      "inputs": ["actions/sprint-contract.md", "actions/evaluation-functional.md"],
+      "outputs": ["actions/evaluation-visual.md"],
+      "on_fail": "generator-frontend",
+      "on_pass": "archive_and_next_sprint"
+    }
+  },
+  "flow": {
+    "sequence": ["dispatcher", "planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
+    "pipeline_selection": {
+      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. 이하 sequence에서 스킵 대상 제외.",
+      "pipelines": {
+        "FULLSTACK": ["planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
+        "FE-ONLY": ["planner:light", "generator-frontend", "evaluator-functional", "evaluator-visual"],
+        "BE-ONLY": ["planner", "generator-backend", "evaluator-functional:api-only"]
+      }
+    },
+    "sprint_execution": {
+      "comment": "Backend 먼저 → API 안정 후 Frontend 연동 → 기능 QA → 비주얼 QA (FULLSTACK 기준)",
+      "backend_first": true,
+      "reason": "프론트가 존재하지 않는 API를 호출하는 실패 방지"
+    },
+    "retry_on_fail": true,
+    "max_retries_per_sprint": 10,
+    "archive_on_sprint_complete": true
+  },
+  "paths": {
+    "actions": ".harness/actions",
+    "archive": ".harness/archive",
+    "prompts": ".harness/prompts",
+    "gotchas": ".harness/gotchas",
+    "progress": ".harness/progress.txt"
+  },
+  "tech_stack": {
+    "backend": {
+      "framework": "NestJS (TypeScript)",
+      "architecture": "MSA (Microservice Architecture)",
+      "monorepo": "Nx 또는 Turborepo",
+      "runner": "통합 러너 (단일 명령으로 전체 서비스 기동/종료)",
+      "database": "PostgreSQL (dev: SQLite fallback 가능)",
+      "api_gateway": "NestJS API Gateway 패턴",
+      "transport": "TCP (dev) / RabbitMQ 또는 NATS (prod)"
+    },
+    "frontend": {
+      "framework": "React 또는 Next.js (TypeScript)",
+      "state": "Zustand 또는 TanStack Query",
+      "styling": "Tailwind CSS"
+    },
+    "testing": {
+      "e2e": "Playwright MCP (browser_* tools)",
+      "backend_unit": "Jest (NestJS 내장)",
+      "frontend_unit": "Vitest"
+    }
+  }
+}

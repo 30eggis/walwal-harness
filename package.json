@@ -1,0 +1,35 @@
+{
+  "name": "@walwal-harness/cli",
+  "version": "1.1.0",
+  "description": "Production harness for AI agent engineering — Planner, Generator(BE/FE), Evaluator(Func/Visual) with Gotcha management",
+  "bin": {
+    "walwal-harness": "bin/init.js"
+  },
+  "scripts": {
+    "postinstall": "node bin/init.js --auto",
+    "init": "node bin/init.js",
+    "scan": "bash scripts/scan-project.sh .",
+    "reset": "node bin/init.js --force"
+  },
+  "keywords": [
+    "harness-engineering",
+    "ai-agent",
+    "claude-code",
+    "skill",
+    "planner",
+    "generator",
+    "evaluator",
+    "nestjs",
+    "react",
+    "playwright"
+  ],
+  "author": "",
+  "license": "MIT",
+  "files": [
+    "bin/",
+    "skills/",
+    "scripts/",
+    "assets/",
+    "gotchas/"
+  ]
+}

@@ -1,0 +1,11 @@
+# Runtime generated (created by postinstall, not distributed)
+.harness/
+AGENTS.md
+CLAUDE.md
+init.sh
+references/
+
+# Dev
+.git/
+node_modules/
+*.log

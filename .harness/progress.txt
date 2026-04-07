@@ -1,0 +1,18 @@
+# Harness Progress Log
+# 세션 간 상태 전달을 위한 진행 기록 파일
+# ─────────────────────────────────────────────────
+
+## [2026-04-07] Harness v2.1 — Production Setup
+- 5-Agent 아키텍처 구축 완료
+  - Planner → Generator-Backend → Generator-Frontend → Evaluator-Functional → Evaluator-Visual
+- Tech Stack: NestJS MSA + React/Next.js + Playwright MCP
+- 통합 러너: `npm run dev` (concurrently)
+- MCP: Chrome DevTools 제거, Playwright MCP 설치 완료
+- api-contract.json: Gateway ↔ Services ↔ Frontend 계약서 체계
+
+## Current State
+- Phase: INIT (Planner 실행 대기)
+- Active Sprint: none
+- Features Completed: 0 / 0
+- Blocking Issues: none
+- Next Action: 사용자가 프로젝트 설명 제공 → Planner 실행

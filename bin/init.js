@@ -1,0 +1,281 @@
+#!/usr/bin/env node
+
+/**
+ * walwal-harness initializer
+ *
+ * Usage:
+ *   npx walwal-harness          # Interactive init
+ *   npx walwal-harness --auto   # Auto init (postinstall)
+ *   npx walwal-harness --force  # Force reinit
+ */
+
+const fs = require('fs');
+const path = require('path');
+const { execSync } = require('child_process');
+
+const PROJECT_ROOT = process.cwd();
+const PKG_ROOT = path.resolve(__dirname, '..');
+const HARNESS_DIR = path.join(PROJECT_ROOT, '.harness');
+const CLAUDE_SKILLS_DIR = path.join(PROJECT_ROOT, '.claude', 'skills');
+
+const isAuto = process.argv.includes('--auto');
+const isForce = process.argv.includes('--force');
+
+// ─────────────────────────────────────────
+// Utility
+// ─────────────────────────────────────────
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+function copyFile(src, dest) {
+  ensureDir(path.dirname(dest));
+  fs.copyFileSync(src, dest);
+}
+
+function copyDir(src, dest) {
+  ensureDir(dest);
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDir(srcPath, destPath);
+    } else {
+      copyFile(srcPath, destPath);
+    }
+  }
+}
+
+function fileExists(p) {
+  return fs.existsSync(p);
+}
+
+function log(msg) {
+  console.log(`[walwal-harness] ${msg}`);
+}
+
+// ─────────────────────────────────────────
+// 1. .harness/ scaffolding
+// ─────────────────────────────────────────
+function scaffoldHarness() {
+  log('Scaffolding .harness/ directory...');
+
+  // Core directories
+  ensureDir(path.join(HARNESS_DIR, 'actions'));
+  ensureDir(path.join(HARNESS_DIR, 'archive'));
+  ensureDir(path.join(HARNESS_DIR, 'gotchas'));
+
+  // Copy gotchas initial files
+  const gotchasSrc = path.join(PKG_ROOT, 'gotchas');
+  if (fs.existsSync(gotchasSrc)) {
+    const files = fs.readdirSync(gotchasSrc);
+    for (const file of files) {
+      const dest = path.join(HARNESS_DIR, 'gotchas', file);
+      if (!fileExists(dest) || isForce) {
+        copyFile(path.join(gotchasSrc, file), dest);
+      }
+    }
+  }
+
+  // Copy templates as initial files
+  const templateMap = {
+    'progress.txt.template': path.join(HARNESS_DIR, 'progress.txt'),
+  };
+
+  const templatesDir = path.join(PKG_ROOT, 'assets', 'templates');
+  if (fs.existsSync(templatesDir)) {
+    for (const [template, dest] of Object.entries(templateMap)) {
+      const src = path.join(templatesDir, template);
+      if (fs.existsSync(src) && (!fileExists(dest) || isForce)) {
+        let content = fs.readFileSync(src, 'utf8');
+        content = content.replace(/\{\{DATE\}\}/g, new Date().toISOString().split('T')[0]);
+        fs.writeFileSync(dest, content);
+      }
+    }
+  }
+
+  // Copy config.json
+  const configSrc = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
+  const configDest = path.join(HARNESS_DIR, 'config.json');
+  if (fs.existsSync(configSrc) && (!fileExists(configDest) || isForce)) {
+    copyFile(configSrc, configDest);
+  }
+
+  // Copy HARNESS.md
+  const harnessMdSrc = path.join(PKG_ROOT, 'assets', 'templates', 'HARNESS.md');
+  const harnessMdDest = path.join(HARNESS_DIR, 'HARNESS.md');
+  if (fs.existsSync(harnessMdSrc) && (!fileExists(harnessMdDest) || isForce)) {
+    copyFile(harnessMdSrc, harnessMdDest);
+  }
+
+  log('.harness/ scaffolding complete');
+}
+
+// ─────────────────────────────────────────
+// 2. Skills → .claude/skills/
+// ─────────────────────────────────────────
+function installSkills() {
+  log('Installing skills to .claude/skills/...');
+
+  const skillsSrc = path.join(PKG_ROOT, 'skills');
+  if (!fs.existsSync(skillsSrc)) {
+    log('WARNING: skills/ directory not found in package');
+    return;
+  }
+
+  const skills = fs.readdirSync(skillsSrc, { withFileTypes: true })
+    .filter(d => d.isDirectory())
+    .map(d => d.name);
+
+  for (const skill of skills) {
+    const src = path.join(skillsSrc, skill);
+    const dest = path.join(CLAUDE_SKILLS_DIR, `harness-${skill}`);
+
+    if (!fileExists(dest) || isForce) {
+      copyDir(src, dest);
+      log(`  Installed: harness-${skill}`);
+    } else {
+      log(`  Skipped (exists): harness-${skill}`);
+    }
+  }
+
+  log('Skills installation complete');
+}
+
+// ─────────────────────────────────────────
+// 3. Scripts
+// ─────────────────────────────────────────
+function installScripts() {
+  log('Installing scripts...');
+
+  const scriptsSrc = path.join(PKG_ROOT, 'scripts');
+  const scriptsDest = path.join(PROJECT_ROOT, 'scripts');
+
+  if (fs.existsSync(scriptsSrc)) {
+    ensureDir(scriptsDest);
+    const files = fs.readdirSync(scriptsSrc);
+    for (const file of files) {
+      const dest = path.join(scriptsDest, file);
+      if (!fileExists(dest) || isForce) {
+        copyFile(path.join(scriptsSrc, file), dest);
+        try { fs.chmodSync(dest, '755'); } catch (e) {}
+      }
+    }
+  }
+
+  log('Scripts installation complete');
+}
+
+// ─────────────────────────────────────────
+// 4. AGENTS.md + CLAUDE.md
+// ─────────────────────────────────────────
+function setupAgentsMd() {
+  const agentsMd = path.join(PROJECT_ROOT, 'AGENTS.md');
+  const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md');
+
+  // Run scan if no AGENTS.md
+  if (!fileExists(agentsMd) || isForce) {
+    log('Running project scan...');
+    try {
+      execSync(`bash "${path.join(PKG_ROOT, 'scripts', 'scan-project.sh')}" "${PROJECT_ROOT}"`, {
+        stdio: 'inherit'
+      });
+      execSync(`bash "${path.join(PKG_ROOT, 'scripts', 'init-agents-md.sh')}" "${PROJECT_ROOT}"`, {
+        stdio: 'inherit'
+      });
+    } catch (e) {
+      log('WARNING: Auto-scan failed. Run manually: bash scripts/scan-project.sh .');
+      // Create minimal AGENTS.md
+      const templateSrc = path.join(PKG_ROOT, 'assets', 'templates', 'AGENTS.md.template');
+      if (fs.existsSync(templateSrc)) {
+        let content = fs.readFileSync(templateSrc, 'utf8');
+        content = content.replace(/\{\{DATE\}\}/g, new Date().toISOString().split('T')[0]);
+        fs.writeFileSync(agentsMd, content);
+      }
+    }
+  }
+
+  // Ensure CLAUDE.md symlink
+  if (fileExists(agentsMd)) {
+    try {
+      const stat = fs.lstatSync(claudeMd);
+      if (!stat.isSymbolicLink()) {
+        // Backup existing CLAUDE.md
+        const backupDir = path.join(HARNESS_DIR, 'archive', 'pre-harness-backup');
+        ensureDir(backupDir);
+        fs.copyFileSync(claudeMd, path.join(backupDir, `CLAUDE.md.${Date.now()}.bak`));
+        fs.unlinkSync(claudeMd);
+        fs.symlinkSync('AGENTS.md', claudeMd);
+        log('CLAUDE.md backed up and replaced with symlink → AGENTS.md');
+      }
+    } catch (e) {
+      // CLAUDE.md doesn't exist
+      try {
+        fs.symlinkSync('AGENTS.md', claudeMd);
+        log('Created symlink: CLAUDE.md → AGENTS.md');
+      } catch (e2) {}
+    }
+  }
+}
+
+// ─────────────────────────────────────────
+// 5. Playwright MCP check
+// ─────────────────────────────────────────
+function checkPlaywrightMcp() {
+  const mcpJson = path.join(require('os').homedir(), '.mcp.json');
+
+  if (fileExists(mcpJson)) {
+    try {
+      const config = JSON.parse(fs.readFileSync(mcpJson, 'utf8'));
+      if (config.mcpServers && config.mcpServers.playwright) {
+        log('Playwright MCP: already configured');
+        return;
+      }
+    } catch (e) {}
+  }
+
+  log('');
+  log('NOTE: Playwright MCP is not configured.');
+  log('Evaluator agents require Playwright MCP for browser testing.');
+  log('Add to ~/.mcp.json:');
+  log('');
+  log('  {');
+  log('    "mcpServers": {');
+  log('      "playwright": {');
+  log('        "command": "npx",');
+  log('        "args": ["-y", "@playwright/mcp@latest", "--headless", "--caps", "vision"]');
+  log('      }');
+  log('    }');
+  log('  }');
+  log('');
+}
+
+// ─────────────────────────────────────────
+// Main
+// ─────────────────────────────────────────
+function main() {
+  console.log('');
+  console.log('╔══════════════════════════════════════╗');
+  console.log('║     walwal-harness v1.0.0            ║');
+  console.log('║     AI Agent Harness Engineering     ║');
+  console.log('╚══════════════════════════════════════╝');
+  console.log('');
+
+  scaffoldHarness();
+  installSkills();
+  installScripts();
+  setupAgentsMd();
+  checkPlaywrightMcp();
+
+  console.log('');
+  log('═══ Initialization Complete ═══');
+  log('');
+  log('Start with: "하네스 엔지니어링 시작"');
+  log('Or invoke:  /harness-dispatcher');
+  console.log('');
+}
+
+main();
