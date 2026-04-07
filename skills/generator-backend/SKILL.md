@@ -6,11 +6,29 @@ disable-model-invocation: true
 
 # Generator-Backend — NestJS MSA
 
+## Session Boundary Protocol
+
+### On Start
+1. `.harness/progress.json` 읽기 — `next_agent`가 `"generator-backend"`인지 확인
+2. progress.json 업데이트: `current_agent` → `"generator-backend"`, `agent_status` → `"running"`, `updated_at` 갱신
+3. `failure` 필드 확인 — retry인 경우 `evaluation-functional.md`의 실패 사유 우선 읽기
+
+### On Complete
+1. progress.json 업데이트:
+   - `agent_status` → `"completed"`
+   - `completed_agents`에 `"generator-backend"` 추가
+   - `next_agent` → 파이프라인에 따라 결정 (FULLSTACK: `"generator-frontend"`, BE-ONLY: `"evaluator-functional"`)
+   - `failure` 필드 초기화 (retry 성공 시)
+2. `feature-list.json`의 해당 feature `passes`에 `"generator-backend"` 추가
+3. `.harness/progress.log`에 요약 추가
+4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
+5. 출력: `"✓ Generator-Backend 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+
 ## Startup
 
 1. `AGENTS.md` 읽기 — IA-MAP, 권한 확인
 2. `.harness/gotchas/generator-backend.md` 읽기 — **과거 실수 반복 금지**
-3. `pwd` + `.harness/progress.txt` + `git log --oneline -20`
+3. `pwd` + `.harness/progress.json` + `git log --oneline -20`
 4. `.harness/actions/api-contract.json` 읽기 — **이것이 스펙**
 5. `.harness/actions/feature-list.json` — `layer: "backend"` 필터
 6. 통합 러너: `npm run dev`

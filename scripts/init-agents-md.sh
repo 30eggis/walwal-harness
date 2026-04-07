@@ -267,7 +267,7 @@ ${USER_RULES}
 | AGENTS.md | 전체 | Planner만 |
 | .harness/actions/api-contract.json | 전체 | Planner만 |
 | .harness/actions/feature-list.json | 전체 | passes: Generator, 나머지: Planner |
-| .harness/progress.txt | 전체 | 전체 (세션 종료 시 업데이트 의무) |
+| .harness/progress.json | 전체 | 전체 (Session Boundary Protocol에 따라 업데이트) |
 | \`[BE]\` 소유 경로 | 전체 | Generator-Backend만 |
 | \`[FE]\` 소유 경로 | 전체 | Generator-Frontend만 |
 | .harness/archive/ | 전체 | 쓰기 금지 (불변) |
@@ -291,7 +291,7 @@ AGENTS.md 또는 api-contract.json 변경이 필요할 때:
 | 명령 | 설명 |
 |------|------|
 | \`bash scripts/scan-project.sh\` | 프로젝트 구조 재스캔 |
-| \`.harness/progress.txt\` | 현재 진행 상태 |
+| \`.harness/progress.json\` | 현재 진행 상태 (기계 판독) |
 | \`.harness/actions/\` | 활성 스프린트 문서 |
 | \`.harness/HARNESS.md\` | 하네스 상세 가이드 |
 AGENTSEOF

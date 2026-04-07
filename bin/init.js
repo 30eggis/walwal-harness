@@ -112,7 +112,7 @@ function scaffoldHarness() {
 
   // Copy templates as initial files
   const templateMap = {
-    'progress.txt.template': path.join(HARNESS_DIR, 'progress.txt'),
+    'progress.json.template': path.join(HARNESS_DIR, 'progress.json'),
   };
 
   const templatesDir = path.join(PKG_ROOT, 'assets', 'templates');
@@ -139,6 +139,19 @@ function scaffoldHarness() {
   const harnessMdDest = path.join(HARNESS_DIR, 'HARNESS.md');
   if (fs.existsSync(harnessMdSrc) && (!fileExists(harnessMdDest) || isForce)) {
     copyFile(harnessMdSrc, harnessMdDest);
+  }
+
+  // Create progress.log
+  const progressLog = path.join(HARNESS_DIR, 'progress.log');
+  if (!fileExists(progressLog) || isForce) {
+    const date = new Date().toISOString().split('T')[0];
+    fs.writeFileSync(progressLog, `# Harness Progress Log\n# ${date} — Initialized\n`);
+  }
+
+  // Create next-prompt.txt placeholder
+  const nextPrompt = path.join(HARNESS_DIR, 'next-prompt.txt');
+  if (!fileExists(nextPrompt) || isForce) {
+    fs.writeFileSync(nextPrompt, '');
   }
 
   log('.harness/ scaffolding complete');
@@ -186,17 +199,76 @@ function installScripts() {
 
   if (fs.existsSync(scriptsSrc)) {
     ensureDir(scriptsDest);
-    const files = fs.readdirSync(scriptsSrc);
-    for (const file of files) {
-      const dest = path.join(scriptsDest, file);
-      if (!fileExists(dest) || isForce) {
-        copyFile(path.join(scriptsSrc, file), dest);
-        try { fs.chmodSync(dest, '755'); } catch (e) {}
+    const entries = fs.readdirSync(scriptsSrc, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(scriptsSrc, entry.name);
+      const destPath = path.join(scriptsDest, entry.name);
+      if (entry.isDirectory()) {
+        // Copy subdirectories (e.g., lib/)
+        if (!fileExists(destPath) || isForce) {
+          copyDir(srcPath, destPath);
+          // Make scripts in subdirs executable
+          try {
+            const subFiles = fs.readdirSync(destPath);
+            for (const f of subFiles) {
+              if (f.endsWith('.sh')) {
+                fs.chmodSync(path.join(destPath, f), '755');
+              }
+            }
+          } catch (e) {}
+        }
+      } else {
+        if (!fileExists(destPath) || isForce) {
+          copyFile(srcPath, destPath);
+          try { fs.chmodSync(destPath, '755'); } catch (e) {}
+        }
       }
     }
   }
 
   log('Scripts installation complete');
+}
+
+// ─────────────────────────────────────────
+// 3b. SessionStart hook
+// ─────────────────────────────────────────
+function installSessionHook() {
+  log('Installing SessionStart hook...');
+
+  const settingsDir = path.join(PROJECT_ROOT, '.claude');
+  const settingsFile = path.join(settingsDir, 'settings.json');
+
+  ensureDir(settingsDir);
+
+  let settings = {};
+  if (fileExists(settingsFile)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    } catch (e) {
+      log('WARNING: Could not parse existing .claude/settings.json, creating new');
+    }
+  }
+
+  // Ensure hooks.SessionStart array exists
+  if (!settings.hooks) settings.hooks = {};
+  if (!settings.hooks.SessionStart) settings.hooks.SessionStart = [];
+
+  // Check if our hook is already installed
+  const hookCmd = 'bash scripts/harness-session-start.sh';
+  const alreadyInstalled = settings.hooks.SessionStart.some(
+    h => h.command && h.command.includes('harness-session-start')
+  );
+
+  if (!alreadyInstalled) {
+    settings.hooks.SessionStart.push({
+      type: 'command',
+      command: hookCmd
+    });
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    log('SessionStart hook installed in .claude/settings.json');
+  } else {
+    log('SessionStart hook already installed');
+  }
 }
 
 // ─────────────────────────────────────────
@@ -390,6 +462,7 @@ function main() {
   scaffoldHarness();
   installSkills();
   installScripts();
+  installSessionHook();
   setupAgentsMd();
   checkPlaywrightMcp();
   checkRecommendedSkills();

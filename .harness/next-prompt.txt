@@ -1,0 +1,3 @@
+/harness-evaluator-functional 를 실행하세요.
+Sprint 1을 진행합니다.
+.harness/progress.json을 읽고 현재 상태를 확인하세요.

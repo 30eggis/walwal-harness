@@ -135,7 +135,7 @@ your-project/
 ├── CLAUDE.md → AGENTS.md           # 심볼릭 링크
 ├── .harness/
 │   ├── config.json                 # 하네스 설정
-│   ├── progress.txt                # 세션 간 상태 전달
+│   ├── progress.json               # 세션 간 상태 (기계 판독)
 │   ├── gotchas/                    # 에이전트별 실수 기록
 │   │   ├── planner.md
 │   │   ├── generator-backend.md
