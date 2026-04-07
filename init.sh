@@ -29,10 +29,16 @@ echo ""
 
 # Harness 상태
 echo "--- Harness Status ---"
-if [ -f .harness/progress.txt ]; then
-  tail -10 .harness/progress.txt
+if [ -f .harness/progress.json ]; then
+  # Feature-level 프로그래스 출력
+  if [ -f scripts/lib/harness-render-progress.sh ]; then
+    source scripts/lib/harness-render-progress.sh
+    render_progress "." 2>/dev/null || cat .harness/progress.json
+  else
+    cat .harness/progress.json
+  fi
 else
-  echo "progress.txt not found"
+  echo "progress.json not found"
 fi
 echo ""
 

@@ -67,7 +67,7 @@
 | .harness/actions/feature-list.json | 전체 | passes 필드: Generator, 나머지: Planner만 |
 | .harness/actions/sprint-contract.md | 전체 | Generator-BE(BE섹션), Generator-FE(FE섹션) |
 | .harness/actions/evaluation-*.md | 전체 | 해당 Evaluator만 |
-| .harness/progress.txt | 전체 | 전체 (세션 종료 시 업데이트 의무) |
+| .harness/progress.json | 전체 | 전체 (Session Boundary Protocol에 따라 업데이트) |
 | apps/gateway/, apps/service-*/ | 전체 | Generator-Backend만 |
 | apps/web/ | 전체 | Generator-Frontend만 |
 | libs/ | 전체 | Generator-Backend만 |
@@ -96,6 +96,6 @@ Generator/Evaluator가 AGENTS.md 또는 api-contract.json 변경이 필요하다
 |------|------|
 | `npm run dev` | 통합 러너 (Gateway + 전체 서비스 + Frontend) |
 | `bash init.sh` | 환경 확인 + 서비스 기동 |
-| `.harness/progress.txt` | 현재 진행 상태 |
+| `.harness/progress.json` | 현재 진행 상태 (기계 판독) |
 | `.harness/actions/` | 활성 스프린트 문서 |
 | `.harness/HARNESS.md` | 하네스 상세 가이드 |

@@ -6,6 +6,23 @@ disable-model-invocation: false
 
 # Dispatcher — Pipeline Selector + Gotcha Manager
 
+## Session Boundary Protocol
+
+### On Start
+1. `.harness/progress.json` 읽기 — `next_agent`가 `"dispatcher"`인지 확인
+2. progress.json 업데이트: `current_agent` → `"dispatcher"`, `agent_status` → `"running"`, `updated_at` 갱신
+
+### On Complete
+1. progress.json 업데이트:
+   - `agent_status` → `"completed"`
+   - `completed_agents`에 `"dispatcher"` 추가
+   - `next_agent` → `"planner"`
+   - `pipeline` → 선택된 파이프라인 (FULLSTACK/FE-ONLY/BE-ONLY)
+   - `sprint.number` → `1`, `sprint.status` → `"in_progress"`
+2. `.harness/progress.log`에 요약 한 줄 추가
+3. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
+4. 출력: `"✓ Dispatcher 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+
 ## 1. Request Classification (최우선)
 
 사용자 입력을 먼저 분류합니다:
@@ -50,4 +67,4 @@ AGENTS.md 비하네스  → 기존 백업 + 리빌드
 
 ## 5. Output
 
-`.harness/actions/pipeline.json` 생성 → 사용자 확인 → 다음 에이전트 실행
+`.harness/actions/pipeline.json` 생성 → 사용자 확인 → Session Boundary Protocol On Complete 실행

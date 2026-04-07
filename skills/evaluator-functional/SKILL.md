@@ -6,6 +6,37 @@ disable-model-invocation: true
 
 # Evaluator-Functional — Playwright MCP
 
+## Session Boundary Protocol
+
+### On Start
+1. `.harness/progress.json` 읽기 — `next_agent`가 `"evaluator-functional"`인지 확인
+2. progress.json 업데이트: `current_agent` → `"evaluator-functional"`, `agent_status` → `"running"`, `updated_at` 갱신
+
+### On Complete (PASS)
+1. progress.json 업데이트:
+   - `agent_status` → `"completed"`
+   - `completed_agents`에 `"evaluator-functional"` 추가
+   - `next_agent` → 파이프라인에 따라 결정 (FULLSTACK/FE-ONLY: `"evaluator-visual"`, BE-ONLY: `"archive"`)
+   - `failure` 필드 초기화
+2. `feature-list.json`의 통과 feature `passes`에 `"evaluator-functional"` 추가
+3. `.harness/progress.log`에 PASS 요약 추가
+4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
+5. 출력: `"✓ Evaluator-Functional PASS. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+
+### On Fail
+1. progress.json 업데이트:
+   - `agent_status` → `"failed"`
+   - `failure.agent` → `"evaluator-functional"`
+   - `failure.location` → `"backend"` 또는 `"frontend"` (결함 위치)
+   - `failure.message` → 실패 요약 (1줄)
+   - `failure.retry_target` → `"generator-backend"` 또는 `"generator-frontend"`
+   - `next_agent` → `failure.retry_target`과 동일
+   - `sprint.retry_count` 증가
+2. `sprint.retry_count >= 10`이면 `agent_status` → `"blocked"`, 사용자 개입 요청
+3. `.harness/progress.log`에 FAIL 요약 추가
+4. **STOP.**
+5. 출력: `"✖ Evaluator-Functional FAIL. bash scripts/harness-next.sh 실행하여 재작업 대상 확인."`
+
 ## Critical Mindset
 
 - **회의적 평가자**. Generator의 자체 평가를 신뢰하지 마세요.
@@ -20,7 +51,7 @@ disable-model-invocation: true
 3. `actions/sprint-contract.md` — BE + FE 성공 기준 전체
 4. `actions/feature-list.json` — 이번 스프린트 범위
 5. `actions/api-contract.json` — 기대 API 동작
-6. `progress.txt`
+6. `.harness/progress.json`
 
 ## Evaluation Steps
 
@@ -54,5 +85,5 @@ Playwright 도구 → [도구 레퍼런스](references/playwright-tools.md)
 
 ## After Evaluation
 
-- **PASS** → Evaluator-Visual 핸드오프
-- **FAIL** → `failure_location` 기반 라우팅 (backend/frontend), max 10회
+- **PASS** → Session Boundary Protocol On Complete (PASS) 실행
+- **FAIL** → Session Boundary Protocol On Fail 실행

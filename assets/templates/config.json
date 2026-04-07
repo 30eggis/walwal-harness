@@ -8,54 +8,46 @@
   "agents": {
     "dispatcher": {
       "role": "사용자 요청 분석 → 파이프라인 결정 (FE-ONLY / BE-ONLY / FULLSTACK)",
-      "prompt_file": "prompts/dispatcher.md",
+      "skill": "harness-dispatcher",
       "outputs": ["actions/pipeline.json"],
-      "triggers_next": "planner",
       "always_first": true
     },
     "planner": {
       "role": "제품 사양 + API 계약서 + 서비스 분할 설계",
-      "prompt_file": "prompts/planner.md",
+      "skill": "harness-planner",
       "outputs": [
         "actions/plan.md",
         "actions/feature-list.json",
         "actions/api-contract.json"
-      ],
-      "triggers_next": ["generator-backend", "generator-frontend"]
+      ]
     },
     "generator-backend": {
       "role": "NestJS MSA 서비스 구현, API 엔드포인트, DB 스키마",
-      "prompt_file": "prompts/generator-backend.md",
+      "skill": "harness-generator-backend",
       "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
       "outputs": ["code:backend", "actions/sprint-contract.md"],
-      "triggers_next": "generator-frontend",
       "order": 1
     },
     "generator-frontend": {
       "role": "React/Next.js UI 컴포넌트, 상태관리, API 연동",
-      "prompt_file": "prompts/generator-frontend.md",
+      "skill": "harness-generator-frontend",
       "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
       "outputs": ["code:frontend", "actions/sprint-contract.md"],
-      "triggers_next": "evaluator-functional",
       "order": 2
     },
     "evaluator-functional": {
       "role": "Playwright로 E2E 기능 검증, API 응답/DB 상태 확인",
-      "prompt_file": "prompts/evaluator-functional.md",
+      "skill": "harness-evaluator-functional",
       "tools": ["playwright:browser_*"],
       "inputs": ["actions/sprint-contract.md"],
-      "outputs": ["actions/evaluation-functional.md"],
-      "on_fail": "generator-backend OR generator-frontend (결함 위치에 따라)",
-      "on_pass": "evaluator-visual"
+      "outputs": ["actions/evaluation-functional.md"]
     },
     "evaluator-visual": {
       "role": "디자인 일관성, 반응형, 접근성, AI슬롭 감지",
-      "prompt_file": "prompts/evaluator-visual.md",
+      "skill": "harness-evaluator-visual",
       "tools": ["playwright:browser_take_screenshot", "playwright:browser_resize", "playwright:browser_snapshot"],
       "inputs": ["actions/sprint-contract.md", "actions/evaluation-functional.md"],
-      "outputs": ["actions/evaluation-visual.md"],
-      "on_fail": "generator-frontend",
-      "on_pass": "archive_and_next_sprint"
+      "outputs": ["actions/evaluation-visual.md"]
     }
   },
   "flow": {
@@ -77,12 +69,18 @@
     "max_retries_per_sprint": 10,
     "archive_on_sprint_complete": true
   },
+  "session": {
+    "isolation": true,
+    "state_file": ".harness/progress.json",
+    "state_log": ".harness/progress.log",
+    "next_prompt_file": ".harness/next-prompt.txt"
+  },
   "paths": {
     "actions": ".harness/actions",
     "archive": ".harness/archive",
-    "prompts": ".harness/prompts",
     "gotchas": ".harness/gotchas",
-    "progress": ".harness/progress.txt"
+    "progress_state": ".harness/progress.json",
+    "progress_log": ".harness/progress.log"
   },
   "recommended_skills": {
     "comment": "Claude Code에 설치하면 하네스 품질이 향상되는 외부 스킬 목록",

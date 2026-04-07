@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "project_name": "",
+  "pipeline": null,
+  "sprint": {
+    "number": 0,
+    "status": "init",
+    "retry_count": 0
+  },
+  "current_agent": null,
+  "agent_status": "pending",
+  "completed_agents": [],
+  "next_agent": "dispatcher",
+  "failure": {
+    "agent": null,
+    "location": null,
+    "message": null,
+    "retry_target": null
+  },
+  "updated_at": "2026-04-07",
+  "history": []
+}

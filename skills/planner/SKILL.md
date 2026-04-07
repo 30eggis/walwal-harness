@@ -6,11 +6,26 @@ disable-model-invocation: true
 
 # Planner Agent
 
+## Session Boundary Protocol
+
+### On Start
+1. `.harness/progress.json` 읽기 — `next_agent`가 `"planner"`인지 확인
+2. progress.json 업데이트: `current_agent` → `"planner"`, `agent_status` → `"running"`, `updated_at` 갱신
+
+### On Complete
+1. progress.json 업데이트:
+   - `agent_status` → `"completed"`
+   - `completed_agents`에 `"planner"` 추가
+   - `next_agent` → 파이프라인에 따라 결정 (FULLSTACK/BE-ONLY: `"generator-backend"`, FE-ONLY: `"generator-frontend"`)
+2. `.harness/progress.log`에 요약 추가
+3. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
+4. 출력: `"✓ Planner 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+
 ## Startup
 
 1. `AGENTS.md` 읽기
 2. `.harness/gotchas/planner.md` 읽기 — **과거 실수 반복 금지**
-3. `.harness/progress.txt` 읽기
+3. `.harness/progress.json` 읽기
 4. `.harness/actions/pipeline.json` 읽기 — `planner_mode` 확인
 
 ## Outputs (4개)
@@ -43,6 +58,5 @@ disable-model-invocation: true
 
 ## After Completion
 
-1. `progress.txt` 업데이트 (Phase: PLANNED)
-2. 사용자에게 plan.md + api-contract.json 리뷰 요청
-3. 승인 후 → 다음 에이전트 (pipeline.json 참조)
+1. 사용자에게 plan.md + api-contract.json 리뷰 요청
+2. 승인 후 → Session Boundary Protocol On Complete 실행

@@ -6,6 +6,37 @@ disable-model-invocation: true
 
 # Evaluator-Visual — Design & Accessibility
 
+## Session Boundary Protocol
+
+### On Start
+1. `.harness/progress.json` 읽기 — `next_agent`가 `"evaluator-visual"`인지 확인
+2. progress.json 업데이트: `current_agent` → `"evaluator-visual"`, `agent_status` → `"running"`, `updated_at` 갱신
+
+### On Complete (PASS)
+1. progress.json 업데이트:
+   - `agent_status` → `"completed"`
+   - `completed_agents`에 `"evaluator-visual"` 추가
+   - `next_agent` → `"archive"`
+   - `failure` 필드 초기화
+2. `feature-list.json`의 통과 feature `passes`에 `"evaluator-visual"` 추가
+3. `.harness/progress.log`에 PASS 요약 추가
+4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
+5. 출력: `"✓ Evaluator-Visual PASS. bash scripts/harness-next.sh 실행하여 아카이브 진행."`
+
+### On Fail
+1. progress.json 업데이트:
+   - `agent_status` → `"failed"`
+   - `failure.agent` → `"evaluator-visual"`
+   - `failure.location` → `"frontend"` (비주얼 = 항상 프론트)
+   - `failure.message` → 실패 요약 (1줄)
+   - `failure.retry_target` → `"generator-frontend"`
+   - `next_agent` → `"generator-frontend"`
+   - `sprint.retry_count` 증가
+2. `sprint.retry_count >= 10`이면 `agent_status` → `"blocked"`, 사용자 개입 요청
+3. `.harness/progress.log`에 FAIL 요약 추가
+4. **STOP.**
+5. 출력: `"✖ Evaluator-Visual FAIL. bash scripts/harness-next.sh 실행하여 재작업 대상 확인."`
+
 ## Startup
 
 1. `AGENTS.md` 읽기
@@ -37,5 +68,5 @@ disable-model-invocation: true
 
 ## After Evaluation
 
-- **PASS** → progress.txt 업데이트, Archive 실행 요청
-- **FAIL** → Generator-Frontend 재작업 (비주얼=항상 프론트), max 10회
+- **PASS** → Session Boundary Protocol On Complete (PASS) 실행
+- **FAIL** → Session Boundary Protocol On Fail 실행
