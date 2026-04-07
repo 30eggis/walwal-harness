@@ -284,6 +284,60 @@ function checkPlaywrightMcp() {
 }
 
 // ─────────────────────────────────────────
+// 6. Recommended skills check
+// ─────────────────────────────────────────
+function checkRecommendedSkills() {
+  const configPath = path.join(HARNESS_DIR, 'config.json');
+  if (!fileExists(configPath)) return;
+
+  let config;
+  try {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (e) { return; }
+
+  const skills = config.recommended_skills;
+  if (!skills) return;
+
+  const missing = [];
+  const found = [];
+
+  for (const [name, info] of Object.entries(skills)) {
+    if (name === 'comment') continue;
+    const checkPath = path.join(PROJECT_ROOT, info.check_path);
+    if (fileExists(checkPath)) {
+      found.push(name);
+    } else {
+      missing.push({ name, ...info });
+    }
+  }
+
+  if (found.length > 0) {
+    log(`Recommended skills installed: ${found.join(', ')}`);
+  }
+
+  if (missing.length > 0) {
+    console.log('');
+    log('╔═══════════════════════════════════════════════════════════╗');
+    log('║  Recommended skills (not installed)                      ║');
+    log('╠═══════════════════════════════════════════════════════════╣');
+    for (const skill of missing) {
+      const agents = skill.used_by.join(', ');
+      log(`║  ${skill.name}`);
+      log(`║    ${skill.description}`);
+      log(`║    Used by: ${agents}`);
+      log(`║    Install: ${skill.install}`);
+      log('║');
+    }
+    log('║  These skills are optional but improve output quality.   ║');
+    log('║  Harness reference files provide baseline guidance       ║');
+    log('║  even without these skills installed.                    ║');
+    log('╚═══════════════════════════════════════════════════════════╝');
+  } else if (found.length > 0) {
+    log('All recommended skills are installed!');
+  }
+}
+
+// ─────────────────────────────────────────
 // Help
 // ─────────────────────────────────────────
 function showHelp() {
@@ -305,6 +359,7 @@ What it does:
   3. Copies helper scripts to scripts/
   4. Creates AGENTS.md + CLAUDE.md symlink
   5. Checks Playwright MCP configuration
+  6. Checks recommended external skills (Vercel, design skills)
 
 After init:
   1. Restart Claude Code session (exit and re-enter) for skills to load
@@ -337,6 +392,7 @@ function main() {
   installScripts();
   setupAgentsMd();
   checkPlaywrightMcp();
+  checkRecommendedSkills();
 
   console.log('');
   log('═══ Initialization Complete ═══');

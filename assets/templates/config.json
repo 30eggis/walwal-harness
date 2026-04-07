@@ -84,6 +84,33 @@
     "gotchas": ".harness/gotchas",
     "progress": ".harness/progress.txt"
   },
+  "recommended_skills": {
+    "comment": "Claude Code에 설치하면 하네스 품질이 향상되는 외부 스킬 목록",
+    "vercel": {
+      "description": "Vercel/Next.js 배포, 성능 최적화, AI SDK 가이드",
+      "used_by": ["generator-frontend"],
+      "install": "claude skill install vercel",
+      "check_path": ".claude/skills/vercel"
+    },
+    "web-design-guidelines": {
+      "description": "UI/UX 접근성, 디자인 리뷰, Web Interface Guidelines",
+      "used_by": ["evaluator-visual", "generator-frontend"],
+      "install": "claude skill install web-design-guidelines",
+      "check_path": ".claude/skills/web-design-guidelines"
+    },
+    "taste-skill": {
+      "description": "AI 생성 UI의 디자인 품질 검증, AI슬롭 패턴 감지",
+      "used_by": ["evaluator-visual", "generator-frontend"],
+      "install": "npx claude-skill install leonxlnx/taste-skill",
+      "check_path": ".claude/skills/taste-skill"
+    },
+    "supanova-design-skill": {
+      "description": "디자인 시스템 규칙, 컴포넌트 패턴, 시각적 일관성",
+      "used_by": ["evaluator-visual", "generator-frontend"],
+      "install": "npx claude-skill install uxjoseph/supanova-design-skill",
+      "check_path": ".claude/skills/supanova-design-skill"
+    }
+  },
   "tech_stack": {
     "backend": {
       "framework": "NestJS (TypeScript)",

@@ -170,6 +170,17 @@ your-project/
 | Unit Testing | Jest (BE) + Vitest (FE) |
 | Database | PostgreSQL / SQLite |
 
+## 권장 외부 스킬
+
+하네스는 자체 reference 파일로 기본 가이드를 제공하지만, 아래 외부 스킬을 설치하면 품질이 향상됩니다. 초기화 시 자동으로 설치 여부를 체크하고 안내합니다.
+
+| 스킬 | 설명 | 사용 에이전트 |
+|------|------|-------------|
+| **vercel** | Vercel/Next.js 배포, 성능 최적화, AI SDK | Generator-FE |
+| **web-design-guidelines** | UI/UX 접근성, Web Interface Guidelines | Evaluator-Visual, Generator-FE |
+| **taste-skill** | AI 생성 UI 디자인 품질, AI슬롭 감지 | Evaluator-Visual, Generator-FE |
+| **supanova-design-skill** | 디자인 시스템 규칙, 시각적 일관성 | Evaluator-Visual, Generator-FE |
+
 ## Playwright MCP 설정
 
 Evaluator가 브라우저 테스트를 수행하려면 Playwright MCP가 필요합니다. `~/.mcp.json`에 추가:
