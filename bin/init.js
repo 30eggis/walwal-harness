@@ -253,19 +253,43 @@ function installSessionHook() {
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.SessionStart) settings.hooks.SessionStart = [];
 
-  // Check if our hook is already installed
+  // Migrate any legacy flat entries (created by older walwal-harness versions)
+  // into the correct matcher + hooks-array shape that Claude Code expects.
   const hookCmd = 'bash scripts/harness-session-start.sh';
+  let migrated = false;
+  settings.hooks.SessionStart = settings.hooks.SessionStart
+    .map((entry) => {
+      if (entry && typeof entry === 'object' && Array.isArray(entry.hooks)) {
+        return entry; // already in correct shape
+      }
+      if (entry && typeof entry === 'object' && entry.type === 'command' && entry.command) {
+        migrated = true;
+        return { matcher: '', hooks: [{ type: entry.type, command: entry.command }] };
+      }
+      return entry;
+    })
+    .filter(Boolean);
+
+  // Check if our hook is already installed (inside any matcher group)
   const alreadyInstalled = settings.hooks.SessionStart.some(
-    h => h.command && h.command.includes('harness-session-start')
+    (entry) =>
+      entry &&
+      Array.isArray(entry.hooks) &&
+      entry.hooks.some(
+        (h) => h && h.command && h.command.includes('harness-session-start')
+      )
   );
 
   if (!alreadyInstalled) {
     settings.hooks.SessionStart.push({
-      type: 'command',
-      command: hookCmd
+      matcher: '',
+      hooks: [{ type: 'command', command: hookCmd }]
     });
     fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
     log('SessionStart hook installed in .claude/settings.json');
+  } else if (migrated) {
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    log('SessionStart hook migrated to matcher + hooks-array format');
   } else {
     log('SessionStart hook already installed');
   }

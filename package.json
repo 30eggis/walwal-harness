@@ -1,6 +1,6 @@
 {
   "name": "@walwal-harness/cli",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Production harness for AI agent engineering — Planner, Generator(BE/FE), Evaluator(Func/Visual) with Gotcha management",
   "bin": {
     "walwal-harness": "bin/init.js"
