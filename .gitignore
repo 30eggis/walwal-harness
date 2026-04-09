@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────
+# Node.js
+# ─────────────────────────────────────────
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# ─────────────────────────────────────────
+# OS
+# ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─────────────────────────────────────────
+# IDE / Editor
+# ─────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─────────────────────────────────────────
+# Env
+# ─────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+
+# ─────────────────────────────────────────
+# Claude Code local cache
+#   .claude/ 전체는 init.js가 skills/ + bin/init.js 로부터 생성하는 파생물.
+#   Source of truth 는 레포의 skills/ 디렉터리.
+# ─────────────────────────────────────────
+.claude/
+
+# ─────────────────────────────────────────
+# Harness runtime state (ephemeral / 세션별 생성)
+#   walwal-harness CLI 자체가 dogfooding 하면서 생성하는 파일들.
+#   추적 대상은 gotchas/, HARNESS.md, config.json, archive/ 정도만.
+# ─────────────────────────────────────────
+.harness/progress.log
+.harness/next-prompt.txt
+.harness/actions/scan-result.json
+.harness/actions/pipeline.json
+.harness/actions/plan.md
+.harness/actions/feature-list.json
+.harness/actions/api-contract.json
+.harness/actions/sprint-contract.md
+.harness/actions/evaluation-*.md
+
+# ─────────────────────────────────────────
+# Logs / Temp
+# ─────────────────────────────────────────
+*.log
+*.tmp
+tmp/
