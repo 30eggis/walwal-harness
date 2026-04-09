@@ -18,6 +18,7 @@ PROJECT_ROOT="$(resolve_harness_root "${1:-.}")" || {
 
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
 CONFIG="$PROJECT_ROOT/.harness/config.json"
+PIPELINE_JSON="$PROJECT_ROOT/.harness/actions/pipeline.json"
 NEXT_PROMPT="$PROJECT_ROOT/.harness/next-prompt.txt"
 
 check_jq || exit 1
@@ -39,6 +40,29 @@ agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS")
 next_agent=$(jq -r '.next_agent // "null"' "$PROGRESS")
 retry_count=$(jq -r '.sprint.retry_count // 0' "$PROGRESS")
 max_retries=$(jq -r '.flow.max_retries_per_sprint // 10' "$CONFIG" 2>/dev/null || echo 10)
+
+# fe_stack 치환 (Flutter 지원) — pipeline.json 에서 읽음
+fe_stack="react"
+if [ -f "$PIPELINE_JSON" ]; then
+  fe_stack=$(jq -r '.fe_stack // "react"' "$PIPELINE_JSON" 2>/dev/null || echo "react")
+fi
+
+# ─────────────────────────────────────────
+# fe_stack 치환 헬퍼
+#   pipeline_selection.pipelines에서 읽은 에이전트명을 fe_stack에 따라 치환
+#   - react: 그대로
+#   - flutter: generator-frontend → generator-frontend-flutter 등, __skip__ 은 건너뜀
+# ─────────────────────────────────────────
+substitute_fe_stack() {
+  local agent="$1"
+  if [ "$fe_stack" != "flutter" ]; then
+    echo "$agent"
+    return
+  fi
+  local sub
+  sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.flutter[\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
+  echo "$sub"
+}
 
 # ─────────────────────────────────────────
 # Determine next agent
@@ -73,8 +97,18 @@ compute_next_agent() {
     return
   fi
 
+  local -a raw_agents
+  mapfile -t raw_agents < <(jq -r ".flow.pipeline_selection.pipelines[\"${pipeline}\"][]" "$CONFIG" 2>/dev/null | sed 's/:.*//')
+
+  # fe_stack 치환 + __skip__ 필터링
   local -a agents
-  mapfile -t agents < <(jq -r ".flow.pipeline_selection.pipelines[\"${pipeline}\"][]" "$CONFIG" 2>/dev/null | sed 's/:.*//')
+  for a in "${raw_agents[@]}"; do
+    local sub
+    sub=$(substitute_fe_stack "$a")
+    if [ "$sub" != "__skip__" ]; then
+      agents+=("$sub")
+    fi
+  done
 
   local found=false
   for agent in "${agents[@]}"; do
@@ -82,6 +116,7 @@ compute_next_agent() {
       echo "$agent"
       return
     fi
+    # current 비교 시에도 치환된 이름으로 (Flutter 변형 에이전트가 실행되는 경우)
     if [ "$agent" = "$current" ]; then
       found=true
     fi
