@@ -296,6 +296,60 @@ function installSessionHook() {
 }
 
 // ─────────────────────────────────────────
+// 3c. UserPromptSubmit hook (auto dispatcher routing)
+// ─────────────────────────────────────────
+function installUserPromptSubmitHook() {
+  log('Installing UserPromptSubmit hook (auto dispatcher routing)...');
+
+  const settingsDir = path.join(PROJECT_ROOT, '.claude');
+  const settingsFile = path.join(settingsDir, 'settings.json');
+
+  ensureDir(settingsDir);
+
+  let settings = {};
+  if (fileExists(settingsFile)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    } catch (e) {
+      log('WARNING: Could not parse existing .claude/settings.json, creating new');
+    }
+  }
+
+  if (!settings.hooks) settings.hooks = {};
+  if (!settings.hooks.UserPromptSubmit) settings.hooks.UserPromptSubmit = [];
+
+  const hookCmd = 'bash scripts/harness-user-prompt-submit.sh';
+
+  // Detect existing harness UserPromptSubmit hook (any shape)
+  const alreadyInstalled = settings.hooks.UserPromptSubmit.some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    if (Array.isArray(entry.hooks)) {
+      return entry.hooks.some(
+        (h) => h && h.command && h.command.includes('harness-user-prompt-submit')
+      );
+    }
+    if (entry.type === 'command' && entry.command) {
+      return entry.command.includes('harness-user-prompt-submit');
+    }
+    return false;
+  });
+
+  if (!alreadyInstalled) {
+    settings.hooks.UserPromptSubmit.push({
+      matcher: '',
+      hooks: [{ type: 'command', command: hookCmd }]
+    });
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    log('UserPromptSubmit hook installed in .claude/settings.json');
+    log('  → All prompts will be routed through harness-dispatcher');
+    log('  → Opt-out per message: say "harness skip" or "without harness"');
+    log('  → Disable globally: set .harness/config.json behavior.auto_route_dispatcher = false');
+  } else {
+    log('UserPromptSubmit hook already installed');
+  }
+}
+
+// ─────────────────────────────────────────
 // 4. AGENTS.md + CLAUDE.md
 // ─────────────────────────────────────────
 function setupAgentsMd() {
@@ -453,9 +507,16 @@ What it does:
   1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
   2. Installs skills to .claude/skills/ (dispatcher, planner, generators, evaluators)
   3. Copies helper scripts to scripts/
-  4. Creates AGENTS.md + CLAUDE.md symlink
-  5. Checks Playwright MCP configuration
-  6. Checks recommended external skills (Vercel, design skills)
+  4. Registers SessionStart hook (boot-time progress render)
+  5. Registers UserPromptSubmit hook (auto-route every prompt through harness-dispatcher)
+  6. Creates AGENTS.md + CLAUDE.md symlink
+  7. Checks Playwright MCP configuration
+  8. Checks recommended external skills (Vercel, design skills)
+
+Auto routing:
+  Every user prompt is routed through harness-dispatcher.
+  Per-message opt-out: say "harness skip" or "harness 없이".
+  Global disable: edit .harness/config.json → behavior.auto_route_dispatcher = false
 
 After init:
   1. Restart Claude Code session (exit and re-enter) for skills to load
@@ -487,6 +548,7 @@ function main() {
   installSkills();
   installScripts();
   installSessionHook();
+  installUserPromptSubmitHook();
   setupAgentsMd();
   checkPlaywrightMcp();
   checkRecommendedSkills();
