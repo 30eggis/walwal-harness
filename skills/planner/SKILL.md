@@ -26,7 +26,12 @@ disable-model-invocation: true
 1. `AGENTS.md` 읽기
 2. `.harness/gotchas/planner.md` 읽기 — **과거 실수 반복 금지**
 3. `.harness/progress.json` 읽기
-4. `.harness/actions/pipeline.json` 읽기 — `planner_mode` 확인
+4. `.harness/actions/pipeline.json` 읽기 — `planner_mode`, `fe_stack` 확인
+5. `.harness/actions/scan-result.json` 읽기 — `tech_stack.fe_stack` 확인 (없으면 `react` 기본)
+6. **FE Stack 확정** → [FE Stack 결정 가이드](references/fe-stack-detection.md)
+   - `pubspec.yaml` + `flutter:` 키 → `fe_stack = "flutter"`
+   - 혼재/불명확 → 사용자에게 단 한 번 질문
+   - 확정 후 `pipeline.json.fe_stack` 갱신 (없으면 생성)
 
 ## Outputs (4개)
 
@@ -41,6 +46,17 @@ disable-model-invocation: true
 
 - **full**: MSA 서비스 분할 + 전체 설계 (FULLSTACK, BE-ONLY)
 - **light**: OpenAPI → api-contract.json 변환 + FE 설계만 (FE-ONLY)
+
+## fe_stack (FE 파이프라인 분기)
+
+`pipeline.json.fe_stack`은 FE Generator/Evaluator 선택을 결정한다:
+
+| 값 | FE Generator | FE Evaluator | 비고 |
+|----|--------------|--------------|------|
+| `react` (기본) | `generator-frontend` | `evaluator-functional` + `evaluator-visual` | Vercel/Next.js/Tailwind |
+| `flutter` | `generator-frontend-flutter` | `evaluator-functional-flutter` | Riverpod + integrated_data_layer, Eval-Visual 생략 |
+
+**Planner는 `pipeline.json`에 `fe_stack`을 반드시 기록해야 한다.** Dispatcher가 이 값으로 `next_agent`를 라우팅한다.
 
 ## Process
 

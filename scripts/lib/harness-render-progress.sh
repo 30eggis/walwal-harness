@@ -282,12 +282,17 @@ render_progress() {
 render_agent_bar() {
   local PROGRESS="${1:-.}/.harness/progress.json"
   local CONFIG="${1:-.}/.harness/config.json"
+  local PIPELINE_JSON="${1:-.}/.harness/actions/pipeline.json"
 
   if [ ! -f "$PROGRESS" ] || [ ! -f "$CONFIG" ]; then return 1; fi
 
-  local pipeline current_agent
+  local pipeline current_agent fe_stack
   pipeline=$(jq -r '.pipeline // "unknown"' "$PROGRESS")
   current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS")
+  fe_stack="react"
+  if [ -f "$PIPELINE_JSON" ]; then
+    fe_stack=$(jq -r '.fe_stack // "react"' "$PIPELINE_JSON" 2>/dev/null || echo "react")
+  fi
 
   local completed_agents
   completed_agents=$(jq -r '.completed_agents // [] | .[]' "$PROGRESS")
@@ -299,6 +304,15 @@ render_agent_bar() {
 
   while IFS= read -r agent; do
     agent=$(echo "$agent" | sed 's/:.*//')  # strip mode suffix like :light, :api-only
+
+    # fe_stack 치환 적용
+    if [ "$fe_stack" = "flutter" ]; then
+      local sub
+      sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.flutter[\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
+      if [ "$sub" = "__skip__" ]; then continue; fi
+      agent="$sub"
+    fi
+
     if [ "$first" = true ]; then
       first=false
     else

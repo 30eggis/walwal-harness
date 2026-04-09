@@ -68,3 +68,23 @@ AGENTS.md 비하네스  → 기존 백업 + 리빌드
 ## 5. Output
 
 `.harness/actions/pipeline.json` 생성 → 사용자 확인 → Session Boundary Protocol On Complete 실행
+
+### fe_stack 필드 (FE 파이프라인에서 필수)
+
+FE-ONLY 또는 FULLSTACK 선택 시, `pipeline.json`에 **`fe_stack`** 필드를 포함해야 한다:
+
+- `scan-result.json.tech_stack.fe_stack` 값을 기본으로 사용 (`react` | `flutter`)
+- 값이 없거나 불명확하면 Planner가 확정하도록 위임 (Dispatcher는 `"unknown"` 기록 + `notes` 에 메모)
+- Flutter 선택 시 `agents_active`/`agents_skipped`에 치환된 에이전트명을 기록
+  - active: `generator-frontend-flutter`, `evaluator-functional-flutter`
+  - skipped: `generator-frontend`, `evaluator-functional`, `evaluator-visual`
+
+## 6. Handoff 라우팅 (fe_stack 반영)
+
+Dispatcher가 `next_agent` 를 세팅할 때 pipeline.json.fe_stack 을 참조해 치환:
+
+| 원본 next_agent | fe_stack=react | fe_stack=flutter |
+|-----------------|----------------|------------------|
+| generator-frontend | generator-frontend | generator-frontend-flutter |
+| evaluator-functional (FE 단계) | evaluator-functional | evaluator-functional-flutter |
+| evaluator-visual | evaluator-visual | (skip → 다음 단계로 이동) |

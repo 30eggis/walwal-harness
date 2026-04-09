@@ -48,16 +48,40 @@
       "tools": ["playwright:browser_take_screenshot", "playwright:browser_resize", "playwright:browser_snapshot"],
       "inputs": ["actions/sprint-contract.md", "actions/evaluation-functional.md"],
       "outputs": ["actions/evaluation-visual.md"]
+    },
+    "generator-frontend-flutter": {
+      "role": "Flutter 앱 개발 — Riverpod, integrated_data_layer(Retrofit), i18n(ARB), build_runner",
+      "skill": "harness-generator-frontend-flutter",
+      "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
+      "outputs": ["code:flutter", "actions/sprint-contract.md"],
+      "order": 2,
+      "fe_stack": "flutter"
+    },
+    "evaluator-functional-flutter": {
+      "role": "Flutter 앱 검증 — flutter analyze, flutter test, build_runner 일관성, 안티패턴 정적 검증",
+      "skill": "harness-evaluator-functional-flutter",
+      "tools": ["bash:flutter", "bash:dart"],
+      "inputs": ["actions/sprint-contract.md"],
+      "outputs": ["actions/evaluation-functional.md"],
+      "fe_stack": "flutter"
     }
   },
   "flow": {
     "sequence": ["dispatcher", "planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
     "pipeline_selection": {
-      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. 이하 sequence에서 스킵 대상 제외.",
+      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. fe_stack 필드로 React/Flutter를 구분. harness-next.sh가 pipeline.json.fe_stack 을 읽어 generator-frontend/evaluator-functional 을 Flutter 변형으로 치환한다.",
       "pipelines": {
         "FULLSTACK": ["planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
         "FE-ONLY": ["planner:light", "generator-frontend", "evaluator-functional", "evaluator-visual"],
         "BE-ONLY": ["planner", "generator-backend", "evaluator-functional:api-only"]
+      },
+      "fe_stack_substitution": {
+        "comment": "pipeline.json.fe_stack=flutter 이면 아래 치환을 적용. evaluator-visual은 skip.",
+        "flutter": {
+          "generator-frontend": "generator-frontend-flutter",
+          "evaluator-functional": "evaluator-functional-flutter",
+          "evaluator-visual": "__skip__"
+        }
       }
     },
     "sprint_execution": {
