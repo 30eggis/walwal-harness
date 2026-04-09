@@ -23,6 +23,20 @@ disable-model-invocation: false
 3. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
 4. 출력: `"✓ Dispatcher 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
 
+## Auto-Routing (UserPromptSubmit Hook)
+
+walwal-harness v2.2.0+ 부터 **UserPromptSubmit 훅** 이 모든 사용자 프롬프트 앞에
+`[walwal-harness] Auto-routing is ACTIVE` 안내를 자동 주입한다. 이 훅이 켜져 있으면
+Claude 는 기본적으로 Dispatcher 경유로 분류/라우팅해야 한다.
+
+- **활성 조건**: `.harness/config.json` 의 `behavior.auto_route_dispatcher == true`
+- **per-message opt-out**: 사용자가 `harness skip`, `harness 없이`, `without harness`,
+  `just answer` 등을 말하면 그 메시지 한정으로 훅이 pass-through
+- **전역 비활성**: `behavior.auto_route_dispatcher = false`
+
+훅이 주입하는 컨텍스트에는 `pipeline`, `current_agent`, `next_agent`, `sprint`,
+`fe_stack` 현재값이 포함되므로 Dispatcher 는 별도 상태 조회 없이 판단 가능.
+
 ## 1. Request Classification (최우선)
 
 사용자 입력을 먼저 분류합니다:
@@ -30,6 +44,7 @@ disable-model-invocation: false
 - **실수 지적** ("아니", "잘못", "그렇게 하면 안 돼", "X로 해야지") → **Gotcha Flow**
 - **기능 요청** ("만들어", "추가", "시작", PRD, OpenAPI) → **Pipeline Flow**
 - **혼합** → Gotcha 먼저 기록 → Pipeline 이어서
+- **메타/인사/Claude 자체 질문** → Dispatcher skip, 짧은 일반 응답 허용
 
 ## 2. Gotcha Flow
 
