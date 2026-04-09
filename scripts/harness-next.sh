@@ -41,17 +41,24 @@ next_agent=$(jq -r '.next_agent // "null"' "$PROGRESS")
 retry_count=$(jq -r '.sprint.retry_count // 0' "$PROGRESS")
 max_retries=$(jq -r '.flow.max_retries_per_sprint // 10' "$CONFIG" 2>/dev/null || echo 10)
 
-# fe_stack 치환 (Flutter 지원) — pipeline.json 에서 읽음
+# fe_stack + fe_target 치환 (Flutter Web/Mobile/Desktop 지원) — pipeline.json 에서 읽음
 fe_stack="react"
+fe_target="web"
 if [ -f "$PIPELINE_JSON" ]; then
   fe_stack=$(jq -r '.fe_stack // "react"' "$PIPELINE_JSON" 2>/dev/null || echo "react")
+  fe_target=$(jq -r '.fe_target // empty' "$PIPELINE_JSON" 2>/dev/null || true)
+  if [ -z "$fe_target" ]; then
+    # pipeline.json 에 fe_target 미지정 시 config.json 의 _default_target 사용
+    fe_target=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.${fe_stack}._default_target // \"web\"" "$CONFIG" 2>/dev/null || echo "web")
+  fi
 fi
 
 # ─────────────────────────────────────────
-# fe_stack 치환 헬퍼
-#   pipeline_selection.pipelines에서 읽은 에이전트명을 fe_stack에 따라 치환
+# fe_stack + fe_target 치환 헬퍼
+#   pipeline_selection.pipelines 에서 읽은 에이전트명을 fe_stack/fe_target 에 따라 치환
 #   - react: 그대로
-#   - flutter: generator-frontend → generator-frontend-flutter 등, __skip__ 은 건너뜀
+#   - flutter+web: generator-frontend → generator-frontend-flutter 만 치환, eval 은 그대로 (Playwright 사용 가능)
+#   - flutter+mobile/desktop: eval 도 정적 분석용으로 치환, evaluator-visual 은 __skip__
 # ─────────────────────────────────────────
 substitute_fe_stack() {
   local agent="$1"
@@ -60,7 +67,7 @@ substitute_fe_stack() {
     return
   fi
   local sub
-  sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.flutter[\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
+  sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.${fe_stack}.by_target[\"${fe_target}\"][\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
   echo "$sub"
 }
 

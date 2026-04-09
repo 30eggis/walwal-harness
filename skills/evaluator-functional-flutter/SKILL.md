@@ -6,9 +6,16 @@ disable-model-invocation: true
 
 # Evaluator-Functional-Flutter — Dart/Flutter 정적·동적 검증
 
-> **주의**: Flutter 앱은 브라우저가 아니므로 Playwright MCP(`browser_*`)를 쓸 수 없다.
-> 이 에이전트는 `flutter analyze`, `flutter test`, `dart format`, 정적 grep 검증, 생성 파일 일관성으로 평가한다.
-> 실기기/시뮬레이터 UI 검증은 사람 QA 또는 별도 파이프라인으로 위임.
+> **이 에이전트는 `fe_target = mobile` 또는 `desktop` 일 때만 사용된다.**
+>
+> Flutter Mobile/Desktop 앱은 브라우저가 아니므로 Playwright MCP(`browser_*`)를 쓸 수 없다.
+> 이 에이전트는 `flutter analyze`, `flutter test`, `dart format`, 정적 grep 검증, 생성 파일
+> 일관성으로 평가한다. 실기기/시뮬레이터 UI 검증은 사람 QA 또는 별도 파이프라인으로 위임.
+>
+> **`fe_target = web` 인 Flutter Web 프로젝트는 이 에이전트가 아니라 일반 `evaluator-functional`
+> 과 `evaluator-visual` 이 Playwright 로 검증한다** (컴파일 결과가 HTML+JS+CSS 이므로).
+> 이 경우 Generator-Frontend-Flutter 의 Self-Verification 단계에서 `flutter analyze` /
+> `flutter test` / `flutter build web --release` 가 이미 통과했음이 전제된다.
 
 ## Session Boundary Protocol
 

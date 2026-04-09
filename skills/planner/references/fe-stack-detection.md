@@ -76,40 +76,87 @@ Planner는 Sprint 1 착수 전 반드시 `fe_stack`을 확정하고 `pipeline.js
 
 혼재 프로젝트(Web + Flutter mobile)라면 사용자에게 **현 스프린트의 타깃**을 묻는다 — 파이프라인은 한 번에 하나의 `fe_stack`만 취급한다.
 
+## 2.5 fe_target 확정 (Flutter 전용)
+
+`fe_stack == "flutter"` 인 경우, **반드시** `fe_target` 도 함께 확정해야 한다 (`web` | `mobile` | `desktop`).
+이는 Flutter Web vs Mobile/Desktop 에서 사용 가능한 API, 빌드 명령, evaluator 가 달라지기 때문이다.
+
+### 자동 감지 (scan-result.json 의 `tech_stack.fe_target`)
+
+| 시그널 | fe_target |
+|--------|-----------|
+| `<flutter_root>/web/index.html` 존재 | `web` |
+| `<flutter_root>/android/` 또는 `ios/` 존재, web/ 없음 | `mobile` |
+| `<flutter_root>/macos/`, `windows/`, `linux/` 존재 (mobile/web 없음) | `desktop` |
+| 없음 | `unknown` |
+
+### 사용자 질문 (불명확하거나 multi-target)
+
+```
+Flutter 프로젝트의 타깃을 확인합니다:
+
+(A) Web — 브라우저 (Chrome/Safari/Firefox), 컴파일 결과는 HTML+JS+CSS
+(B) Mobile — Android / iOS 네이티브 빌드
+(C) Desktop — macOS / Windows / Linux 네이티브 빌드
+
+감지된 시그널:
+- web/index.html: [있음/없음]
+- android|ios/: [있음/없음]
+- macos|windows|linux/: [있음/없음]
+
+이번 스프린트의 타깃은? (A/B/C)
+```
+
+### fe_target → Eval 흐름
+
+| fe_target | Generator | Eval-Functional | Eval-Visual |
+|-----------|-----------|----------------|-------------|
+| `web` | `generator-frontend-flutter` | `evaluator-functional` (Playwright!) | `evaluator-visual` (Playwright!) |
+| `mobile` | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | SKIP |
+| `desktop` | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | SKIP |
+
+**핵심**: Flutter Web 의 빌드 결과물(HTML/JS/CSS)은 일반 웹앱과 동일하므로 Playwright 기반
+React 경로의 evaluator 를 그대로 재사용한다. Generator-Frontend-Flutter 의 Self-Verification
+단계에서 `flutter analyze`/`flutter test`/`flutter build web` 정적 검증이 이미 통과한 상태로 handoff 된다.
+
 ## 3. pipeline.json 갱신
 
-`fe_stack` 확정 후 `pipeline.json`에 반드시 추가:
+`fe_stack` + `fe_target` 확정 후 `pipeline.json`에 반드시 추가:
 
 ```json
 {
   "pipeline": "FULLSTACK",
   "planner_mode": "full",
   "fe_stack": "flutter",
+  "fe_target": "web",
   "agents_active": [
     "planner",
     "generator-backend",
     "generator-frontend-flutter",
-    "evaluator-functional-flutter"
-  ],
-  "agents_skipped": [
-    "generator-frontend",
     "evaluator-functional",
     "evaluator-visual"
   ],
-  "evaluator_mode": "flutter-native",
-  "notes": "Flutter 앱 — Playwright 대신 flutter analyze/test + 정적 anti-pattern 검증"
+  "agents_skipped": [
+    "generator-frontend",
+    "evaluator-functional-flutter"
+  ],
+  "evaluator_mode": "playwright-web",
+  "notes": "Flutter Web — 컴파일 결과가 HTML+JS+CSS 이므로 React 경로의 Playwright evaluator 사용. Generator 의 Self-Verification 에서 flutter analyze/test 통과 전제."
 }
 ```
 
-### fe_stack → 파이프라인 매핑
+### fe_stack + fe_target → 파이프라인 매핑
 
-| pipeline | fe_stack | agents_active 예시 |
-|----------|----------|-------------------|
-| FULLSTACK | react | planner, generator-backend, generator-frontend, evaluator-functional, evaluator-visual |
-| FULLSTACK | flutter | planner, generator-backend, generator-frontend-flutter, evaluator-functional-flutter |
-| FE-ONLY | react | planner, generator-frontend, evaluator-functional, evaluator-visual |
-| FE-ONLY | flutter | planner, generator-frontend-flutter, evaluator-functional-flutter |
-| BE-ONLY | (무관) | planner, generator-backend, evaluator-functional |
+| pipeline | fe_stack | fe_target | agents_active 예시 |
+|----------|----------|-----------|-------------------|
+| FULLSTACK | react | (n/a) | planner, generator-backend, generator-frontend, evaluator-functional, evaluator-visual |
+| FULLSTACK | flutter | **web** | planner, generator-backend, generator-frontend-flutter, evaluator-functional, evaluator-visual |
+| FULLSTACK | flutter | mobile | planner, generator-backend, generator-frontend-flutter, evaluator-functional-flutter |
+| FULLSTACK | flutter | desktop | planner, generator-backend, generator-frontend-flutter, evaluator-functional-flutter |
+| FE-ONLY | react | (n/a) | planner, generator-frontend, evaluator-functional, evaluator-visual |
+| FE-ONLY | flutter | **web** | planner, generator-frontend-flutter, evaluator-functional, evaluator-visual |
+| FE-ONLY | flutter | mobile | planner, generator-frontend-flutter, evaluator-functional-flutter |
+| BE-ONLY | (무관) | (n/a) | planner, generator-backend, evaluator-functional |
 
 ## 4. Flutter 선택 시 추가 작업
 

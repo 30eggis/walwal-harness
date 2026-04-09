@@ -33,26 +33,49 @@ docmeta:
 
 각 항목은 **패턴 → 이유 → 대체 방법** 형태.
 
-## 1. 웹 전용 API 직접 참조
+## 1. 웹 전용 API 직접 참조 (fe_target 별 차이)
 
-### 금지
+### `fe_target = mobile` 또는 `desktop` — 금지
 ```dart
-import 'dart:html';
-import 'package:universal_html/html.dart';
+import 'dart:html';                              // ✗
+import 'package:universal_html/html.dart';       // ✗
+import 'package:web/web.dart';                   // ✗ (가드 없으면)
 ```
 
 ### 이유
-Flutter 앱은 크로스 플랫폼 — 모바일 빌드에서 `dart:html` 참조는 즉시 빌드 실패한다.
-Web 빌드 전용 코드가 필요하면 조건부 import 패턴을 사용한다.
+Flutter 모바일/데스크톱 빌드에서 `dart:html` 참조는 즉시 빌드 실패한다.
+가드 없이 import 하면 cross-platform 코드가 깨진다.
 
 ### 대체
-`package:web` 또는 `kIsWeb` 분기로 플랫폼 체크 후 조건부 import.
+- `kIsWeb` 분기로 플랫폼 체크 후 조건부 import
+- `if (kIsWeb) { ... }` 가드 안에서만 web API 사용
+- 또는 conditional import (`stub.dart` / `web.dart` / `io.dart`)
+
+### `fe_target = web` — 허용 (단, 권장 패턴 준수)
+```dart
+import 'package:web/web.dart' as web;            // ✓ 권장 (modern)
+import 'dart:js_interop';                        // ✓ JS interop
+import 'dart:html';                              // ✓ (legacy, 신규 코드는 package:web 권장)
+```
+
+### Web 권장 패턴
+- 새 코드는 `package:web` + `dart:js_interop` 사용 (Flutter 3.7+ 에서 stable)
+- `dart:html` 은 legacy — 마이그레이션 대상이지만 즉시 금지는 아님
+- 가능하면 web 전용 코드를 별도 파일로 분리하고 conditional import:
+  ```dart
+  // _web_helper.dart 또는 conditional import
+  import 'platform_helper.dart'
+    if (dart.library.html) 'platform_helper_web.dart'
+    if (dart.library.io) 'platform_helper_io.dart';
+  ```
 
 ### 검증
 ```bash
-grep -rn "dart:html\|universal_html" lib/ integrated_data_layer/lib/
+# fe_target = mobile/desktop: 0개여야 함
+grep -rn "dart:html\|universal_html\|package:web" lib/ integrated_data_layer/lib/
+
+# fe_target = web: 매치 OK, 단 'kIsWeb' 가드 또는 conditional import 와 함께 쓰는지 인접 라인 확인
 ```
-결과 0개여야 함.
 
 ---
 
@@ -263,11 +286,20 @@ grep -rEn "(api[_-]?key|secret|token)\s*=\s*['\"][A-Za-z0-9]{16,}['\"]" lib/ int
 
 ## 셀프 체크 스크립트
 
-Generator는 handoff 전 다음 명령을 모두 실행하고 결과를 sprint-contract.md에 기록한다:
+Generator는 handoff 전 다음 명령을 모두 실행하고 결과를 sprint-contract.md에 기록한다.
+**`fe_target` 에 따라 1번 룰의 적용 여부가 달라진다.**
 
 ```bash
-# 1. 웹 API 직접 참조
-grep -rn "dart:html\|universal_html" lib/ integrated_data_layer/lib/ || echo "OK"
+# fe_target 읽기
+FE_TARGET=$(jq -r '.fe_target // "web"' .harness/actions/pipeline.json 2>/dev/null || echo "web")
+
+# 1. 웹 API 직접 참조 — fe_target=web 이 아닐 때만 검사
+if [ "$FE_TARGET" != "web" ]; then
+  grep -rn "dart:html\|universal_html\|package:web" lib/ integrated_data_layer/lib/ || echo "OK (FL-01 mobile/desktop)"
+else
+  # web 타겟: 가드 없는 사용만 경고 (수동 검토)
+  grep -rn "dart:html\|package:web" lib/ | grep -v "kIsWeb\|conditional import" || echo "OK (FL-01 web — manual review)"
+fi
 
 # 2. print 남발
 grep -rn "^\s*print(" lib/ integrated_data_layer/lib/ || echo "OK"

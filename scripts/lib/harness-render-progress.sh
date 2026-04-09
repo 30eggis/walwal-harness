@@ -286,12 +286,17 @@ render_agent_bar() {
 
   if [ ! -f "$PROGRESS" ] || [ ! -f "$CONFIG" ]; then return 1; fi
 
-  local pipeline current_agent fe_stack
+  local pipeline current_agent fe_stack fe_target
   pipeline=$(jq -r '.pipeline // "unknown"' "$PROGRESS")
   current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS")
   fe_stack="react"
+  fe_target="web"
   if [ -f "$PIPELINE_JSON" ]; then
     fe_stack=$(jq -r '.fe_stack // "react"' "$PIPELINE_JSON" 2>/dev/null || echo "react")
+    fe_target=$(jq -r '.fe_target // empty' "$PIPELINE_JSON" 2>/dev/null || true)
+    if [ -z "$fe_target" ]; then
+      fe_target=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.${fe_stack}._default_target // \"web\"" "$CONFIG" 2>/dev/null || echo "web")
+    fi
   fi
 
   local completed_agents
@@ -305,10 +310,10 @@ render_agent_bar() {
   while IFS= read -r agent; do
     agent=$(echo "$agent" | sed 's/:.*//')  # strip mode suffix like :light, :api-only
 
-    # fe_stack 치환 적용
+    # fe_stack + fe_target 치환 적용
     if [ "$fe_stack" = "flutter" ]; then
       local sub
-      sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.flutter[\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
+      sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.flutter.by_target[\"${fe_target}\"][\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
       if [ "$sub" = "__skip__" ]; then continue; fi
       agent="$sub"
     fi

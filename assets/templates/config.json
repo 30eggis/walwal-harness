@@ -87,11 +87,30 @@
         "BE-ONLY": ["planner", "generator-backend", "evaluator-functional:api-only"]
       },
       "fe_stack_substitution": {
-        "comment": "pipeline.json.fe_stack=flutter 이면 아래 치환을 적용. evaluator-visual은 skip.",
+        "comment": "pipeline.json.fe_stack + fe_target 에 따라 FE 에이전트 치환. Flutter Web 은 React 와 동일한 Playwright 기반 evaluator 를 사용한다.",
         "flutter": {
-          "generator-frontend": "generator-frontend-flutter",
-          "evaluator-functional": "evaluator-functional-flutter",
-          "evaluator-visual": "__skip__"
+          "_doc": "fe_target = web | mobile | desktop. by_target 으로 분기.",
+          "by_target": {
+            "web": {
+              "_doc": "Flutter Web — 컴파일 결과가 HTML+JS+CSS 이므로 Playwright evaluator 사용 가능",
+              "generator-frontend": "generator-frontend-flutter",
+              "evaluator-functional": "evaluator-functional",
+              "evaluator-visual": "evaluator-visual"
+            },
+            "mobile": {
+              "_doc": "Flutter Mobile (Android/iOS) — 브라우저 없음, 정적 분석 evaluator 사용",
+              "generator-frontend": "generator-frontend-flutter",
+              "evaluator-functional": "evaluator-functional-flutter",
+              "evaluator-visual": "__skip__"
+            },
+            "desktop": {
+              "_doc": "Flutter Desktop (macOS/Windows/Linux) — 브라우저 없음, 정적 분석 evaluator 사용",
+              "generator-frontend": "generator-frontend-flutter",
+              "evaluator-functional": "evaluator-functional-flutter",
+              "evaluator-visual": "__skip__"
+            }
+          },
+          "_default_target": "mobile"
         }
       }
     },

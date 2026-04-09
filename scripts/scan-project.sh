@@ -62,11 +62,15 @@ fi
 
 # Frontend
 # Flutter 우선 감지 — pubspec.yaml 존재하면 Flutter 프로젝트로 판정 (TECH_LANG도 보정)
-FE_STACK="react"  # react | flutter (기본값은 react 계열)
+FE_STACK="react"   # react | flutter (기본값은 react 계열)
+FE_TARGET="web"    # web | mobile | desktop (Flutter 의 컴파일 타겟; React 는 항상 web)
+FLUTTER_ROOT=""    # Flutter 프로젝트 루트 경로 (web/mobile/desktop 감지용)
+
 if [ -f "${PROJECT_ROOT}/pubspec.yaml" ] && grep -q "flutter:" "${PROJECT_ROOT}/pubspec.yaml" 2>/dev/null; then
   TECH_FRONTEND="flutter"
   TECH_LANG="dart"
   FE_STACK="flutter"
+  FLUTTER_ROOT="${PROJECT_ROOT}"
 elif [ -f "${PROJECT_ROOT}/next.config.js" ] || [ -f "${PROJECT_ROOT}/next.config.ts" ] || [ -f "${PROJECT_ROOT}/next.config.mjs" ]; then
   TECH_FRONTEND="nextjs"
 elif [ -f "${PROJECT_ROOT}/vite.config.ts" ] || [ -f "${PROJECT_ROOT}/vite.config.js" ]; then
@@ -91,14 +95,39 @@ fi
 # Flutter 서브디렉토리 감지 (monorepo 또는 서브 프로젝트 케이스)
 if [ "$TECH_FRONTEND" = "unknown" ]; then
   # 대표적인 Flutter 서브폴더 이름을 얕게 탐색
-  for d in apps/mobile mobile clue_mobile_app flutter_app; do
+  for d in apps/mobile apps/web mobile clue_mobile_app flutter_app; do
     if [ -f "${PROJECT_ROOT}/${d}/pubspec.yaml" ] && grep -q "flutter:" "${PROJECT_ROOT}/${d}/pubspec.yaml" 2>/dev/null; then
       TECH_FRONTEND="flutter"
       TECH_LANG="dart"
       FE_STACK="flutter"
+      FLUTTER_ROOT="${PROJECT_ROOT}/${d}"
       break
     fi
   done
+fi
+
+# Flutter fe_target 감지 (web / mobile / desktop)
+# - web/index.html 존재 → web
+# - android/ 또는 ios/ 존재 + web/ 없음 → mobile
+# - macos/ 또는 windows/ 또는 linux/ 존재 + 위 둘 없음 → desktop
+# - 동시 존재 (멀티 타겟) → web 우선 (사용자가 Planner에서 변경 가능)
+if [ "$FE_STACK" = "flutter" ] && [ -n "$FLUTTER_ROOT" ]; then
+  HAS_WEB=false
+  HAS_MOBILE=false
+  HAS_DESKTOP=false
+  [ -f "${FLUTTER_ROOT}/web/index.html" ] && HAS_WEB=true
+  { [ -d "${FLUTTER_ROOT}/android" ] || [ -d "${FLUTTER_ROOT}/ios" ]; } && HAS_MOBILE=true
+  { [ -d "${FLUTTER_ROOT}/macos" ] || [ -d "${FLUTTER_ROOT}/windows" ] || [ -d "${FLUTTER_ROOT}/linux" ]; } && HAS_DESKTOP=true
+
+  if [ "$HAS_WEB" = "true" ]; then
+    FE_TARGET="web"
+  elif [ "$HAS_MOBILE" = "true" ]; then
+    FE_TARGET="mobile"
+  elif [ "$HAS_DESKTOP" = "true" ]; then
+    FE_TARGET="desktop"
+  else
+    FE_TARGET="unknown"
+  fi
 fi
 
 # Database
@@ -225,6 +254,7 @@ cat > "$OUTPUT" << JSONEOF
     "backend": "${TECH_BACKEND}",
     "frontend": "${TECH_FRONTEND}",
     "fe_stack": "${FE_STACK}",
+    "fe_target": "${FE_TARGET}",
     "database": "${TECH_DB}",
     "monorepo": "${TECH_MONOREPO}",
     "language": "${TECH_LANG}"
@@ -282,7 +312,7 @@ echo "=== Scan Complete ==="
 echo "Output: ${OUTPUT}"
 echo ""
 echo "--- Summary ---"
-echo "Tech Stack: ${TECH_BACKEND} / ${TECH_FRONTEND} (fe_stack=${FE_STACK}) / ${TECH_DB}"
+echo "Tech Stack: ${TECH_BACKEND} / ${TECH_FRONTEND} (fe_stack=${FE_STACK}, fe_target=${FE_TARGET}) / ${TECH_DB}"
 echo "Monorepo: ${TECH_MONOREPO}"
 echo "OpenAPI: ${OPENAPI}"
 echo "Git: ${GIT_INIT} (${GIT_COMMITS} commits, branch: ${GIT_BRANCH})"

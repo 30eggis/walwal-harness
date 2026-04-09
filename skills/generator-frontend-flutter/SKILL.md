@@ -33,7 +33,10 @@ disable-model-invocation: true
 4. `pwd` + `.harness/progress.json` + `git log --oneline -20`
 5. `.harness/actions/api-contract.json` 읽기 — **서버 API 계약이 Source of Truth**
 6. `.harness/actions/feature-list.json` — `layer: "frontend"` 필터
-7. `pubspec.yaml` 확인 — Flutter 버전, Riverpod/Retrofit/json_serializable 의존성 존재 확인
+7. `.harness/actions/pipeline.json` 의 **`fe_target`** 확인 (`web` | `mobile` | `desktop`)
+   - 이 값에 따라 허용되는 API, 빌드 명령, 안티패턴이 달라진다 (아래 "fe_target 분기" 섹션 참조)
+8. `pubspec.yaml` 확인 — Flutter 버전, Riverpod/Retrofit/json_serializable 의존성 존재 확인
+   - `fe_target = web` 인 경우 `flutter config --enable-web` 활성화 + `web/index.html` 존재 확인
 
 ## AGENTS.md — 읽기 전용
 
@@ -60,7 +63,38 @@ Backend 코드, `.harness/`, `AGENTS.md` 수정 금지.
 | [API Layer Pattern](references/api-layer-pattern.md) | integrated_data_layer 구조, Request/Response, Retrofit | API 연동 시 |
 | [Riverpod Pattern](references/riverpod-pattern.md) | Page+VM 쌍, NotifierProvider, family 패턴 | 페이지/위젯 구현 시 |
 | [i18n Pattern](references/i18n-pattern.md) | ARB 파일, LocaleAssist, 키 네이밍 | 문자열 추가 시 |
-| [Anti-Patterns](references/anti-patterns.md) | 금지 API, 하드코딩, bridges/, StatefulWidget 직접 호출 | 구현 완료 후 셀프 체크 |
+| [Anti-Patterns](references/anti-patterns.md) | 금지 API, 하드코딩, bridges/, StatefulWidget 직접 호출 (fe_target 별 차이 포함) | 구현 완료 후 셀프 체크 |
+| [Flutter Web Pattern](references/flutter-web-pattern.md) | Web 전용 — `dart:html`/`package:web` 허용, 라우팅, 빌드, hosting | `fe_target = web` 일 때만 |
+
+## fe_target 분기
+
+`pipeline.json.fe_target` 에 따라 적용되는 규칙이 다르다:
+
+### `fe_target = web` (Flutter Web)
+
+- **빌드**: `flutter build web --release` / 개발 서버: `flutter run -d chrome`
+- **HTML/JS 인터롭 허용**: `dart:html`, `package:web`, `dart:js_interop` 사용 가능
+  - 단, 가능하면 cross-platform 코드를 우선하고 web 전용 코드는 `if (kIsWeb)` 가드 또는 conditional import
+- **라우팅**: `go_router` 권장 (URL 동기화). `Navigator 1.0` 의 `MaterialApp.routes` 도 OK 지만 hash routing 주의
+- **자산**: `web/index.html`, `web/manifest.json`, `web/icons/` 관리. SEO 가 필요하면 `<meta>` 태그 명시
+- **CORS**: 백엔드 API 가 `localhost:포트` 에서 다른 origin 일 수 있으므로 CORS 설정 확인
+- **Eval 흐름**: Playwright 기반 `evaluator-functional` + `evaluator-visual` 이 정상 작동 (브라우저 E2E + 시각 검증)
+- 상세 → [Flutter Web Pattern](references/flutter-web-pattern.md)
+
+### `fe_target = mobile` (Android / iOS)
+
+- **빌드**: `flutter build apk` / `flutter build ios` / 개발: `flutter run -d <device>`
+- **HTML/JS 인터롭 금지**: `dart:html`, `package:web`, `universal_html` 직접 참조 → 빌드 실패
+- **플랫폼 채널**: 네이티브 기능 사용 시 `MethodChannel` 또는 검증된 plugin 사용
+- **권한**: `AndroidManifest.xml` / `Info.plist` 에 권한 명시
+- **Eval 흐름**: 정적 분석 기반 `evaluator-functional-flutter` 사용 (Playwright 불가)
+
+### `fe_target = desktop` (macOS / Windows / Linux)
+
+- **빌드**: `flutter build macos` / `flutter build windows` / `flutter build linux`
+- **HTML/JS 인터롭 금지**: 모바일과 동일
+- **윈도우 관리**: `window_manager` 등 플러그인으로 윈도우 크기/위치 제어
+- **Eval 흐름**: 정적 분석 기반 `evaluator-functional-flutter` 사용
 
 ## 핵심 규칙
 

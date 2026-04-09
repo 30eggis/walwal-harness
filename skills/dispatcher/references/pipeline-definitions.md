@@ -31,20 +31,31 @@ docmeta:
 > **FE Stack 차원**: 모든 FE 관련 파이프라인은 `fe_stack` 필드로 React/Flutter를 구분한다.
 > Planner가 scan-result.json(`tech_stack.fe_stack`) 또는 사용자 질문으로 확정한다.
 
-## fe_stack 스위치 매트릭스
+## fe_stack + fe_target 스위치 매트릭스
 
-| fe_stack | FE Generator | FE Evaluator(Functional) | Evaluator-Visual |
-|----------|--------------|--------------------------|------------------|
-| `react`  | `generator-frontend` | `evaluator-functional` (Playwright MCP) | `evaluator-visual` |
-| `flutter`| `generator-frontend-flutter` | `evaluator-functional-flutter` (flutter analyze/test) | **SKIP** (브라우저 없음) |
+| fe_stack | fe_target | FE Generator | Eval-Functional | Eval-Visual |
+|----------|-----------|--------------|----------------|-------------|
+| `react`  | (n/a)     | `generator-frontend` | `evaluator-functional` (Playwright) | `evaluator-visual` |
+| `flutter`| **`web`** | `generator-frontend-flutter` | **`evaluator-functional`** (Playwright!) | **`evaluator-visual`** (Playwright!) |
+| `flutter`| `mobile`  | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | **SKIP** |
+| `flutter`| `desktop` | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | **SKIP** |
 
-Dispatcher는 `next_agent`를 설정할 때 다음 규칙으로 치환한다:
+> **Flutter Web**: 컴파일 결과가 HTML+JS+CSS 이므로 React 경로의 Playwright evaluator 가 정상 동작.
+> Generator-Frontend-Flutter 의 Self-Verification 에서 `flutter analyze` / `flutter test` /
+> `flutter build web --release` 가 이미 통과한 상태로 handoff 됨이 전제.
+
+Dispatcher는 `next_agent`를 설정할 때 `pipeline.json` 의 `fe_stack` + `fe_target` 두 값을 보고 치환한다:
 
 ```
 if pipeline.json.fe_stack == "flutter":
-    "generator-frontend"  → "generator-frontend-flutter"
-    "evaluator-functional" (FE 단계) → "evaluator-functional-flutter"
-    "evaluator-visual" → skip (agents_skipped로 이동)
+    "generator-frontend" → "generator-frontend-flutter"  (모든 fe_target 공통)
+
+    if fe_target == "web":
+        "evaluator-functional" → "evaluator-functional"  (그대로, Playwright 사용)
+        "evaluator-visual"     → "evaluator-visual"      (그대로)
+    elif fe_target in ("mobile", "desktop"):
+        "evaluator-functional" → "evaluator-functional-flutter"
+        "evaluator-visual"     → __skip__
 ```
 
 ## FE-ONLY
