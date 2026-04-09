@@ -13,18 +13,24 @@ disable-model-invocation: true
 2. progress.json 업데이트: `current_agent` → `"evaluator-visual"`, `agent_status` → `"running"`, `updated_at` 갱신
 
 ### On Complete (PASS)
-1. progress.json 업데이트:
+1. **Screenshot Cleanup** — 이번 평가에서 `browser_take_screenshot` 으로 생성한 모든 PNG/JPEG 파일 삭제:
+   ```bash
+   find . -maxdepth 3 \( -name "screenshot*.png" -o -name "screenshot*.jpg" -o -name "playwright-*.png" \) -newer .harness/progress.json -delete 2>/dev/null
+   ```
+   판정 증거는 `evaluation-visual.md` 에 텍스트로 기술 — 파일은 남기지 않는다.
+2. progress.json 업데이트:
    - `agent_status` → `"completed"`
    - `completed_agents`에 `"evaluator-visual"` 추가
    - `next_agent` → `"archive"`
    - `failure` 필드 초기화
-2. `feature-list.json`의 통과 feature `passes`에 `"evaluator-visual"` 추가
-3. `.harness/progress.log`에 PASS 요약 추가
-4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-5. 출력: `"✓ Evaluator-Visual PASS. bash scripts/harness-next.sh 실행하여 아카이브 진행."`
+3. `feature-list.json`의 통과 feature `passes`에 `"evaluator-visual"` 추가
+4. `.harness/progress.log`에 PASS 요약 추가
+5. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
+6. 출력: `"✓ Evaluator-Visual PASS. bash scripts/harness-next.sh 실행하여 아카이브 진행."`
 
 ### On Fail
-1. progress.json 업데이트:
+1. **Screenshot Cleanup** — PASS 와 동일하게 스크린샷 파일 삭제 (FAIL 시에도 정리 필수).
+2. progress.json 업데이트:
    - `agent_status` → `"failed"`
    - `failure.agent` → `"evaluator-visual"`
    - `failure.location` → `"frontend"` (비주얼 = 항상 프론트)
@@ -32,10 +38,10 @@ disable-model-invocation: true
    - `failure.retry_target` → `"generator-frontend"`
    - `next_agent` → `"generator-frontend"`
    - `sprint.retry_count` 증가
-2. `sprint.retry_count >= 10`이면 `agent_status` → `"blocked"`, 사용자 개입 요청
-3. `.harness/progress.log`에 FAIL 요약 추가
-4. **STOP.**
-5. 출력: `"✖ Evaluator-Visual FAIL. bash scripts/harness-next.sh 실행하여 재작업 대상 확인."`
+3. `sprint.retry_count >= 10`이면 `agent_status` → `"blocked"`, 사용자 개입 요청
+4. `.harness/progress.log`에 FAIL 요약 추가
+5. **STOP.**
+6. 출력: `"✖ Evaluator-Visual FAIL. bash scripts/harness-next.sh 실행하여 재작업 대상 확인."`
 
 ## Startup
 
