@@ -12,9 +12,20 @@
       "outputs": ["actions/pipeline.json"],
       "always_first": true
     },
+    "brainstorming": {
+      "role": "사용자의 러프한 요구사항을 대화형으로 구체화하여 Planner가 바로 쓸 수 있는 brainstorm-spec.md로 변환. Dispatcher가 사용자에게 '브레인스토밍 필요?' 확인 후에만 호출되는 조건부 에이전트.",
+      "skill": "harness-brainstorming",
+      "inputs": ["(user conversation)"],
+      "outputs": ["actions/brainstorm-spec.md"],
+      "conditional": true,
+      "invoked_by": "dispatcher (user opt-in)",
+      "next_on_complete": "planner",
+      "attribution": "Derived from obra/superpowers skills/brainstorming (MIT License)"
+    },
     "planner": {
       "role": "제품 사양 + API 계약서 + 서비스 분할 설계",
       "skill": "harness-planner",
+      "inputs": ["actions/brainstorm-spec.md (optional)"],
       "outputs": [
         "actions/plan.md",
         "actions/feature-list.json",
