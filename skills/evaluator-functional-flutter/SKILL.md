@@ -53,11 +53,12 @@ disable-model-invocation: true
 
 1. `AGENTS.md` 읽기 — IA-MAP (Flutter 경로 확인)
 2. `.harness/gotchas/evaluator-functional-flutter.md` (없으면 skip) — **과거 실수 반복 금지**
-3. `actions/sprint-contract.md` — FE 성공 기준
-4. `actions/feature-list.json` — 이번 스프린트 범위 (`layer: "frontend"` + `fe_stack: "flutter"`)
-5. `actions/api-contract.json` — 기대 API 계약 (Retrofit 매핑 대조용)
-6. `.harness/progress.json`
-7. **Generator의 anti-patterns.md 로드** — 정적 검증 rule 소스
+3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+4. `actions/sprint-contract.md` — FE 성공 기준
+5. `actions/feature-list.json` — 이번 스프린트 범위 (`layer: "frontend"` + `fe_stack: "flutter"`)
+6. `actions/api-contract.json` — 기대 API 계약 (Retrofit 매핑 대조용)
+7. `.harness/progress.json`
+8. **Generator의 anti-patterns.md 로드** — 정적 검증 rule 소스
    → `skills/generator-frontend-flutter/references/anti-patterns.md`
 
 ## Evaluation Steps

@@ -47,8 +47,9 @@ disable-model-invocation: true
 
 1. `AGENTS.md` 읽기
 2. `.harness/gotchas/evaluator-visual.md` 읽기 — **과거 실수 반복 금지**
-3. `actions/evaluation-functional.md` — Verdict: PASS 확인
-4. Frontend `http://localhost:5173` 실행 확인
+3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+4. `actions/evaluation-functional.md` — Verdict: PASS 확인
+5. Frontend `http://localhost:5173` 실행 확인
 
 ## Evaluation Steps
 

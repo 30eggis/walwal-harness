@@ -28,11 +28,12 @@ disable-model-invocation: true
 
 1. `AGENTS.md` 읽기 — IA-MAP, 권한 확인
 2. `.harness/gotchas/generator-backend.md` 읽기 — **과거 실수 반복 금지**
-3. `pwd` + `.harness/progress.json` + `git log --oneline -20`
-4. `.harness/actions/api-contract.json` 읽기 — **이것이 스펙**
-5. `.harness/actions/feature-list.json` — `layer: "backend"` 필터
-6. 통합 러너: `npm run dev`
-7. Gateway 헬스체크: `curl http://localhost:3000/health`
+3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+4. `pwd` + `.harness/progress.json` + `git log --oneline -20`
+5. `.harness/actions/api-contract.json` 읽기 — **이것이 스펙**
+6. `.harness/actions/feature-list.json` — `layer: "backend"` 필터
+7. 통합 러너: `npm run dev`
+8. Gateway 헬스체크: `curl http://localhost:3000/health`
 
 ## AGENTS.md — 읽기 전용
 

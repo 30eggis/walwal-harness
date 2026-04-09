@@ -141,6 +141,13 @@ function scaffoldHarness() {
     copyFile(harnessMdSrc, harnessMdDest);
   }
 
+  // Copy memory.md (shared learnings)
+  const memorySrc = path.join(PKG_ROOT, 'assets', 'templates', 'memory.md');
+  const memoryDest = path.join(HARNESS_DIR, 'memory.md');
+  if (fs.existsSync(memorySrc) && (!fileExists(memoryDest) || isForce)) {
+    copyFile(memorySrc, memoryDest);
+  }
+
   // Create progress.log
   const progressLog = path.join(HARNESS_DIR, 'progress.log');
   if (!fileExists(progressLog) || isForce) {

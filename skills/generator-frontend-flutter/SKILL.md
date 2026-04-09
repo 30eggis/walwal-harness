@@ -29,10 +29,11 @@ disable-model-invocation: true
 
 1. `AGENTS.md` 읽기 — IA-MAP, 권한 확인 (Flutter 소유 경로)
 2. `.harness/gotchas/generator-frontend-flutter.md` 읽기 (없으면 skip) — **과거 실수 반복 금지**
-3. `pwd` + `.harness/progress.json` + `git log --oneline -20`
-4. `.harness/actions/api-contract.json` 읽기 — **서버 API 계약이 Source of Truth**
-5. `.harness/actions/feature-list.json` — `layer: "frontend"` 필터
-6. `pubspec.yaml` 확인 — Flutter 버전, Riverpod/Retrofit/json_serializable 의존성 존재 확인
+3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+4. `pwd` + `.harness/progress.json` + `git log --oneline -20`
+5. `.harness/actions/api-contract.json` 읽기 — **서버 API 계약이 Source of Truth**
+6. `.harness/actions/feature-list.json` — `layer: "frontend"` 필터
+7. `pubspec.yaml` 확인 — Flutter 버전, Riverpod/Retrofit/json_serializable 의존성 존재 확인
 
 ## AGENTS.md — 읽기 전용
 

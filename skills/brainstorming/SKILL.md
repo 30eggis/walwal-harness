@@ -37,7 +37,8 @@ Planner 가 곧바로 plan.md / feature-list.json / api-contract.json 으로 변
 1. `.harness/progress.json` 읽기 — `next_agent == "brainstormer"` 인지 확인
    - 아니면 즉시 STOP + "Dispatcher 를 먼저 실행하세요" 안내
 2. progress.json 업데이트: `current_agent` → `"brainstormer"`, `agent_status` → `"running"`, `updated_at` 갱신
-3. **Skip 조건 검사**: `.harness/actions/brainstorm-spec.md` 가 이미 존재하고
+3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+4. **Skip 조건 검사**: `.harness/actions/brainstorm-spec.md` 가 이미 존재하고
    사용자가 "새로 브레인스토밍" 을 명시하지 않았다면:
    - 사용자에게 "기존 brainstorm-spec.md 가 있습니다. 재사용(Y) / 새로 작성(N)?" 질문
    - Y → 즉시 On Complete 로 이동 (interactive 단계 전부 스킵)

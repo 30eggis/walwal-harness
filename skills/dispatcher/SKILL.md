@@ -11,6 +11,7 @@ disable-model-invocation: false
 ### On Start
 1. `.harness/progress.json` 읽기 — `next_agent`가 `"dispatcher"`인지 확인
 2. progress.json 업데이트: `current_agent` → `"dispatcher"`, `agent_status` → `"running"`, `updated_at` 갱신
+3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
 
 ### On Complete
 1. progress.json 업데이트:
@@ -50,7 +51,16 @@ Claude 는 기본적으로 Dispatcher 경유로 분류/라우팅해야 한다.
 - **혼합** → Gotcha 먼저 기록 → Pipeline 이어서
 - **메타/인사/Claude 자체 질문** → Dispatcher skip, 짧은 일반 응답 허용
 
-## 2. Gotcha Flow
+## 2. Gotcha Flow vs Memory Flow
+
+사용자의 교정/피드백을 받으면 **먼저 분류**:
+
+| 유형 | 저장 위치 | 예시 |
+|------|----------|------|
+| **에이전트별 실수** (일회성 교정) | `.harness/gotchas/[agent].md` | "API 응답에 created_at은 ISO 8601로" |
+| **프로젝트 공유 규칙** (구조적/반복적) | `.harness/memory.md` | "Playwright 스크린샷은 단계 완료 후 항상 삭제" |
+
+### Gotcha Flow (에이전트별 실수)
 
 실수 지적 감지 시 → [Gotcha 상세 가이드](references/gotcha-flow.md)
 
@@ -58,6 +68,14 @@ Claude 는 기본적으로 Dispatcher 경유로 분류/라우팅해야 한다.
 1. 교정 시그널 감지 (HIGH/MEDIUM만 기록)
 2. 도메인 분석 → 대상 에이전트 판별
 3. `.harness/gotchas/[agent].md`에 항목 추가 (중복 시 Occurrences 증가)
+4. 사용자에게 기록 확인
+
+### Memory Flow (프로젝트 공유 규칙)
+
+구조적/반복적 교훈 감지 시:
+1. 이것이 특정 에이전트의 일회성 실수가 아니라 **전체 에이전트가 따라야 할 규칙**인지 판단
+2. **맞으면**: `.harness/memory.md`에 항목 추가 (ID: `[M-NNN]`, 날짜, 규칙, 적용 범위)
+3. 관련 스킬의 SKILL.md에 구조적 변경이 필요하면 → 사용자에게 "이건 스킬 자체에 반영해야 합니다" 안내 (Dispatcher가 직접 SKILL.md를 수정하지는 않음)
 4. 사용자에게 기록 확인
 
 ## 3. Initialization Check (Phase 0)
