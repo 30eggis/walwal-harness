@@ -7,6 +7,7 @@
 ## 디렉토리 구조
 
 ```
+CONVENTIONS.md                    # 프로젝트 컨벤션 (사용자 작성, 에이전트 읽기 전용)
 .harness/
 ├── HARNESS.md                  # 이 파일
 ├── config.json                 # 하네스 설정
@@ -190,7 +191,7 @@ jq . .harness/progress.json         # 현재 상태 확인
 
 모든 에이전트 스킬에 내장된 프로토콜:
 
-- **On Start**: `progress.json` 읽기 → `agent_status: "running"` 설정 → `handoff.json` 참조
+- **On Start**: `progress.json` 읽기 → `agent_status: "running"` 설정 → `handoff.json` 참조 → `CONVENTIONS.md` 읽기 (존재 시)
 - **On Complete**: `progress.json` 업데이트 → 아티팩트 상태 갱신 → `next_agent` 계산 → **STOP**
 - **On Fail** (Evaluator): `failure` 정보 기록 → `retry_target` 설정 → **STOP**
 - **On Transition**: 파일 소유권 검증 → Pre-Eval Gate (해당 시) → 아티팩트 선행조건 검증

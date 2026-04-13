@@ -333,8 +333,16 @@
     "actions": ".harness/actions",
     "archive": ".harness/archive",
     "gotchas": ".harness/gotchas",
+    "conventions": "CONVENTIONS.md",
     "progress_state": ".harness/progress.json",
     "progress_log": ".harness/progress.log"
+  },
+  "conventions": {
+    "comment": "CONVENTIONS.md — 사용자가 자유 형식으로 작성하는 프로젝트 컨벤션. 모든 에이전트가 세션 시작 시 직접 읽음. Gotcha/AGENTS.md에 복사하지 않음.",
+    "file": "CONVENTIONS.md",
+    "read_by": "all_agents",
+    "write_by": "user_only",
+    "read_timing": "session_start"
   },
   "recommended_skills": {
     "comment": "Claude Code에 설치하면 하네스 품질이 향상되는 외부 스킬 목록",

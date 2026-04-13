@@ -62,6 +62,7 @@
 
 | 파일 | 읽기 | 쓰기 |
 |------|------|------|
+| CONVENTIONS.md | 전체 | 사용자만 (에이전트 수정 금지) |
 | AGENTS.md | 전체 | Planner만 |
 | .harness/actions/api-contract.json | 전체 | Planner만 |
 | .harness/actions/feature-list.json | 전체 | passes 필드: Generator, 나머지: Planner만 |

@@ -148,6 +148,14 @@ function scaffoldHarness() {
     copyFile(memorySrc, memoryDest);
   }
 
+  // Copy CONVENTIONS.md to project root
+  const conventionsSrc = path.join(PKG_ROOT, 'assets', 'templates', 'CONVENTIONS.md');
+  const conventionsDest = path.join(PROJECT_ROOT, 'CONVENTIONS.md');
+  if (fs.existsSync(conventionsSrc) && (!fileExists(conventionsDest) || isForce)) {
+    copyFile(conventionsSrc, conventionsDest);
+    log('CONVENTIONS.md created — edit to define your project conventions');
+  }
+
   // Create progress.log
   const progressLog = path.join(HARNESS_DIR, 'progress.log');
   if (!fileExists(progressLog) || isForce) {
