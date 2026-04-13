@@ -311,6 +311,10 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
         .failure.retry_target = "planner"' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
   fi
 
+  # ── Read model & thinking mode for next agent ──
+  agent_model=$(jq -r ".agents[\"${next_agent}\"].model // \"opus\"" "$CONFIG" 2>/dev/null || echo "opus")
+  agent_thinking=$(jq -r ".agents[\"${next_agent}\"].thinking_mode // \"null\"" "$CONFIG" 2>/dev/null || echo "null")
+
   # Build prompt
   prompt="/harness-${next_agent} 를 실행하세요."
 
@@ -323,6 +327,21 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   fi
 
   prompt+=$'\n'".harness/progress.json을 읽고 현재 상태를 확인하세요."
+
+  # Inject thinking mode instruction into prompt
+  if [ "$agent_thinking" != "null" ]; then
+    case "$agent_thinking" in
+      ultraplan)
+        prompt+=$'\n\n'"[Thinking Mode: ultraplan] 이 세션에서는 /ultraplan 모드를 사용하세요. 깊은 사고로 아키텍처와 설계를 수행합니다."
+        ;;
+      ultrathink)
+        prompt+=$'\n\n'"[Thinking Mode: ultrathink] 이 세션에서는 /ultrathink 모드를 사용하세요. 최대 추론 깊이로 비판적 검증을 수행합니다."
+        ;;
+      plan)
+        prompt+=$'\n\n'"[Thinking Mode: plan] 이 세션에서는 /plan 모드를 사용하세요. 구조화된 계획을 수립한 후 실행합니다."
+        ;;
+    esac
+  fi
 
   # Add failure context if retrying (include previous failure summary)
   failure_msg=$(jq -r '.failure.message // empty' "$PROGRESS")
@@ -406,6 +425,8 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
     --argjson regression "$regression_source" \
     --argjson eval_config "$eval_config" \
     --argjson cross_val "$cross_validation_data" \
+    --arg agent_model "$agent_model" \
+    --arg agent_thinking "$agent_thinking" \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{
       from: $from,
@@ -413,6 +434,8 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
       sprint: $sprint,
       retry_count: $retry,
       sprint_status: $status,
+      model: $agent_model,
+      thinking_mode: (if $agent_thinking == "null" then null else $agent_thinking end),
       failure_context: (if $failure_msg != "" then $failure_msg else null end),
       artifacts_ready: $artifacts,
       focus_features: $focus,

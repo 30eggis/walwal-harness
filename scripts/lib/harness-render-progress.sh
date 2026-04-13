@@ -268,9 +268,28 @@ render_progress() {
 
   # ── Next Action ──
   if [ "$next_agent" != "none" ] && [ "$next_agent" != "null" ] && [ "$agent_status" != "blocked" ]; then
+    # Read model & thinking mode from config
+    local next_model="opus"
+    local next_thinking="null"
+    if [ -f "$CONFIG" ]; then
+      next_model=$(jq -r ".agents[\"${next_agent}\"].model // \"opus\"" "$CONFIG" 2>/dev/null || echo "opus")
+      next_thinking=$(jq -r ".agents[\"${next_agent}\"].thinking_mode // \"null\"" "$CONFIG" 2>/dev/null || echo "null")
+    fi
+
+    local mode_str=""
+    if [ "$next_thinking" != "null" ]; then
+      mode_str=" [/${next_thinking}]"
+    fi
+
     echo ""
-    echo "  Next → /harness-${next_agent}"
-    echo "  Auto → claude --prompt \"\$(cat .harness/next-prompt.txt)\""
+    echo "  Next → /harness-${next_agent}  (model: ${next_model}${mode_str})"
+
+    # Build auto CLI command with model flag
+    local model_flag=""
+    if [ "$next_model" != "opus" ]; then
+      model_flag=" --model ${next_model}"
+    fi
+    echo "  Auto → claude${model_flag} --prompt \"\$(cat .harness/next-prompt.txt)\""
   fi
 
   echo ""

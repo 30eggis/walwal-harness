@@ -1,7 +1,7 @@
 {
   "harness": {
     "name": "6-Agent Production Harness",
-    "version": "3.2.0",
+    "version": "3.3.0",
     "description": "Dispatcher + NestJS MSA + React/Next.js + Playwright 기반 실무 하네스",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
@@ -10,7 +10,9 @@
       "role": "사용자 요청 분석 → 파이프라인 결정 (FE-ONLY / BE-ONLY / FULLSTACK)",
       "skill": "harness-dispatcher",
       "outputs": ["actions/pipeline.json"],
-      "always_first": true
+      "always_first": true,
+      "model": "opus",
+      "thinking_mode": null
     },
     "brainstorming": {
       "role": "사용자의 러프한 요구사항을 대화형으로 구체화하여 Planner가 바로 쓸 수 있는 brainstorm-spec.md로 변환.",
@@ -33,6 +35,9 @@
       },
       "invoked_by": "dispatcher (user opt-in after suggestion)",
       "next_on_complete": "planner",
+      "model": "opus",
+      "thinking_mode": "plan",
+      "thinking_mode_description": "Claude Code plan 모드로 실행. 구조화된 계획 수립 후 실행.",
       "attribution": "Derived from obra/superpowers skills/brainstorming (MIT License)"
     },
     "planner": {
@@ -43,21 +48,30 @@
         "actions/plan.md",
         "actions/feature-list.json",
         "actions/api-contract.json"
-      ]
+      ],
+      "model": "opus",
+      "thinking_mode": "ultraplan",
+      "thinking_mode_description": "최고 수준의 계획 모드. 아키텍처 결정, API 설계, 서비스 분할에 깊은 사고 필요."
     },
     "generator-backend": {
       "role": "NestJS MSA 서비스 구현, API 엔드포인트, DB 스키마",
       "skill": "harness-generator-backend",
       "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
       "outputs": ["code:backend", "actions/sprint-contract.md"],
-      "order": 1
+      "order": 1,
+      "model": "sonnet",
+      "thinking_mode": null,
+      "model_rationale": "코드 생성은 Sonnet이 비용 대비 효율적. 계획은 Planner가 이미 완료."
     },
     "generator-frontend": {
       "role": "React/Next.js UI 컴포넌트, 상태관리, API 연동",
       "skill": "harness-generator-frontend",
       "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
       "outputs": ["code:frontend", "actions/sprint-contract.md"],
-      "order": 2
+      "order": 2,
+      "model": "sonnet",
+      "thinking_mode": null,
+      "model_rationale": "코드 생성은 Sonnet이 비용 대비 효율적. 계획은 Planner가 이미 완료."
     },
     "evaluator-functional": {
       "role": "Playwright로 E2E 기능 검증, API 응답/DB 상태 확인",
@@ -65,6 +79,9 @@
       "tools": ["playwright:browser_*"],
       "inputs": ["actions/sprint-contract.md", "actions/feature-list.json", "actions/api-contract.json"],
       "outputs": ["actions/evaluation-functional.md"],
+      "model": "opus",
+      "thinking_mode": "ultrathink",
+      "thinking_mode_description": "최고 수준의 사고 모드. 적대적 검증에 깊은 추론이 필요. 각 항목을 비판적으로 분석.",
       "evaluation_template": "assets/templates/evaluation-functional.md.template",
       "adversarial_rules": {
         "comment": "Evaluator 적대적 행동 규칙 — 통과 편향 제거를 위한 강제 규칙",
@@ -92,6 +109,9 @@
       "tools": ["playwright:browser_take_screenshot", "playwright:browser_resize", "playwright:browser_snapshot"],
       "inputs": ["actions/sprint-contract.md", "actions/evaluation-functional.md", "actions/feature-list.json"],
       "outputs": ["actions/evaluation-visual.md"],
+      "model": "opus",
+      "thinking_mode": "ultrathink",
+      "thinking_mode_description": "최고 수준의 사고 모드. 시각적 결함, 접근성, AI슬롭을 비판적으로 탐지.",
       "evaluation_template": "assets/templates/evaluation-visual.md.template",
       "adversarial_rules": {
         "comment": "Visual Evaluator 적대적 행동 규칙",
@@ -119,7 +139,9 @@
       "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
       "outputs": ["code:flutter", "actions/sprint-contract.md"],
       "order": 2,
-      "fe_stack": "flutter"
+      "fe_stack": "flutter",
+      "model": "sonnet",
+      "thinking_mode": null
     },
     "evaluator-functional-flutter": {
       "role": "Flutter 앱 검증 — flutter analyze, flutter test, build_runner 일관성, 안티패턴 정적 검증",
@@ -127,7 +149,9 @@
       "tools": ["bash:flutter", "bash:dart"],
       "inputs": ["actions/sprint-contract.md"],
       "outputs": ["actions/evaluation-functional.md"],
-      "fe_stack": "flutter"
+      "fe_stack": "flutter",
+      "model": "opus",
+      "thinking_mode": "ultrathink"
     }
   },
   "flow": {

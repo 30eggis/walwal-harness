@@ -88,6 +88,28 @@ if [ "$retry_count" -gt 0 ]; then
   retry_str=" R${retry_count}"
 fi
 
+# Model/mode for current or next agent
+CONFIG="$PROJECT_ROOT/.harness/config.json"
+active_agent="$current_agent"
+if [ "$active_agent" = "none" ] || [ "$active_agent" = "null" ]; then
+  active_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
+fi
+model_short=""
+if [ -f "$CONFIG" ] && [ "$active_agent" != "none" ] && [ "$active_agent" != "null" ]; then
+  am=$(jq -r ".agents[\"${active_agent}\"].model // empty" "$CONFIG" 2>/dev/null)
+  at=$(jq -r ".agents[\"${active_agent}\"].thinking_mode // empty" "$CONFIG" 2>/dev/null)
+  if [ -n "$am" ]; then
+    model_short="${am}"
+    if [ -n "$at" ] && [ "$at" != "null" ]; then
+      model_short+="/${at}"
+    fi
+  fi
+fi
+
 # Build compact status line
-# Format: [S1] FULL | >backend | 2/5 feat | R0 | ctx 45% | $1.23
-echo "[S${sprint_num}] ${pl} | ${status_icon}${agent_short}${retry_str} | ${completed_features}/${total_features} feat | ctx ${context_pct}% | \$${cost}"
+# Format: [S1] FULL | >backend | sonnet | 2/5 feat | ctx 45% | $1.23
+if [ -n "$model_short" ]; then
+  echo "[S${sprint_num}] ${pl} | ${status_icon}${agent_short}${retry_str} | ${model_short} | ${completed_features}/${total_features} feat | ctx ${context_pct}% | \$${cost}"
+else
+  echo "[S${sprint_num}] ${pl} | ${status_icon}${agent_short}${retry_str} | ${completed_features}/${total_features} feat | ctx ${context_pct}% | \$${cost}"
+fi
