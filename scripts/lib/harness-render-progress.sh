@@ -282,14 +282,8 @@ render_progress() {
     fi
 
     echo ""
-    echo "  Next → /harness-${next_agent}  (model: ${next_model}${mode_str})"
-
-    # Build auto CLI command with model flag, reading prompt from handoff.json
-    local model_flag=""
-    if [ "$next_model" != "opus" ]; then
-      model_flag=" --model ${next_model}"
-    fi
-    echo "  Auto → claude${model_flag} --prompt \"\$(jq -r .prompt .harness/handoff.json)\""
+    echo "  Next → /harness-${next_agent}  (${next_model}${mode_str})"
+    echo "  Tip  → 새 세션을 시작하면 자동으로 안내됩니다"
   fi
 
   echo ""

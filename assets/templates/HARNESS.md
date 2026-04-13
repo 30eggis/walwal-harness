@@ -152,23 +152,39 @@ pending → draft → reviewed → approved
 "하네스 엔지니어링 시작" 또는 /harness-dispatcher
 ```
 
-#### 2. 이후 세션: harness-next.sh로 안내받기
-```bash
-bash scripts/harness-next.sh
+#### 2. 이후 세션: 새 세션만 열면 자동 진행
+
+에이전트가 완료 후 STOP하면, **새 세션을 시작하기만 하면 됩니다**.
+SessionStart 훅이 자동으로:
+1. 이전 에이전트의 완료 상태 감지
+2. 게이트 체크 실행 (Pre-Eval Gate, 파일 소유권, 아티팩트 선행조건)
+3. `handoff.json` 생성 (prompt, model, thinking_mode, regression 등)
+4. 다음 에이전트 안내 출력
+
 ```
-Feature-level 프로그래스를 출력하고 다음 에이전트를 안내합니다.
+# 새 세션 시작 시 자동 출력 예시:
+# Harness: next → /harness-generator-backend  (sonnet)
+```
 
-#### 3. 다음 세션 시작
+사용자는 안내에 따라 스킬을 호출하면 됩니다.
+
+#### 자동 CLI 실행 (옵션)
+
+완전 자동화를 원하면 아래 명령으로 다음 에이전트를 즉시 시작할 수 있습니다:
+
 ```bash
-# 방법 A: 새 세션에서 스킬 직접 호출
-/harness-generator-backend
-
-# 방법 B: claude CLI 자동 실행
 claude --model $(jq -r .model .harness/handoff.json) --prompt "$(jq -r .prompt .harness/handoff.json)"
 ```
 
-#### 4. SessionStart 훅 (자동)
-세션 시작 시 `.claude/settings.json` 훅이 자동으로 현재 프로그래스를 출력합니다.
+#### 디버깅 (수동)
+
+문제가 생겼을 때만 수동으로 상태를 확인합니다:
+
+```bash
+bash scripts/harness-next.sh        # 게이트 체크 + 프로그래스 출력
+jq . .harness/handoff.json          # handoff 내용 확인
+jq . .harness/progress.json         # 현재 상태 확인
+```
 
 ### Session Boundary Protocol
 
