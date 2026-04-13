@@ -89,6 +89,37 @@ Generator/Evaluator가 AGENTS.md 또는 api-contract.json 변경이 필요하다
 - 테스트 삭제/약화
 - archive/ 내 파일 수정
 - 프로젝트를 조기 "완료" 선언
+- 아티팩트 상태가 `draft` 미만인 선행 아티팩트에 의존하여 작업 시작
+
+### 품질 게이트 (v3.1 신설)
+
+| 게이트 | 시점 | 내용 |
+|--------|------|------|
+| **Pre-Eval Gate** | Generator → Evaluator 전환 | tsc, eslint, jest/vitest 자동 실행. 실패 시 Generator 리라우팅 |
+| **파일 소유권 검증** | 에이전트 전환 시 | git diff로 권한 밖 파일 수정 감지 |
+| **아티팩트 선행조건** | 에이전트 시작 전 | progress.json.artifacts 상태 확인 |
+| **에스컬레이션** | 3회 연속 실패 | Planner에게 scope 축소/접근 변경 요청 |
+
+### Evaluation System (v3.2)
+
+| 설정 | 값 |
+|------|------|
+| PASS 기준 | **2.80 / 3.00 이상** |
+| FAIL 기준 | 2.79 이하 (예외 없음) |
+| Evidence 없는 Score | 0점 강제 |
+| AC 부분 통과 | FAIL (100% 필수) |
+| Regression 실패 1건+ | FAIL (신규 점수 무관) |
+
+- Planner는 feature-list.json에 **Executable AC** (type: api/visual/e2e + verify 조건) 필수 작성
+- Evaluator는 Adversarial Rules에 따라 적대적으로 검증 (rubber-stamping 금지)
+- 이전 Sprint PASS 기능은 Regression Checkpoint로 재검증
+- Eval-Functional ↔ Eval-Visual 간 Cross-Validation으로 불일치 감지
+
+### 메모리 오염 방어
+
+- gotcha/memory 항목은 `unverified` 상태로 시작, Planner 리뷰 후 `verified` 승격
+- TTL 만료 항목은 Planner 스프린트 전환 시 리뷰 (갱신 또는 삭제)
+- 코드/git으로 검증 불가한 항목은 즉시 삭제
 
 ## Harness Quick Reference
 

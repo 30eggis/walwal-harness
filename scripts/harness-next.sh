@@ -6,6 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/harness-render-progress.sh"
+source "$SCRIPT_DIR/lib/harness-guardrail.sh"
 
 # ─────────────────────────────────────────
 # Resolve project root
@@ -69,6 +70,90 @@ substitute_fe_stack() {
   local sub
   sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.${fe_stack}.by_target[\"${fe_target}\"][\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
   echo "$sub"
+}
+
+# ─────────────────────────────────────────
+# Pre-Eval Gate — deterministic checks before Evaluator
+#   Generator가 완료되고 다음이 Evaluator일 때, lint/type/test를 먼저 실행.
+#   실패 시 Evaluator를 건너뛰고 Generator로 리라우팅.
+# ─────────────────────────────────────────
+run_pre_eval_gate() {
+  local next="$1"
+  local gate_enabled
+  gate_enabled=$(jq -r '.flow.pre_eval_gate.enabled // false' "$CONFIG" 2>/dev/null)
+  if [ "$gate_enabled" != "true" ]; then return 0; fi
+
+  # Evaluator 에이전트인지 확인
+  case "$next" in
+    evaluator-*) ;;
+    *) return 0 ;;
+  esac
+
+  local timeout
+  timeout=$(jq -r '.flow.pre_eval_gate.timeout_seconds // 120' "$CONFIG" 2>/dev/null)
+
+  # 실패 위치 결정 (backend or frontend)
+  local location="backend"
+  local checks_key="backend_checks"
+  if [ "$current_agent" = "generator-frontend" ] || [ "$current_agent" = "generator-frontend-flutter" ]; then
+    location="frontend"
+    checks_key="frontend_checks"
+  fi
+
+  local -a checks
+  mapfile -t checks < <(jq -r ".flow.pre_eval_gate.${checks_key}[]" "$CONFIG" 2>/dev/null)
+
+  if [ ${#checks[@]} -eq 0 ]; then return 0; fi
+
+  echo ""
+  echo "  ── Pre-Eval Gate ──────────────────────"
+  local all_pass=true
+  local fail_log=""
+
+  for cmd in "${checks[@]}"; do
+    printf "  %-40s " "$cmd"
+    local output
+    if output=$(cd "$PROJECT_ROOT" && timeout "${timeout}s" bash -c "$cmd" 2>&1); then
+      echo "✓"
+    else
+      echo "✗"
+      all_pass=false
+      fail_log+="[FAIL] $cmd"$'\n'"$output"$'\n\n'
+    fi
+  done
+
+  if [ "$all_pass" = true ]; then
+    echo "  Gate: PASS — proceeding to $next"
+    echo ""
+    return 0
+  else
+    echo ""
+    echo "  Gate: FAIL — rerouting to $current_agent"
+    echo ""
+
+    # progress.json 업데이트: 실패 기록 + Generator로 리라우팅
+    local new_retry=$((retry_count + 1))
+    local fail_summary
+    fail_summary=$(echo "$fail_log" | head -20)
+
+    jq --arg agent "$current_agent" \
+       --arg loc "$location" \
+       --arg msg "Pre-eval gate failed: $fail_summary" \
+       --arg target "$current_agent" \
+       --argjson retry "$new_retry" \
+       '.sprint.status = "failed" |
+        .sprint.retry_count = $retry |
+        .agent_status = "failed" |
+        .next_agent = $target |
+        .failure.agent = $agent |
+        .failure.location = $loc |
+        .failure.message = $msg |
+        .failure.retry_target = $target' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
+
+    # next_agent를 Generator로 덮어쓰기
+    next_agent="$current_agent"
+    return 1
+  fi
 }
 
 # ─────────────────────────────────────────
@@ -139,6 +224,71 @@ if [ "$agent_status" = "completed" ] && [ "$next_agent" = "null" ]; then
 fi
 
 # ─────────────────────────────────────────
+# Artifact Prerequisites — 선행 아티팩트 상태 검증
+# ─────────────────────────────────────────
+verify_artifact_prerequisites() {
+  local target_agent="$1"
+  local states_order='["pending","draft","reviewed","approved"]'
+
+  # 에이전트의 prerequisites 가져오기
+  local prereqs
+  prereqs=$(jq -r ".artifacts.prerequisites[\"${target_agent}\"] // empty" "$CONFIG" 2>/dev/null)
+  if [ -z "$prereqs" ] || [ "$prereqs" = "null" ]; then return 0; fi
+
+  local all_met=true
+  echo ""
+  echo "  ── Artifact Prerequisites ─────────────"
+
+  # prereqs의 각 키(artifact명)를 순회
+  while IFS='=' read -r artifact required_status; do
+    artifact=$(echo "$artifact" | tr -d '"' | tr -d ' ')
+    required_status=$(echo "$required_status" | tr -d '"' | tr -d ' ')
+    if [ -z "$artifact" ]; then continue; fi
+
+    local current_status
+    current_status=$(jq -r ".artifacts[\"${artifact}\"].status // \"pending\"" "$PROGRESS" 2>/dev/null)
+
+    # 상태 순서 비교
+    local required_idx current_idx
+    required_idx=$(echo "$states_order" | jq "index(\"$required_status\") // 0")
+    current_idx=$(echo "$states_order" | jq "index(\"$current_status\") // 0")
+
+    if [ "$current_idx" -ge "$required_idx" ]; then
+      printf "  ✓ %-25s %s (required: %s)\n" "$artifact" "$current_status" "$required_status"
+    else
+      printf "  ✗ %-25s %s (required: %s)\n" "$artifact" "$current_status" "$required_status"
+      all_met=false
+    fi
+  done < <(jq -r ".artifacts.prerequisites[\"${target_agent}\"] | to_entries[] | \"\(.key)=\(.value)\"" "$CONFIG" 2>/dev/null)
+
+  echo ""
+
+  if [ "$all_met" = true ]; then
+    echo "  Prerequisites: PASS"
+  else
+    echo "  Prerequisites: FAIL — preceding agent must complete artifacts first"
+  fi
+  echo ""
+
+  [ "$all_met" = true ] && return 0 || return 1
+}
+
+# ─────────────────────────────────────────
+# Runtime Guardrail — 파일 소유권 검증
+# ─────────────────────────────────────────
+if [ "$agent_status" = "completed" ]; then
+  verify_file_ownership "$PROJECT_ROOT" || true
+fi
+
+# ─────────────────────────────────────────
+# Run Pre-Eval Gate (if applicable)
+# ─────────────────────────────────────────
+if [ "$agent_status" = "completed" ]; then
+  run_pre_eval_gate "$next_agent" || true
+  verify_artifact_prerequisites "$next_agent" || true
+fi
+
+# ─────────────────────────────────────────
 # Render progress
 # ─────────────────────────────────────────
 render_progress "$PROJECT_ROOT"
@@ -149,6 +299,18 @@ echo ""
 # Generate next-prompt.txt
 # ─────────────────────────────────────────
 if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_status" != "blocked" ]; then
+  # ── Escalation check: 3회 실패 시 Planner에게 scope 축소 요청 ──
+  escalate_after=$(jq -r '.flow.escalate_to_planner_after // 3' "$CONFIG" 2>/dev/null || echo 3)
+  if [ "$retry_count" -ge "$escalate_after" ] && [ "$sprint_status" = "failed" ] && [ "$next_agent" != "planner" ]; then
+    echo "  ⚠ Escalation: ${retry_count}회 실패 — Planner에게 scope 축소/접근 변경 요청"
+    next_agent="planner"
+    # progress.json에 에스컬레이션 기록
+    jq --arg msg "Escalated after ${retry_count} failures. Planner must review scope or approach." \
+       '.next_agent = "planner" |
+        .failure.message = $msg |
+        .failure.retry_target = "planner"' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
+  fi
+
   # Build prompt
   prompt="/harness-${next_agent} 를 실행하세요."
 
@@ -162,13 +324,104 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
 
   prompt+=$'\n'".harness/progress.json을 읽고 현재 상태를 확인하세요."
 
-  # Add failure context if retrying
+  # Add failure context if retrying (include previous failure summary)
   failure_msg=$(jq -r '.failure.message // empty' "$PROGRESS")
   if [ -n "$failure_msg" ] && [ "$failure_msg" != "null" ]; then
     prompt+=$'\n\n'"이전 실패 사유: ${failure_msg}"
+    prompt+=$'\n'"같은 접근을 반복하지 말고, 실패 원인을 분석한 후 다른 전략으로 시도하세요."
   fi
 
   echo "$prompt" > "$NEXT_PROMPT"
+
+  # ── Generate structured handoff.json ──
+  HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
+  FEATURE_LIST="$PROJECT_ROOT/.harness/actions/feature-list.json"
+
+  # Collect available artifacts
+  local -a artifacts_ready=()
+  for f in plan.md feature-list.json api-contract.json sprint-contract.md evaluation-functional.md evaluation-visual.md; do
+    if [ -f "$PROJECT_ROOT/.harness/actions/$f" ]; then
+      artifacts_ready+=("$f")
+    fi
+  done
+  local artifacts_json
+  artifacts_json=$(printf '%s\n' "${artifacts_ready[@]}" | jq -R . | jq -s .)
+
+  # Collect focus features (incomplete ones)
+  local focus_features="[]"
+  if [ -f "$FEATURE_LIST" ]; then
+    focus_features=$(jq '[.features[]? | select(.passes == null or (.passes | length) == 0 or ((.passes // []) | map(select(. == "evaluator-functional")) | length == 0)) | .id] | .[0:5]' "$FEATURE_LIST" 2>/dev/null || echo "[]")
+  fi
+
+  # ── Regression data: collect previous sprint's passed AC from archive ──
+  local regression_source="null"
+  local prev_sprint=$((sprint_num - 1))
+  local prev_archive="$PROJECT_ROOT/.harness/archive/sprint-$(printf '%03d' $prev_sprint)"
+  if [ "$prev_sprint" -ge 1 ] && [ -d "$prev_archive" ]; then
+    if [ -f "$prev_archive/feature-list.json" ]; then
+      regression_source=$(jq '{
+        sprint: '"$prev_sprint"',
+        passed_features: [.features[]? | select((.passes // []) | map(select(. == "evaluator-functional")) | length > 0) | {id, name, acceptance_criteria}],
+        archive_path: "'"$prev_archive"'"
+      }' "$prev_archive/feature-list.json" 2>/dev/null || echo "null")
+    fi
+  fi
+
+  # ── Eval-specific scoring config ──
+  local eval_config="null"
+  local cross_validation_data="null"
+  case "$next_agent" in
+    evaluator-*)
+      eval_config=$(jq '{
+        pass_threshold: .evaluation.scoring.pass_threshold,
+        scale: .evaluation.scoring.scale,
+        verdict_rules: .evaluation.scoring.verdict_rules,
+        regression_enabled: .evaluation.regression.enabled,
+        cross_validation_enabled: .evaluation.cross_validation.enabled,
+        adversarial_rules: .agents["'"$next_agent"'"].adversarial_rules.rules,
+        forbidden: .agents["'"$next_agent"'"].adversarial_rules.forbidden
+      }' "$CONFIG" 2>/dev/null || echo "null")
+      ;;
+  esac
+
+  # ── Cross-Validation: evaluator-visual이면 functional 결과 파싱 ──
+  if [ "$next_agent" = "evaluator-visual" ]; then
+    local func_eval="$PROJECT_ROOT/.harness/actions/evaluation-functional.md"
+    if [ -f "$func_eval" ]; then
+      # evaluation-functional.md 내 JSON 코드블록에서 Cross-Validation Data 추출
+      cross_validation_data=$(sed -n '/```json/,/```/p' "$func_eval" | tail -n +2 | head -n -1 | jq 'select(.evaluator == "functional")' 2>/dev/null || echo "null")
+    fi
+  fi
+
+  # Build handoff.json
+  jq -n \
+    --arg from "${current_agent:-dispatcher}" \
+    --arg to "$next_agent" \
+    --argjson sprint "$sprint_num" \
+    --argjson retry "$retry_count" \
+    --arg status "$sprint_status" \
+    --arg failure_msg "${failure_msg:-}" \
+    --argjson artifacts "$artifacts_json" \
+    --argjson focus "$focus_features" \
+    --argjson regression "$regression_source" \
+    --argjson eval_config "$eval_config" \
+    --argjson cross_val "$cross_validation_data" \
+    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{
+      from: $from,
+      to: $to,
+      sprint: $sprint,
+      retry_count: $retry,
+      sprint_status: $status,
+      failure_context: (if $failure_msg != "" then $failure_msg else null end),
+      artifacts_ready: $artifacts,
+      focus_features: $focus,
+      regression: $regression,
+      eval_config: $eval_config,
+      cross_validation_from_functional: $cross_val,
+      warnings: [],
+      timestamp: $timestamp
+    }' > "$HANDOFF"
 
 elif [ "$next_agent" = "archive" ]; then
   cat > "$NEXT_PROMPT" <<'PROMPT'

@@ -17,6 +17,12 @@
     "message": null,
     "retry_target": null
   },
+  "artifacts": {
+    "plan.md": { "status": "pending", "updated_by": null, "updated_at": null },
+    "feature-list.json": { "status": "pending", "updated_by": null, "updated_at": null },
+    "api-contract.json": { "status": "pending", "updated_by": null, "updated_at": null },
+    "sprint-contract.md": { "status": "pending", "updated_by": null, "updated_at": null }
+  },
   "updated_at": "{{DATE}}",
   "history": []
 }

@@ -1,7 +1,7 @@
 {
   "harness": {
     "name": "6-Agent Production Harness",
-    "version": "3.0.0",
+    "version": "3.2.0",
     "description": "Dispatcher + NestJS MSA + React/Next.js + Playwright 기반 실무 하네스",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
@@ -13,12 +13,25 @@
       "always_first": true
     },
     "brainstorming": {
-      "role": "사용자의 러프한 요구사항을 대화형으로 구체화하여 Planner가 바로 쓸 수 있는 brainstorm-spec.md로 변환. Dispatcher가 사용자에게 '브레인스토밍 필요?' 확인 후에만 호출되는 조건부 에이전트.",
+      "role": "사용자의 러프한 요구사항을 대화형으로 구체화하여 Planner가 바로 쓸 수 있는 brainstorm-spec.md로 변환.",
       "skill": "harness-brainstorming",
       "inputs": ["(user conversation)"],
       "outputs": ["actions/brainstorm-spec.md"],
       "conditional": true,
-      "invoked_by": "dispatcher (user opt-in)",
+      "trigger_conditions": {
+        "comment": "Dispatcher가 아래 조건 중 하나 이상 충족 시 사용자에게 브레인스토밍 제안",
+        "rules": [
+          "사용자 요청에 구체적 기능명/엔드포인트/화면명이 없고 추상적 목표만 있을 때",
+          "PRD/OpenAPI 등 구조화된 입력 문서가 없을 때",
+          "'뭔가 만들고 싶은데', '아이디어가 있는데' 등 탐색적 표현이 포함될 때"
+        ],
+        "skip_when": [
+          "사용자가 PRD, OpenAPI spec, 또는 구체적 feature list를 제공한 경우",
+          "사용자가 '브레인스토밍 없이', 'skip brainstorming'을 명시한 경우",
+          "이미 brainstorm-spec.md가 actions/에 존재하는 경우"
+        ]
+      },
+      "invoked_by": "dispatcher (user opt-in after suggestion)",
       "next_on_complete": "planner",
       "attribution": "Derived from obra/superpowers skills/brainstorming (MIT License)"
     },
@@ -50,15 +63,55 @@
       "role": "Playwright로 E2E 기능 검증, API 응답/DB 상태 확인",
       "skill": "harness-evaluator-functional",
       "tools": ["playwright:browser_*"],
-      "inputs": ["actions/sprint-contract.md"],
-      "outputs": ["actions/evaluation-functional.md"]
+      "inputs": ["actions/sprint-contract.md", "actions/feature-list.json", "actions/api-contract.json"],
+      "outputs": ["actions/evaluation-functional.md"],
+      "evaluation_template": "assets/templates/evaluation-functional.md.template",
+      "adversarial_rules": {
+        "comment": "Evaluator 적대적 행동 규칙 — 통과 편향 제거를 위한 강제 규칙",
+        "rules": [
+          "Generator의 '구현 완료' 주장을 절대 신뢰하지 마라. 모든 엔드포인트에 직접 요청을 보내고 응답을 확인하라.",
+          "정상 경로(happy path) 1개당 비정상 경로(unhappy path) 최소 2개를 반드시 테스트하라.",
+          "api-contract.json과 실제 응답을 필드 단위로 비교하라. 누락 필드, 타입 불일치, 추가 필드 모두 FAIL 사유.",
+          "PASS를 주기 전에 자문하라: '내가 이 코드를 직접 작성했다면 이 수준으로 PR을 올리겠는가?' NO이면 FAIL.",
+          "AC 항목 하나라도 미통과이면 전체 FAIL. 부분 통과는 인정하지 않는다.",
+          "Evidence(증거)가 없는 Score는 0점이다. '확인했다'는 주장은 증거가 아니다.",
+          "이전 Sprint에서 PASS된 기능이 하나라도 깨졌으면 신규 기능 점수와 무관하게 FAIL.",
+          "Score 3을 주려면 엣지케이스(빈 값, 초과값, 동시 요청, 특수문자)까지 테스트한 증거가 있어야 한다."
+        ],
+        "forbidden": [
+          "'전반적으로 잘 구현되었습니다' 류의 모호한 긍정 평가",
+          "'사소한 이슈이므로 PASS' — 사소함은 Evaluator가 판단할 사항이 아니다",
+          "'시간 제약상 일부만 테스트' — 전수 테스트가 불가하면 FAIL 처리",
+          "Generator에게 유리한 방향으로 기준을 해석하는 행위"
+        ]
+      }
     },
     "evaluator-visual": {
       "role": "디자인 일관성, 반응형, 접근성, AI슬롭 감지",
       "skill": "harness-evaluator-visual",
       "tools": ["playwright:browser_take_screenshot", "playwright:browser_resize", "playwright:browser_snapshot"],
-      "inputs": ["actions/sprint-contract.md", "actions/evaluation-functional.md"],
-      "outputs": ["actions/evaluation-visual.md"]
+      "inputs": ["actions/sprint-contract.md", "actions/evaluation-functional.md", "actions/feature-list.json"],
+      "outputs": ["actions/evaluation-visual.md"],
+      "evaluation_template": "assets/templates/evaluation-visual.md.template",
+      "adversarial_rules": {
+        "comment": "Visual Evaluator 적대적 행동 규칙",
+        "rules": [
+          "모든 페이지를 반드시 3개 뷰포트(375px, 768px, 1280px)에서 스크린샷 촬영하라. 1개라도 누락이면 해당 페이지 Score 산정 불가.",
+          "axe-core 접근성 검사를 실제로 실행하라. Critical 또는 Serious 위반이 1건이라도 있으면 V3 = 0.",
+          "AI슬롭 패턴(무의미한 그라데이션, 과도한 그림자, 장식 아이콘 남발)을 적극 탐지하라. 2건 이상이면 V4 최대 1점.",
+          "evaluation-functional.md의 Cross-Validation Data와 교차 검증하라. API 성공인데 UI에 에러 표시 = 불일치 = FAIL 사유.",
+          "이전 Sprint 스크린샷 대비 의도치 않은 시각 변경이 있으면 점수 무관 FAIL.",
+          "PASS를 주기 전에 자문하라: '이 UI를 실사용자에게 보여줄 수 있는가?' NO이면 FAIL.",
+          "로딩/에러/빈 상태가 하나라도 미구현이면 V5 최대 1점.",
+          "Evidence(스크린샷 경로 또는 DOM 스냅샷)가 없는 Score는 0점이다."
+        ],
+        "forbidden": [
+          "'디자인이 깔끔합니다' 류의 주관적 긍정 평가",
+          "'접근성은 추후 개선' — 접근성은 기본 요건이지 부가 기능이 아니다",
+          "'모바일 뷰포트는 생략' — 3개 뷰포트 전수 검사는 필수",
+          "스크린샷 없이 '확인했다'고 주장하는 행위"
+        ]
+      }
     },
     "generator-frontend-flutter": {
       "role": "Flutter 앱 개발 — Riverpod, integrated_data_layer(Retrofit), i18n(ARB), build_runner",
@@ -120,14 +173,133 @@
       "reason": "프론트가 존재하지 않는 API를 호출하는 실패 방지"
     },
     "retry_on_fail": true,
-    "max_retries_per_sprint": 10,
-    "archive_on_sprint_complete": true
+    "max_retries_per_sprint": 5,
+    "escalate_to_planner_after": 3,
+    "archive_on_sprint_complete": true,
+    "pre_eval_gate": {
+      "comment": "Generator → Evaluator 전환 전 결정론적 검증. 실패 시 Evaluator 세션을 열지 않고 Generator로 자동 리라우팅.",
+      "enabled": true,
+      "backend_checks": ["npx tsc --noEmit", "npx eslint . --max-warnings=0", "npx jest --bail --passWithNoTests"],
+      "frontend_checks": ["npx tsc --noEmit", "npx eslint . --max-warnings=0", "npx vitest run --bail 1"],
+      "timeout_seconds": 120,
+      "on_fail": "reroute_to_generator"
+    }
+  },
+  "evaluation": {
+    "comment": "Evaluator 공통 설정",
+    "scoring": {
+      "scale": 3,
+      "pass_threshold": 2.80,
+      "fail_threshold": 2.79,
+      "verdict_rules": [
+        "Weighted Score < 2.80 → FAIL",
+        "AC Pass Rate < 100% → FAIL (부분 통과 불인정)",
+        "Regression Failures > 0 → FAIL (신규 점수 무관)",
+        "Evidence 누락 항목 → 해당 Score = 0으로 재계산",
+        "Cross-Validation 불일치 > 0 → CONDITIONAL FAIL"
+      ]
+    },
+    "regression": {
+      "enabled": true,
+      "source": "archive",
+      "scope": "all_passed_features",
+      "comment": "이전 Sprint에서 PASS된 모든 AC를 현재 Sprint에서 재검증. 1건이라도 실패하면 전체 FAIL."
+    },
+    "cross_validation": {
+      "enabled": true,
+      "comment": "evaluator-functional과 evaluator-visual이 서로의 결과를 참조하여 불일치를 감지. evaluation-*.md의 Cross-Validation Data JSON 블록을 기계적으로 파싱."
+    },
+    "acceptance_criteria_schema": {
+      "comment": "Planner가 feature-list.json에 기능 정의 시 반드시 작성해야 하는 실행 가능한 검증 조건 스키마. Evaluator는 이 조건을 기계적으로 실행한다.",
+      "required_fields": ["id", "description", "type", "verify"],
+      "types": {
+        "api": {
+          "verify_fields": ["method", "path", "body", "expect"],
+          "expect_fields": ["status"],
+          "optional_expect": ["body_contains", "body_schema", "headers"]
+        },
+        "visual": {
+          "verify_fields": ["url", "elements"],
+          "optional_verify": ["viewport", "state", "screenshot_match"]
+        },
+        "e2e": {
+          "verify_fields": ["steps"],
+          "step_fields": ["action", "target", "value", "expect"]
+        }
+      },
+      "example": {
+        "id": "AC-001",
+        "description": "유효한 이메일로 가입 시 201 응답",
+        "type": "api",
+        "verify": {
+          "method": "POST",
+          "path": "/api/auth/register",
+          "body": { "email": "test-{{timestamp}}@test.com", "password": "Test1234!" },
+          "expect": { "status": 201, "body_contains": { "id": "string", "email": "string" } }
+        }
+      },
+      "negative_example": {
+        "id": "AC-002",
+        "description": "중복 이메일 시 409 응답",
+        "type": "api",
+        "verify": {
+          "method": "POST",
+          "path": "/api/auth/register",
+          "body": { "email": "duplicate@test.com", "password": "Test1234!" },
+          "expect": { "status": 409 }
+        },
+        "is_negative": true
+      },
+      "visual_example": {
+        "id": "AC-003",
+        "description": "회원가입 폼 렌더링 확인",
+        "type": "visual",
+        "verify": {
+          "url": "/register",
+          "elements": ["input[name=email]", "input[name=password]", "button[type=submit]"],
+          "viewport": [375, 768, 1280]
+        }
+      }
+    }
+  },
+  "artifacts": {
+    "comment": "아티팩트 상태 머신. 각 에이전트 실행 전 선행 아티팩트가 required_status 이상인지 검증.",
+    "states": ["pending", "draft", "reviewed", "approved"],
+    "prerequisites": {
+      "generator-backend": {
+        "plan.md": "draft",
+        "api-contract.json": "draft",
+        "feature-list.json": "draft"
+      },
+      "generator-frontend": {
+        "plan.md": "draft",
+        "api-contract.json": "draft",
+        "feature-list.json": "draft"
+      },
+      "evaluator-functional": {
+        "sprint-contract.md": "draft"
+      },
+      "evaluator-visual": {
+        "sprint-contract.md": "draft"
+      }
+    }
   },
   "session": {
     "isolation": true,
     "state_file": ".harness/progress.json",
     "state_log": ".harness/progress.log",
-    "next_prompt_file": ".harness/next-prompt.txt"
+    "next_prompt_file": ".harness/next-prompt.txt",
+    "handoff_file": ".harness/handoff.json",
+    "context_guard": {
+      "comment": "컨텍스트 분리 하드 가드레일. UserPromptSubmit 훅이 위반을 감지하면 경고를 주입한다.",
+      "enabled": true,
+      "rules": [
+        "current_agent가 running 상태일 때 다른 에이전트 스킬 호출 금지",
+        "한 세션에서 2개 이상의 에이전트 스킬 실행 금지",
+        "agent_status를 completed로 변경하지 않고 다음 에이전트를 호출하면 경고"
+      ],
+      "on_violation": "warn_and_block"
+    }
   },
   "behavior": {
     "comment": "하네스 동작 플래그. UserPromptSubmit 훅이 이 값을 읽어 자동 라우팅을 결정한다.",
