@@ -7,6 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/harness-render-progress.sh"
 source "$SCRIPT_DIR/lib/harness-guardrail.sh"
+source "$SCRIPT_DIR/lib/harness-audit.sh"
 
 # ─────────────────────────────────────────
 # Resolve project root
@@ -23,6 +24,9 @@ PIPELINE_JSON="$PROJECT_ROOT/.harness/actions/pipeline.json"
 HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
 
 check_jq || exit 1
+
+# Initialize audit log
+init_audit "$PROJECT_ROOT"
 
 if [ ! -f "$PROGRESS" ]; then
   echo "[harness] ERROR: progress.json not found" >&2
@@ -277,15 +281,25 @@ verify_artifact_prerequisites() {
 # Runtime Guardrail — 파일 소유권 검증
 # ─────────────────────────────────────────
 if [ "$agent_status" = "completed" ]; then
-  verify_file_ownership "$PROJECT_ROOT" || true
+  audit_log "$current_agent" "develop" "complete" "" "agent completed"
+  verify_file_ownership "$PROJECT_ROOT" || audit_gate "file-ownership" "warn" "boundary violation detected"
 fi
 
 # ─────────────────────────────────────────
 # Run Pre-Eval Gate (if applicable)
 # ─────────────────────────────────────────
 if [ "$agent_status" = "completed" ]; then
-  run_pre_eval_gate "$next_agent" || true
-  verify_artifact_prerequisites "$next_agent" || true
+  audit_gate "pre-eval" "start" "$next_agent"
+  if run_pre_eval_gate "$next_agent"; then
+    audit_gate "pre-eval" "pass" "$next_agent"
+  else
+    audit_gate "pre-eval" "fail" "rerouted to $current_agent"
+  fi
+  if verify_artifact_prerequisites "$next_agent"; then
+    audit_gate "artifact-prereq" "pass" "$next_agent"
+  else
+    audit_gate "artifact-prereq" "fail" "$next_agent"
+  fi
 fi
 
 # ─────────────────────────────────────────
@@ -303,6 +317,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   escalate_after=$(jq -r '.flow.escalate_to_planner_after // 3' "$CONFIG" 2>/dev/null || echo 3)
   if [ "$retry_count" -ge "$escalate_after" ] && [ "$sprint_status" = "failed" ] && [ "$next_agent" != "planner" ]; then
     echo "  ⚠ Escalation: ${retry_count}회 실패 — Planner에게 scope 축소/접근 변경 요청"
+    audit_log "system" "escalate" "start" "→planner" "retry ${retry_count}회 초과"
     next_agent="planner"
     jq --arg msg "Escalated after ${retry_count} failures. Planner must review scope or approach." \
        '.next_agent = "planner" |
@@ -442,7 +457,10 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
       timestamp: $timestamp
     }' > "$HANDOFF"
 
+  audit_handoff "${current_agent:-dispatcher}" "$next_agent" "complete"
+
 elif [ "$next_agent" = "archive" ]; then
+  audit_log "system" "archive" "start" "sprint-${sprint_num}" "sprint cycle complete"
   jq -n \
     --arg from "${current_agent:-evaluator}" \
     --argjson sprint "$sprint_num" \

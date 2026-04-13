@@ -337,6 +337,23 @@
     "progress_state": ".harness/progress.json",
     "progress_log": ".harness/progress.log"
   },
+  "audit": {
+    "comment": "Audit log — 1 sprint cycle 단위의 실행 추적. Planner/Dispatcher 시작 시 리셋.",
+    "file": ".harness/actions/audit.log",
+    "lifecycle": "planner_to_eval_pass",
+    "reset_on": ["planner", "dispatcher"],
+    "archive_previous": true,
+    "format": "TIMESTAMP | AGENT | ACTION | STATUS | TARGET | DETAIL",
+    "actions": {
+      "develop": "코드 생성/수정 (Generator)",
+      "review": "검수/평가 (Evaluator)",
+      "handoff": "에이전트 전환",
+      "plan": "설계/계획 (Planner)",
+      "gate": "자동 게이트 체크 (system)",
+      "escalate": "에스컬레이션 (system)"
+    },
+    "statuses": ["start", "complete", "fail", "pass", "skip", "warn"]
+  },
   "conventions": {
     "comment": "CONVENTIONS.md — 사용자가 자유 형식으로 작성하는 프로젝트 컨벤션. 모든 에이전트가 세션 시작 시 직접 읽음. Gotcha/AGENTS.md에 복사하지 않음.",
     "file": "CONVENTIONS.md",

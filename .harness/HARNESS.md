@@ -143,8 +143,39 @@ pending → draft → reviewed → approved
 | 파일 | 역할 |
 |------|------|
 | `.harness/progress.json` | 기계 판독 상태 (현재 에이전트, 파이프라인, 실패 정보) |
-| `.harness/progress.log` | 사람 판독 히스토리 (append-only) |
-| `.harness/handoff.json` | 세션 전환 문서 (prompt, model, thinking_mode, artifacts, regression) |
+| `.harness/progress.log` | 사람 판독 히스토리 (append-only, 전체) |
+| `.harness/handoff.json` | 세션 전환 문서 (prompt, model, thinking_mode, artifacts) |
+| `.harness/actions/audit.log` | Sprint cycle 단위 실행 추적 (Planner→Eval 통과) |
+
+### Audit Log
+
+1 sprint cycle(Planner/Dispatcher 시작 → Eval 통과) 단위의 상세 실행 추적입니다.
+
+```
+# 예시:
+TIMESTAMP            | AGENT          | ACTION   | STATUS   | TARGET                         | DETAIL
+2026-04-09T14:30:00Z | planner        | plan     | start    | plan.md                        | Sprint 1 설계 시작
+2026-04-09T14:35:00Z | planner        | plan     | complete | api-contract.json              | 3 endpoints, 2 services
+2026-04-09T14:35:01Z | planner        | handoff  | complete | →gen-backend                   |
+2026-04-09T14:36:00Z | system         | gate     | pass     | pre-eval                       | gen-backend
+2026-04-09T14:40:00Z | gen-backend    | develop  | start    | apps/service-user/             | User CRUD 구현
+2026-04-09T14:50:00Z | gen-backend    | develop  | complete | apps/service-user/             | 4 endpoints
+2026-04-09T14:50:01Z | gen-backend    | handoff  | complete | →eval-functional               |
+2026-04-09T14:55:00Z | eval-func      | review   | start    | POST /api/auth/register        | AC-001~003 검증
+2026-04-09T14:58:00Z | eval-func      | review   | fail     | POST /api/auth/register        | 409→400 contract 불일치
+2026-04-09T14:58:01Z | eval-func      | handoff  | complete | →gen-backend                   | Re-Generate
+```
+
+**라이프사이클**: 새 Planner/Dispatcher 사이클 시작 시 이전 로그는 archive로 이동, 새 로그 시작.
+
+**에이전트 기록 의무**: 모든 에이전트는 세션 중 주요 작업의 시작/완료를 audit에 기록해야 합니다.
+
+```bash
+# 에이전트 스킬에서 호출:
+source scripts/lib/harness-audit.sh && init_audit .
+audit_log "gen-backend" "develop" "start" "apps/service-user/" "User CRUD 구현"
+audit_log "gen-backend" "develop" "complete" "apps/service-user/" "4 endpoints 완료"
+```
 
 ### 실행 방법
 

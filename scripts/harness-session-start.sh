@@ -1,17 +1,17 @@
 #!/bin/bash
 # harness-session-start.sh — SessionStart 훅
 # 새 세션 시작 시 자동으로:
-#   1) 이전 에이전트가 completed이면 harness-next.sh를 실행하여 게이트 체크 + handoff 생성
-#   2) handoff.json이 있으면 다음 에이전트 안내
-#   3) statusline이 상시 상태를 표시하므로 여기서는 핵심 안내만 출력
-#
-# 사용자가 수동으로 harness-next.sh를 실행할 필요가 없도록 자동화.
+#   1) 이전 에이전트가 completed이면 harness-next.sh 실행 (게이트 + handoff)
+#   2) Planner/Dispatcher 사이클이면 audit 리셋
+#   3) 다음 에이전트 안내 출력
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB="$SCRIPT_DIR/lib/harness-render-progress.sh"
+AUDIT_LIB="$SCRIPT_DIR/lib/harness-audit.sh"
 
 if [ ! -f "$LIB" ]; then exit 0; fi
 source "$LIB"
+[ -f "$AUDIT_LIB" ] && source "$AUDIT_LIB"
 command -v jq &>/dev/null || exit 0
 
 PROJECT_ROOT="$(resolve_harness_root "." 2>/dev/null)" || exit 0
@@ -21,6 +21,7 @@ HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
 [ -f "$PROGRESS" ] || exit 0
 
 sprint_status=$(jq -r '.sprint.status // "init"' "$PROGRESS" 2>/dev/null)
+sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
 current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
 next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
@@ -34,14 +35,21 @@ if [ "$sprint_status" = "init" ]; then
 fi
 
 # ─────────────────────────────────────────
-# 이전 에이전트가 completed → 자동으로 harness-next 실행
-# (게이트 체크, 아티팩트 검증, handoff.json 생성)
+# Audit lifecycle: Planner/Dispatcher 시작 시 리셋
+# ─────────────────────────────────────────
+init_audit "$PROJECT_ROOT"
+if [ "$next_agent" = "planner" ] || [ "$next_agent" = "dispatcher" ]; then
+  # 새 사이클 — 이전 audit을 archive로 이동하고 새로 시작
+  reset_audit "$PROJECT_ROOT" "$sprint_num"
+  audit_log "system" "cycle" "start" "sprint-${sprint_num}" "new plan/dispatch cycle"
+fi
+
+# ─────────────────────────────────────────
+# 이전 에이전트가 completed/failed → 자동 전환
 # ─────────────────────────────────────────
 if [ "$agent_status" = "completed" ] || [ "$agent_status" = "failed" ]; then
-  # harness-next.sh를 백그라운드로 실행하면 안 됨 — 결과가 필요
   bash "$SCRIPT_DIR/harness-next.sh" "$PROJECT_ROOT" 2>/dev/null
 
-  # harness-next.sh가 progress.json과 handoff.json을 업데이트했으므로 다시 읽기
   next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
   agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 fi
@@ -53,7 +61,6 @@ if [ "$agent_status" = "blocked" ]; then
   echo "# Harness BLOCKED — retry limit reached, user intervention required"
 
 elif [ -f "$HANDOFF" ] && [ "$next_agent" != "none" ] && [ "$next_agent" != "null" ]; then
-  # handoff.json에서 모델/모드 정보 읽기
   handoff_model=$(jq -r '.model // "opus"' "$HANDOFF" 2>/dev/null)
   handoff_thinking=$(jq -r '.thinking_mode // empty' "$HANDOFF" 2>/dev/null)
 
