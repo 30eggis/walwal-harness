@@ -14,9 +14,11 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const PKG_ROOT = path.resolve(__dirname, '..');
-const isAuto = process.argv.includes('--auto');
-const isForce = process.argv.includes('--force');
-const isHelp = process.argv.includes('--help') || process.argv.includes('-h');
+const args = process.argv.slice(2);
+const subcommand = args.find(a => !a.startsWith('-')) || null;
+const isAuto = args.includes('--auto');
+const isForce = args.includes('--force');
+const isHelp = args.includes('--help') || args.includes('-h');
 
 // ─────────────────────────────────────────
 // Resolve project root
@@ -551,9 +553,11 @@ function showHelp() {
 ╚══════════════════════════════════════╝
 
 Usage:
-  npx walwal-harness           Initialize project for harness engineering
-  npx walwal-harness --force   Re-initialize (overwrites existing files)
-  npx walwal-harness --help    Show this help
+  npx walwal-harness            Initialize project for harness engineering
+  npx walwal-harness --force    Re-initialize (overwrites existing files)
+  npx walwal-harness studio     Launch Harness Studio (tmux 4-pane monitor)
+  npx walwal-harness studio --ai  Studio + AI eval summary (API cost)
+  npx walwal-harness --help     Show this help
 
 What it does:
   1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
@@ -580,9 +584,36 @@ After init:
 // ─────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────
+function runStudio() {
+  const useAi = args.includes('--ai') ? '--ai' : '';
+  const scriptsDir = path.join(PKG_ROOT, 'scripts');
+  const tmuxScript = path.join(scriptsDir, 'harness-tmux.sh');
+
+  if (!fs.existsSync(tmuxScript)) {
+    log('ERROR: harness-tmux.sh not found. Update @walwal-harness/cli to >= 3.6.0');
+    process.exit(1);
+  }
+
+  try {
+    execSync('which tmux', { stdio: 'ignore' });
+  } catch {
+    log('ERROR: tmux is required. Install with: brew install tmux');
+    process.exit(1);
+  }
+
+  const cmd = `bash "${tmuxScript}" "${PROJECT_ROOT}" ${useAi}`.trim();
+  log(`Launching Harness Studio...`);
+  execSync(cmd, { stdio: 'inherit' });
+}
+
 function main() {
   if (isHelp) {
     showHelp();
+    return;
+  }
+
+  if (subcommand === 'studio') {
+    runStudio();
     return;
   }
 
