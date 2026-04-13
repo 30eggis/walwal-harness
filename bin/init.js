@@ -303,7 +303,44 @@ function installSessionHook() {
 }
 
 // ─────────────────────────────────────────
-// 3c. UserPromptSubmit hook (auto dispatcher routing)
+// 3c. Statusline (persistent status bar)
+// ─────────────────────────────────────────
+function installStatusline() {
+  log('Installing statusline...');
+
+  const settingsDir = path.join(PROJECT_ROOT, '.claude');
+  const settingsFile = path.join(settingsDir, 'settings.json');
+
+  ensureDir(settingsDir);
+
+  let settings = {};
+  if (fileExists(settingsFile)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    } catch (e) {
+      log('WARNING: Could not parse existing .claude/settings.json, creating new');
+    }
+  }
+
+  // Check if statusLine is already configured
+  if (settings.statusLine && settings.statusLine.command &&
+      settings.statusLine.command.includes('harness-statusline')) {
+    log('Statusline already installed');
+    return;
+  }
+
+  settings.statusLine = {
+    type: 'command',
+    command: 'bash scripts/harness-statusline.sh',
+    refreshInterval: 3
+  };
+
+  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+  log('Statusline installed — persistent status bar at terminal bottom');
+}
+
+// ─────────────────────────────────────────
+// 3d. UserPromptSubmit hook (auto dispatcher routing)
 // ─────────────────────────────────────────
 function installUserPromptSubmitHook() {
   log('Installing UserPromptSubmit hook (auto dispatcher routing)...');
@@ -514,11 +551,12 @@ What it does:
   1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
   2. Installs skills to .claude/skills/ (dispatcher, planner, generators, evaluators)
   3. Copies helper scripts to scripts/
-  4. Registers SessionStart hook (boot-time progress render)
-  5. Registers UserPromptSubmit hook (auto-route every prompt through harness-dispatcher)
-  6. Creates AGENTS.md + CLAUDE.md symlink
-  7. Checks Playwright MCP configuration
-  8. Checks recommended external skills (Vercel, design skills)
+  4. Registers SessionStart hook (compact boot-time status)
+  5. Installs statusline (persistent 1-line status bar at terminal bottom)
+  6. Registers UserPromptSubmit hook (auto-route every prompt through harness-dispatcher)
+  7. Creates AGENTS.md + CLAUDE.md symlink
+  8. Checks Playwright MCP configuration
+  9. Checks recommended external skills (Vercel, design skills)
 
 Auto routing:
   Every user prompt is routed through harness-dispatcher.
@@ -555,6 +593,7 @@ function main() {
   installSkills();
   installScripts();
   installSessionHook();
+  installStatusline();
   installUserPromptSubmitHook();
   setupAgentsMd();
   checkPlaywrightMcp();
