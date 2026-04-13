@@ -1,7 +1,7 @@
 #!/bin/bash
 # harness-next.sh — 세션 오케스트레이터
 # 현재 progress.json 상태를 읽고 다음 에이전트를 결정한다.
-# Feature-level 프로그래스를 출력하고 next-prompt.txt를 생성한다.
+# Feature-level 프로그래스를 출력하고 handoff.json을 생성한다.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -20,7 +20,7 @@ PROJECT_ROOT="$(resolve_harness_root "${1:-.}")" || {
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
 CONFIG="$PROJECT_ROOT/.harness/config.json"
 PIPELINE_JSON="$PROJECT_ROOT/.harness/actions/pipeline.json"
-NEXT_PROMPT="$PROJECT_ROOT/.harness/next-prompt.txt"
+HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
 
 check_jq || exit 1
 
@@ -296,7 +296,7 @@ render_agent_bar "$PROJECT_ROOT"
 echo ""
 
 # ─────────────────────────────────────────
-# Generate next-prompt.txt
+# Generate handoff.json (unified session transition document)
 # ─────────────────────────────────────────
 if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_status" != "blocked" ]; then
   # ── Escalation check: 3회 실패 시 Planner에게 scope 축소 요청 ──
@@ -304,7 +304,6 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   if [ "$retry_count" -ge "$escalate_after" ] && [ "$sprint_status" = "failed" ] && [ "$next_agent" != "planner" ]; then
     echo "  ⚠ Escalation: ${retry_count}회 실패 — Planner에게 scope 축소/접근 변경 요청"
     next_agent="planner"
-    # progress.json에 에스컬레이션 기록
     jq --arg msg "Escalated after ${retry_count} failures. Planner must review scope or approach." \
        '.next_agent = "planner" |
         .failure.message = $msg |
@@ -315,7 +314,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   agent_model=$(jq -r ".agents[\"${next_agent}\"].model // \"opus\"" "$CONFIG" 2>/dev/null || echo "opus")
   agent_thinking=$(jq -r ".agents[\"${next_agent}\"].thinking_mode // \"null\"" "$CONFIG" 2>/dev/null || echo "null")
 
-  # Build prompt
+  # ── Build prompt text (embedded in handoff.json) ──
   prompt="/harness-${next_agent} 를 실행하세요."
 
   if [ "$sprint_num" -gt 0 ]; then
@@ -326,37 +325,33 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
     prompt+="을 진행합니다."
   fi
 
-  prompt+=$'\n'".harness/progress.json을 읽고 현재 상태를 확인하세요."
+  prompt+=$'\n'".harness/handoff.json을 읽고 컨텍스트를 확인하세요."
 
-  # Inject thinking mode instruction into prompt
+  # Inject thinking mode instruction
   if [ "$agent_thinking" != "null" ]; then
     case "$agent_thinking" in
       ultraplan)
-        prompt+=$'\n\n'"[Thinking Mode: ultraplan] 이 세션에서는 /ultraplan 모드를 사용하세요. 깊은 사고로 아키텍처와 설계를 수행합니다."
+        prompt+=$'\n\n'"[Thinking Mode: ultraplan] /${agent_thinking} 모드를 사용하세요. 깊은 사고로 아키텍처와 설계를 수행합니다."
         ;;
       ultrathink)
-        prompt+=$'\n\n'"[Thinking Mode: ultrathink] 이 세션에서는 /ultrathink 모드를 사용하세요. 최대 추론 깊이로 비판적 검증을 수행합니다."
+        prompt+=$'\n\n'"[Thinking Mode: ultrathink] /${agent_thinking} 모드를 사용하세요. 최대 추론 깊이로 비판적 검증을 수행합니다."
         ;;
       plan)
-        prompt+=$'\n\n'"[Thinking Mode: plan] 이 세션에서는 /plan 모드를 사용하세요. 구조화된 계획을 수립한 후 실행합니다."
+        prompt+=$'\n\n'"[Thinking Mode: plan] /${agent_thinking} 모드를 사용하세요. 구조화된 계획을 수립한 후 실행합니다."
         ;;
     esac
   fi
 
-  # Add failure context if retrying (include previous failure summary)
+  # Add failure context if retrying
   failure_msg=$(jq -r '.failure.message // empty' "$PROGRESS")
   if [ -n "$failure_msg" ] && [ "$failure_msg" != "null" ]; then
     prompt+=$'\n\n'"이전 실패 사유: ${failure_msg}"
     prompt+=$'\n'"같은 접근을 반복하지 말고, 실패 원인을 분석한 후 다른 전략으로 시도하세요."
   fi
 
-  echo "$prompt" > "$NEXT_PROMPT"
-
-  # ── Generate structured handoff.json ──
-  HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
+  # ── Collect artifacts ──
   FEATURE_LIST="$PROJECT_ROOT/.harness/actions/feature-list.json"
 
-  # Collect available artifacts
   local -a artifacts_ready=()
   for f in plan.md feature-list.json api-contract.json sprint-contract.md evaluation-functional.md evaluation-visual.md; do
     if [ -f "$PROJECT_ROOT/.harness/actions/$f" ]; then
@@ -372,7 +367,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
     focus_features=$(jq '[.features[]? | select(.passes == null or (.passes | length) == 0 or ((.passes // []) | map(select(. == "evaluator-functional")) | length == 0)) | .id] | .[0:5]' "$FEATURE_LIST" 2>/dev/null || echo "[]")
   fi
 
-  # ── Regression data: collect previous sprint's passed AC from archive ──
+  # ── Regression data ──
   local regression_source="null"
   local prev_sprint=$((sprint_num - 1))
   local prev_archive="$PROJECT_ROOT/.harness/archive/sprint-$(printf '%03d' $prev_sprint)"
@@ -386,7 +381,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
     fi
   fi
 
-  # ── Eval-specific scoring config ──
+  # ── Eval-specific config ──
   local eval_config="null"
   local cross_validation_data="null"
   case "$next_agent" in
@@ -403,34 +398,35 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
       ;;
   esac
 
-  # ── Cross-Validation: evaluator-visual이면 functional 결과 파싱 ──
+  # ── Cross-Validation ──
   if [ "$next_agent" = "evaluator-visual" ]; then
     local func_eval="$PROJECT_ROOT/.harness/actions/evaluation-functional.md"
     if [ -f "$func_eval" ]; then
-      # evaluation-functional.md 내 JSON 코드블록에서 Cross-Validation Data 추출
       cross_validation_data=$(sed -n '/```json/,/```/p' "$func_eval" | tail -n +2 | head -n -1 | jq 'select(.evaluator == "functional")' 2>/dev/null || echo "null")
     fi
   fi
 
-  # Build handoff.json
+  # ── Build handoff.json (single source of truth for session transition) ──
   jq -n \
     --arg from "${current_agent:-dispatcher}" \
     --arg to "$next_agent" \
+    --arg prompt "$prompt" \
     --argjson sprint "$sprint_num" \
     --argjson retry "$retry_count" \
     --arg status "$sprint_status" \
+    --arg agent_model "$agent_model" \
+    --arg agent_thinking "$agent_thinking" \
     --arg failure_msg "${failure_msg:-}" \
     --argjson artifacts "$artifacts_json" \
     --argjson focus "$focus_features" \
     --argjson regression "$regression_source" \
     --argjson eval_config "$eval_config" \
     --argjson cross_val "$cross_validation_data" \
-    --arg agent_model "$agent_model" \
-    --arg agent_thinking "$agent_thinking" \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{
       from: $from,
       to: $to,
+      prompt: $prompt,
       sprint: $sprint,
       retry_count: $retry,
       sprint_status: $status,
@@ -447,12 +443,20 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
     }' > "$HANDOFF"
 
 elif [ "$next_agent" = "archive" ]; then
-  cat > "$NEXT_PROMPT" <<'PROMPT'
-Sprint 문서를 아카이브 하세요.
-.harness/actions/의 스프린트 문서를 .harness/archive/sprint-NNN/으로 이동합니다.
-.harness/progress.json을 읽고 sprint 번호를 확인하세요.
-PROMPT
+  jq -n \
+    --arg from "${current_agent:-evaluator}" \
+    --argjson sprint "$sprint_num" \
+    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{
+      from: $from,
+      to: "archive",
+      prompt: "Sprint 문서를 아카이브하세요.\n.harness/actions/의 스프린트 문서를 .harness/archive/sprint-NNN/으로 이동합니다.\n.harness/handoff.json을 읽고 sprint 번호를 확인하세요.",
+      sprint: $sprint,
+      model: "opus",
+      thinking_mode: null,
+      timestamp: $timestamp
+    }' > "$HANDOFF"
 
 else
-  echo "" > "$NEXT_PROMPT"
+  echo '{}' > "$HANDOFF"
 fi

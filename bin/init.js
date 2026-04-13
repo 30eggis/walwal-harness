@@ -155,10 +155,10 @@ function scaffoldHarness() {
     fs.writeFileSync(progressLog, `# Harness Progress Log\n# ${date} — Initialized\n`);
   }
 
-  // Create next-prompt.txt placeholder
-  const nextPrompt = path.join(HARNESS_DIR, 'next-prompt.txt');
-  if (!fileExists(nextPrompt) || isForce) {
-    fs.writeFileSync(nextPrompt, '');
+  // Create handoff.json placeholder
+  const handoff = path.join(HARNESS_DIR, 'handoff.json');
+  if (!fileExists(handoff) || isForce) {
+    fs.writeFileSync(handoff, '{}');
   }
 
   log('.harness/ scaffolding complete');

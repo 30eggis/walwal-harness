@@ -312,7 +312,6 @@
     "isolation": true,
     "state_file": ".harness/progress.json",
     "state_log": ".harness/progress.log",
-    "next_prompt_file": ".harness/next-prompt.txt",
     "handoff_file": ".harness/handoff.json",
     "context_guard": {
       "comment": "컨텍스트 분리 하드 가드레일. UserPromptSubmit 훅이 위반을 감지하면 경고를 주입한다.",

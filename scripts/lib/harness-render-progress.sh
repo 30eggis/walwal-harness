@@ -284,12 +284,12 @@ render_progress() {
     echo ""
     echo "  Next → /harness-${next_agent}  (model: ${next_model}${mode_str})"
 
-    # Build auto CLI command with model flag
+    # Build auto CLI command with model flag, reading prompt from handoff.json
     local model_flag=""
     if [ "$next_model" != "opus" ]; then
       model_flag=" --model ${next_model}"
     fi
-    echo "  Auto → claude${model_flag} --prompt \"\$(cat .harness/next-prompt.txt)\""
+    echo "  Auto → claude${model_flag} --prompt \"\$(jq -r .prompt .harness/handoff.json)\""
   fi
 
   echo ""
