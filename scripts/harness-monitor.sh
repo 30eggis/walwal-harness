@@ -1,6 +1,9 @@
 #!/bin/bash
-# harness-monitor.sh — Panel 2: Task & Agent Lifecycle 모니터링
-# audit.log 스트리밍 + progress.json 변경 감지
+# harness-monitor.sh — Agent Lifecycle Monitor
+#
+# v3 모드: 단일 이벤트 스트림 (progress.json 변경 감지 + audit.log)
+# v4 모드: 팀별 섹션 분리 (feature-queue.json + progress.log 기반)
+#
 # Usage: bash scripts/harness-monitor.sh [project-root]
 
 set -uo pipefail
@@ -17,8 +20,9 @@ if [ -z "$PROJECT_ROOT" ]; then
 fi
 
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
+PROGRESS_LOG="$PROJECT_ROOT/.harness/progress.log"
 AUDIT_LOG="$PROJECT_ROOT/.harness/actions/audit.log"
-HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
+QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
 
 # ── ANSI helpers ──
 BOLD="\033[1m"
@@ -28,28 +32,169 @@ YELLOW="\033[33m"
 RED="\033[31m"
 CYAN="\033[36m"
 MAGENTA="\033[35m"
+BLUE="\033[34m"
 RESET="\033[0m"
+
+# ── Team colors ──
+T1_COLOR="$CYAN"
+T2_COLOR="$MAGENTA"
+T3_COLOR="$YELLOW"
+
+team_color() {
+  case "$1" in
+    1|team-1) echo "$T1_COLOR" ;;
+    2|team-2) echo "$T2_COLOR" ;;
+    3|team-3) echo "$T3_COLOR" ;;
+    *)        echo "$DIM" ;;
+  esac
+}
+
+# ══════════════════════════════════════════
+# v4 모드: 팀별 섹션 렌더링
+# ══════════════════════════════════════════
+
+render_v4_header() {
+  echo -e "${BOLD}TEAM MONITOR${RESET}  ${DIM}$(date +%H:%M:%S)${RESET}"
+  echo ""
+}
+
+render_team_section() {
+  local team_num="$1"
+  local color
+  color=$(team_color "$team_num")
+
+  # 팀 상태 from queue
+  local t_status="idle" t_feature="—" t_phase="—" t_attempt=""
+  if [ -f "$QUEUE" ]; then
+    t_status=$(jq -r ".teams[\"$team_num\"].status // \"idle\"" "$QUEUE" 2>/dev/null)
+    t_feature=$(jq -r ".teams[\"$team_num\"].feature // \"—\"" "$QUEUE" 2>/dev/null)
+    if [ "$t_feature" != "—" ] && [ "$t_feature" != "null" ]; then
+      t_phase=$(jq -r --arg f "$t_feature" '.queue.in_progress[$f].phase // "?"' "$QUEUE" 2>/dev/null)
+      t_attempt=$(jq -r --arg f "$t_feature" '.queue.in_progress[$f].attempt // 1' "$QUEUE" 2>/dev/null)
+    fi
+  fi
+
+  # 상태 아이콘
+  local icon="○"
+  case "$t_status" in
+    busy) icon="▶" ;;
+    idle) icon="○" ;;
+  esac
+
+  # Phase 표시
+  local phase_str=""
+  case "$t_phase" in
+    gen)  phase_str="Gen" ;;
+    gate) phase_str="Gate" ;;
+    eval) phase_str="Eval" ;;
+    *)    phase_str="" ;;
+  esac
+
+  # 헤더 라인
+  printf "%b%b T%s%b " "$color" "$icon" "$team_num" "$RESET"
+  if [ "$t_feature" != "—" ] && [ "$t_feature" != "null" ]; then
+    printf "%s " "$t_feature"
+    if [ -n "$phase_str" ]; then
+      printf "%b%s%b" "$color" "$phase_str" "$RESET"
+    fi
+    if [ -n "$t_attempt" ] && [ "$t_attempt" != "—" ] && [ "$t_attempt" != "1" ]; then
+      printf " %b#%s%b" "$DIM" "$t_attempt" "$RESET"
+    fi
+  else
+    printf "%bidle%b" "$DIM" "$RESET"
+  fi
+  echo ""
+
+  # 팀 로그 (progress.log에서 team-N 엔트리만 추출)
+  if [ -f "$PROGRESS_LOG" ]; then
+    grep -i "team-${team_num}\|team_${team_num}" "$PROGRESS_LOG" 2>/dev/null | tail -5 | while IFS= read -r line; do
+      local ts action detail
+      ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
+      action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
+      detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
+
+      local short_ts
+      short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}' | tail -1 || echo "$ts")
+
+      if [ ${#detail} -gt 35 ]; then detail="${detail:0:33}.."; fi
+
+      # 액션별 아이콘
+      local a_icon="·" a_color="$DIM"
+      case "$action" in
+        gen)      a_icon="▶"; a_color="$GREEN" ;;
+        eval)     a_icon="✦"; a_color="$BLUE" ;;
+        pass)     a_icon="✓"; a_color="$GREEN" ;;
+        fail)     a_icon="✗"; a_color="$RED" ;;
+        dequeue)  a_icon="→"; a_color="$CYAN" ;;
+        gate)     a_icon="◆"; a_color="$YELLOW" ;;
+        *)        a_icon="·"; a_color="$DIM" ;;
+      esac
+
+      printf "  %b%s%b %b%s%b %b%s%b\n" \
+        "$DIM" "$short_ts" "$RESET" \
+        "$a_color" "$a_icon" "$RESET" \
+        "$DIM" "$detail" "$RESET"
+    done
+  fi
+}
+
+render_v4() {
+  render_v4_header
+
+  # 팀 수 확인
+  local team_count=3
+  if [ -f "$QUEUE" ]; then
+    team_count=$(jq '.teams | length' "$QUEUE" 2>/dev/null || echo 3)
+  fi
+
+  for i in $(seq 1 "$team_count"); do
+    render_team_section "$i"
+    echo ""
+  done
+
+  # Lead/시스템 이벤트 (team이 아닌 엔트리)
+  echo -e "${BOLD}SYSTEM${RESET}"
+  if [ -f "$PROGRESS_LOG" ]; then
+    grep -v 'team-[0-9]' "$PROGRESS_LOG" 2>/dev/null | grep -v '^#' | grep -v '^$' | tail -5 | while IFS= read -r line; do
+      local ts agent action detail
+      ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
+      agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
+      action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
+      detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
+
+      local short_ts
+      short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}' | tail -1 || echo "$ts")
+
+      if [ ${#detail} -gt 35 ]; then detail="${detail:0:33}.."; fi
+
+      printf "  %b%s%b %s %b%s%b\n" \
+        "$DIM" "$short_ts" "$RESET" \
+        "$agent" \
+        "$DIM" "$detail" "$RESET"
+    done
+  fi
+}
+
+# ══════════════════════════════════════════
+# v3 모드: 단일 스트림 (기존 동작)
+# ══════════════════════════════════════════
 
 LAST_AGENT=""
 LAST_STATUS=""
 LAST_SPRINT=""
-EVENT_COUNT=0
 
 print_event() {
   local ts="$1" icon="$2" color="$3" msg="$4"
-  EVENT_COUNT=$((EVENT_COUNT + 1))
   echo -e "  ${DIM}${ts}${RESET}  ${color}${icon}${RESET}  ${msg}"
 }
 
-# ── Header ──
-print_header() {
+print_v3_header() {
   echo -e "${BOLD}╔══════════════════════════════════════╗${RESET}"
   echo -e "${BOLD}║  AGENT LIFECYCLE MONITOR             ║${RESET}"
   echo -e "${BOLD}╚══════════════════════════════════════╝${RESET}"
   echo ""
 }
 
-# ── Detect agent transitions from progress.json ──
 check_transitions() {
   if [ ! -f "$PROGRESS" ]; then return; fi
 
@@ -61,39 +206,22 @@ check_transitions() {
   local now
   now=$(date +"%H:%M:%S")
 
-  # Sprint change
   if [ "$sprint" != "$LAST_SPRINT" ] && [ -n "$LAST_SPRINT" ]; then
     print_event "$now" ">>>" "$MAGENTA" "${BOLD}Sprint ${sprint} started${RESET}"
     echo ""
   fi
 
-  # Agent change
   if [ "$agent" != "$LAST_AGENT" ] && [ -n "$LAST_AGENT" ]; then
     if [ "$LAST_AGENT" != "none" ] && [ "$LAST_AGENT" != "null" ]; then
       print_event "$now" " ✓ " "$GREEN" "${LAST_AGENT} → ${BOLD}done${RESET}"
     fi
     if [ "$agent" != "none" ] && [ "$agent" != "null" ]; then
       print_event "$now" " ▶ " "$CYAN" "${BOLD}${agent}${RESET} started"
-
-      # Show handoff context if available
-      if [ -f "$HANDOFF" ]; then
-        local from focus
-        from=$(jq -r '.from // empty' "$HANDOFF" 2>/dev/null)
-        focus=$(jq -r '.focus_features // [] | join(", ")' "$HANDOFF" 2>/dev/null)
-        if [ -n "$from" ] && [ "$from" != "null" ]; then
-          echo -e "         ${DIM}handoff from: ${from}${RESET}"
-        fi
-        if [ -n "$focus" ] && [ "$focus" != "null" ]; then
-          echo -e "         ${DIM}focus: ${focus}${RESET}"
-        fi
-      fi
     fi
   fi
 
-  # Status change (same agent)
   if [ "$agent" = "$LAST_AGENT" ] && [ "$status" != "$LAST_STATUS" ] && [ -n "$LAST_STATUS" ]; then
-    local status_color="$RESET"
-    local status_icon="•"
+    local status_color="$RESET" status_icon="•"
     case "$status" in
       running)   status_color="$GREEN";  status_icon=" ▶ " ;;
       completed) status_color="$CYAN";   status_icon=" ✓ " ;;
@@ -103,7 +231,6 @@ check_transitions() {
     esac
     print_event "$now" "$status_icon" "$status_color" "${agent} → ${BOLD}${status}${RESET}"
 
-    # Show failure detail
     if [ "$status" = "failed" ]; then
       local fail_msg
       fail_msg=$(jq -r '.failure.message // empty' "$PROGRESS" 2>/dev/null)
@@ -118,76 +245,84 @@ check_transitions() {
   LAST_SPRINT="$sprint"
 }
 
-# ── Stream audit.log new lines ──
 stream_audit() {
   if [ ! -f "$AUDIT_LOG" ]; then return; fi
-
-  # Use tail -f in background, parse each new line
   tail -n 0 -f "$AUDIT_LOG" 2>/dev/null | while IFS= read -r line; do
-    # Skip comments/headers
     if [[ "$line" == "#"* ]] || [[ -z "$line" ]]; then continue; fi
-
-    # Parse: TIMESTAMP | AGENT | ACTION | STATUS | TARGET | DETAIL
-    local ts agent action status target detail
+    local ts agent action status target
     ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
     agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
     action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
     status=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
     target=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$5); print $5}')
-    detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$6); print $6}')
 
-    # Color by status
     local color="$RESET" icon="•"
     case "$status" in
-      start)    color="$CYAN";   icon="▶" ;;
-      complete) color="$GREEN";  icon="✓" ;;
-      fail)     color="$RED";    icon="✗" ;;
-      pass)     color="$GREEN";  icon="✓" ;;
-      skip)     color="$DIM";    icon="–" ;;
+      start)    color="$CYAN";  icon="▶" ;;
+      complete) color="$GREEN"; icon="✓" ;;
+      fail)     color="$RED";   icon="✗" ;;
+      pass)     color="$GREEN"; icon="✓" ;;
+      skip)     color="$DIM";   icon="–" ;;
     esac
 
-    # Short timestamp (HH:MM:SS from ISO)
     local short_ts
     short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}:[0-9]{2}' || echo "$ts")
-
-    echo -e "  ${DIM}${short_ts}${RESET}  ${color}${icon}${RESET}  ${BOLD}${agent}${RESET} ${action} ${target} ${DIM}${detail}${RESET}"
+    echo -e "  ${DIM}${short_ts}${RESET}  ${color}${icon}${RESET}  ${BOLD}${agent}${RESET} ${action} ${target}"
   done &
   AUDIT_TAIL_PID=$!
 }
 
-# ── Cleanup ──
+# ══════════════════════════════════════════
+# Mode detection & main loop
+# ══════════════════════════════════════════
+
 cleanup() {
   if [ -n "${AUDIT_TAIL_PID:-}" ]; then
     kill "$AUDIT_TAIL_PID" 2>/dev/null || true
   fi
+  tput cnorm 2>/dev/null
   exit 0
 }
 trap cleanup EXIT INT TERM
 
-# ── Main ──
-print_header
-
-# Initialize state
-if [ -f "$PROGRESS" ]; then
-  LAST_AGENT=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
-  LAST_STATUS=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
-  LAST_SPRINT=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
+# v4 감지: feature-queue.json 존재 여부
+IS_V4=false
+if [ -f "$QUEUE" ]; then
+  IS_V4=true
 fi
 
-# Show existing history
-if [ -f "$PROGRESS" ]; then
-  echo -e "  ${BOLD}History${RESET}"
-  jq -r '.history // [] | .[] | "  \(.timestamp)  \(.agent) — \(.action): \(.detail)"' "$PROGRESS" 2>/dev/null
-  echo ""
-  echo -e "  ${DIM}── Live events below ──${RESET}"
-  echo ""
+if [ "$IS_V4" = true ]; then
+  # ── v4: 팀별 섹션, auto-refresh ──
+  tput civis 2>/dev/null
+  clear
+
+  while true; do
+    buf=$(render_v4 2>&1)
+    tput cup 0 0 2>/dev/null
+    echo "$buf"
+    tput ed 2>/dev/null
+    sleep 3
+  done
+else
+  # ── v3: 단일 스트림, audit tail ──
+  print_v3_header
+
+  if [ -f "$PROGRESS" ]; then
+    LAST_AGENT=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
+    LAST_STATUS=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
+    LAST_SPRINT=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
+
+    echo -e "  ${BOLD}History${RESET}"
+    jq -r '.history // [] | .[] | "  \(.timestamp)  \(.agent) — \(.action): \(.detail)"' "$PROGRESS" 2>/dev/null
+    echo ""
+    echo -e "  ${DIM}── Live events below ──${RESET}"
+    echo ""
+  fi
+
+  stream_audit
+
+  while true; do
+    check_transitions
+    sleep 2
+  done
 fi
-
-# Start audit log streaming
-stream_audit
-
-# Poll progress.json for transitions
-while true; do
-  check_transitions
-  sleep 2
-done
