@@ -97,12 +97,38 @@ run_pre_eval_gate() {
   timeout=$(jq -r '.flow.pre_eval_gate.timeout_seconds // 120' "$CONFIG" 2>/dev/null)
 
   # 실패 위치 결정 (backend or frontend)
+  # current_agent가 실패로 변경된 경우, completed_agents에서 직전 Generator를 찾는다
   local location="backend"
   local checks_key="backend_checks"
-  if [ "$current_agent" = "generator-frontend" ] || [ "$current_agent" = "generator-frontend-flutter" ]; then
-    location="frontend"
-    checks_key="frontend_checks"
-  fi
+  local source_agent="$current_agent"
+
+  # current_agent가 generator가 아닌 경우 (예: dispatcher로 리라우팅된 상태),
+  # completed_agents에서 마지막 generator를 찾는다
+  case "$source_agent" in
+    generator-frontend|generator-frontend-flutter)
+      location="frontend"
+      checks_key="frontend_checks"
+      ;;
+    generator-backend)
+      location="backend"
+      checks_key="backend_checks"
+      ;;
+    *)
+      # completed_agents에서 마지막 generator를 역순으로 찾기
+      local last_gen
+      last_gen=$(jq -r '.completed_agents // [] | map(select(startswith("generator-"))) | last // empty' "$PROGRESS" 2>/dev/null)
+      case "$last_gen" in
+        generator-frontend|generator-frontend-flutter)
+          location="frontend"
+          checks_key="frontend_checks"
+          ;;
+        generator-backend)
+          location="backend"
+          checks_key="backend_checks"
+          ;;
+      esac
+      ;;
+  esac
 
   local -a checks
   mapfile -t checks < <(jq -r ".flow.pre_eval_gate.${checks_key}[]" "$CONFIG" 2>/dev/null)

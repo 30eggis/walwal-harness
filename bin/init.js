@@ -214,6 +214,19 @@ function installScripts() {
   const scriptsSrc = path.join(PKG_ROOT, 'scripts');
   const scriptsDest = path.join(PROJECT_ROOT, 'scripts');
 
+  // Core scripts are ALWAYS overwritten on update (not user-editable)
+  // These contain harness logic that must stay in sync with the CLI version
+  const coreScripts = new Set([
+    'harness-next.sh',
+    'harness-session-start.sh',
+    'harness-statusline.sh',
+    'harness-user-prompt-submit.sh',
+    'harness-dashboard.sh',
+    'harness-monitor.sh',
+    'harness-eval-watcher.sh',
+    'harness-tmux.sh',
+  ]);
+
   if (fs.existsSync(scriptsSrc)) {
     ensureDir(scriptsDest);
     const entries = fs.readdirSync(scriptsSrc, { withFileTypes: true });
@@ -221,21 +234,20 @@ function installScripts() {
       const srcPath = path.join(scriptsSrc, entry.name);
       const destPath = path.join(scriptsDest, entry.name);
       if (entry.isDirectory()) {
-        // Copy subdirectories (e.g., lib/)
-        if (!fileExists(destPath) || isForce) {
-          copyDir(srcPath, destPath);
-          // Make scripts in subdirs executable
-          try {
-            const subFiles = fs.readdirSync(destPath);
-            for (const f of subFiles) {
-              if (f.endsWith('.sh')) {
-                fs.chmodSync(path.join(destPath, f), '755');
-              }
+        // lib/ and other subdirectories — always overwrite
+        copyDir(srcPath, destPath);
+        try {
+          const subFiles = fs.readdirSync(destPath);
+          for (const f of subFiles) {
+            if (f.endsWith('.sh')) {
+              fs.chmodSync(path.join(destPath, f), '755');
             }
-          } catch (e) {}
-        }
+          }
+        } catch (e) {}
       } else {
-        if (!fileExists(destPath) || isForce) {
+        // Core scripts: always overwrite. Others: skip if exists (unless --force)
+        const isCore = coreScripts.has(entry.name);
+        if (isCore || !fileExists(destPath) || isForce) {
           copyFile(srcPath, destPath);
           try { fs.chmodSync(destPath, '755'); } catch (e) {}
         }
