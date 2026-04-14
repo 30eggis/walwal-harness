@@ -226,6 +226,11 @@ function installScripts() {
     'harness-eval-watcher.sh',
     'harness-tmux.sh',
     'harness-control.sh',
+    'harness-studio-v4.sh',
+    'harness-dashboard-v4.sh',
+    'harness-control-v4.sh',
+    'harness-queue-manager.sh',
+    'harness-team-worker.sh',
   ]);
 
   if (fs.existsSync(scriptsSrc)) {
@@ -568,8 +573,9 @@ function showHelp() {
 Usage:
   npx walwal-harness            Initialize project for harness engineering
   npx walwal-harness --force    Re-initialize (overwrites existing files)
-  npx walwal-harness studio     Launch Harness Studio (tmux 4-pane monitor)
-  npx walwal-harness studio --ai  Studio + AI eval summary (API cost)
+  npx walwal-harness studio     Launch Harness Studio v3 (tmux 5-pane)
+  npx walwal-harness studio --ai  Studio v3 + AI eval summary
+  npx walwal-harness v4          Launch Studio v4 (3 Parallel Agent Teams)
   npx walwal-harness --help     Show this help
 
 What it does:
@@ -619,6 +625,27 @@ function runStudio() {
   execSync(cmd, { stdio: 'inherit' });
 }
 
+function runStudioV4() {
+  const scriptsDir = path.join(PKG_ROOT, 'scripts');
+  const tmuxScript = path.join(scriptsDir, 'harness-studio-v4.sh');
+
+  if (!fs.existsSync(tmuxScript)) {
+    log('ERROR: harness-studio-v4.sh not found. Update @walwal-harness/cli to >= 4.0.0');
+    process.exit(1);
+  }
+
+  try {
+    execSync('which tmux', { stdio: 'ignore' });
+  } catch {
+    log('ERROR: tmux is required. Install with: brew install tmux');
+    process.exit(1);
+  }
+
+  const cmd = `bash "${tmuxScript}" "${PROJECT_ROOT}"`.trim();
+  log('Launching Harness Studio v4 (Parallel Agent Teams)...');
+  execSync(cmd, { stdio: 'inherit' });
+}
+
 function main() {
   if (isHelp) {
     showHelp();
@@ -627,6 +654,11 @@ function main() {
 
   if (subcommand === 'studio') {
     runStudio();
+    return;
+  }
+
+  if (subcommand === 'studio-v4' || subcommand === 'v4') {
+    runStudioV4();
     return;
   }
 
