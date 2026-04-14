@@ -204,7 +204,9 @@
       "comment": "Generator → Evaluator 전환 전 결정론적 검증. 실패 시 Evaluator 세션을 열지 않고 Generator로 자동 리라우팅.",
       "enabled": true,
       "backend_checks": ["npx tsc --noEmit", "npx eslint . --max-warnings=0", "npx jest --bail --passWithNoTests"],
+      "backend_cwd": "",
       "frontend_checks": ["npx tsc --noEmit", "npx eslint . --max-warnings=0", "npx vitest run --bail 1"],
+      "frontend_cwd": "",
       "timeout_seconds": 120,
       "on_fail": "reroute_to_generator"
     }

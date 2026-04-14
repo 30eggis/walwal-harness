@@ -109,15 +109,29 @@ run_pre_eval_gate() {
 
   if [ ${#checks[@]} -eq 0 ]; then return 0; fi
 
+  # Resolve cwd for checks: config.pre_eval_gate.frontend_cwd / backend_cwd
+  local cwd_key="${location}_cwd"
+  local check_cwd
+  check_cwd=$(jq -r ".flow.pre_eval_gate.${cwd_key} // empty" "$CONFIG" 2>/dev/null)
+  if [ -n "$check_cwd" ] && [ "$check_cwd" != "null" ]; then
+    # Relative path from PROJECT_ROOT
+    check_cwd="$PROJECT_ROOT/$check_cwd"
+  else
+    check_cwd="$PROJECT_ROOT"
+  fi
+
   echo ""
   echo "  ── Pre-Eval Gate ──────────────────────"
+  if [ "$check_cwd" != "$PROJECT_ROOT" ]; then
+    echo "  cwd: ${check_cwd#$PROJECT_ROOT/}"
+  fi
   local all_pass=true
   local fail_log=""
 
   for cmd in "${checks[@]}"; do
     printf "  %-40s " "$cmd"
     local output
-    if output=$(cd "$PROJECT_ROOT" && timeout "${timeout}s" bash -c "$cmd" 2>&1); then
+    if output=$(cd "$check_cwd" && timeout "${timeout}s" bash -c "$cmd" 2>&1); then
       echo "✓"
     else
       echo "✗"
