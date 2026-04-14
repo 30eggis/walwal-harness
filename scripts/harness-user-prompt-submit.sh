@@ -36,6 +36,19 @@ if [ -f "$CWD/.harness/progress.json" ] && command -v jq >/dev/null 2>&1; then
   AGENT_STATUS=$(jq -r '.agent_status // "pending"' "$CWD/.harness/progress.json" 2>/dev/null || echo "pending")
 fi
 
+# ── 명령 히스토리 기록 (모든 모드 공통) ──
+PROGRESS_LOG="$CWD/.harness/progress.log"
+if [ -n "$PROMPT" ] && [ -d "$CWD/.harness" ]; then
+  # progress.log가 없으면 생성
+  if [ ! -f "$PROGRESS_LOG" ]; then
+    echo "# Harness Command History — $(date +%Y-%m-%d)" > "$PROGRESS_LOG"
+  fi
+  PROMPT_SHORT=$(echo "$PROMPT" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-80)
+  if [ ${#PROMPT_SHORT} -gt 2 ]; then
+    echo "$(date +"%Y-%m-%d %H:%M") | user-prompt | input | ${PROMPT_SHORT}" >> "$PROGRESS_LOG"
+  fi
+fi
+
 # ── 컨텍스트 분리 가드레일 ──
 # 현재 에이전트가 활성인데 다른 에이전트 스킬을 호출하려는 경우 경고
 CONTEXT_WARNING=""
@@ -57,16 +70,6 @@ if [ -f "$FEATURE_QUEUE" ]; then
   V4_PASSED=$(jq '.queue.passed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
   V4_TOTAL=$(jq '[.queue.ready, (.queue.blocked | keys), (.queue.in_progress | keys), .queue.passed, .queue.failed] | flatten | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
   V4_FAILED=$(jq '.queue.failed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
-
-  # Log user prompt to progress.log (truncated to 80 chars)
-  PROGRESS_LOG="$CWD/.harness/progress.log"
-  if [ -n "$PROMPT" ] && [ -f "$PROGRESS_LOG" ]; then
-    PROMPT_SHORT=$(echo "$PROMPT" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-80)
-    # Skip logging for empty or very short prompts
-    if [ ${#PROMPT_SHORT} -gt 2 ]; then
-      echo "$(date +"%Y-%m-%d %H:%M") | user-prompt | input | ${PROMPT_SHORT}" >> "$PROGRESS_LOG"
-    fi
-  fi
 
   cat <<EOF
 [harness-v4] ${V4_PASSED}/${V4_TOTAL} features passed | ${V4_FAILED} failed
