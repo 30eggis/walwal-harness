@@ -1,17 +1,21 @@
 #!/bin/bash
-# harness-dashboard.sh — Panel 1: 실시간 대시보드
-# progress.json + feature-list.json + progress.log 를 2초 간격으로 시각화
+# harness-dashboard.sh — Control Center: Dashboard + Manual Prompt
 #
-# Layout:
-#   ┌─────────────────────┬──────────────────────┐
-#   │  Sprint Map         │  Prompt History       │
-#   ├─────────────────────┴──────────────────────┤
-#   │  Processing Status (features, agent bar)    │
-#   └────────────────────────────────────────────┘
+# 상단: 실시간 대시보드 (Sprint Map | Prompt History + Processing Status)
+# 하단: 사용자 명령 입력 (오케스트레이션)
+#
+# Commands:
+#   status / s      대시보드 즉시 갱신
+#   next / n        다음 에이전트 세션 시작 (Agent Session pane으로 전달)
+#   retry / r       현재 에이전트 재실행
+#   stop            에이전트 세션 중지
+#   log <message>   progress.log에 수동 메모 추가
+#   clear-fail      failure 상태 클리어
+#   quit / q        대시보드 종료
 #
 # Usage: bash scripts/harness-dashboard.sh [project-root]
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/harness-render-progress.sh"
@@ -38,21 +42,28 @@ CYAN="\033[36m"
 MAGENTA="\033[35m"
 RESET="\033[0m"
 
-# ── Get terminal width for column layout ──
+# ── Strip ANSI escape sequences ──
+strip_ansi() {
+  sed 's/\x1b\[[0-9;]*m//g; s/\x1b\[[0-9;]*[a-zA-Z]//g'
+}
+
 get_term_width() {
   tput cols 2>/dev/null || echo 80
 }
 
+# ══════════════════════════════════════════
+# Render functions
+# ══════════════════════════════════════════
+
 render_header() {
-  local now
+  local now project_name
   now=$(date +"%H:%M:%S")
-  local project_name
   project_name=$(jq -r '.project_name // "Unknown"' "$PROGRESS" 2>/dev/null)
 
-  echo -e "${BOLD}╔══════════════════════════════════════╗${RESET}"
-  echo -e "${BOLD}║  HARNESS DASHBOARD                   ║${RESET}"
-  echo -e "${BOLD}╚══════════════════════════════════════╝${RESET}"
-  echo -e "  ${DIM}${project_name}  |  Updated: ${now}${RESET}"
+  echo -e "${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
+  echo -e "${BOLD}║  HARNESS CONTROL CENTER                              ║${RESET}"
+  echo -e "${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
+  echo -e "  ${DIM}${project_name}  |  ${now}${RESET}"
   echo ""
 }
 
@@ -79,11 +90,10 @@ render_sprint_overview() {
     *)         status_color="$YELLOW" ;;
   esac
 
-  echo -e "  ${BOLD}Pipeline${RESET}  ${pipeline}  |  ${BOLD}Sprint${RESET}  ${sprint_num} (${sprint_status})  |  ${BOLD}Agent${RESET}  ${status_color}${current_agent} [${agent_status}]${RESET}$([ "$retry_count" -gt 0 ] && echo -e "  |  ${RED}R${retry_count}${RESET}")"
+  echo -e "  ${BOLD}Pipeline${RESET} ${pipeline}  ${BOLD}Sprint${RESET} ${sprint_num} (${sprint_status})  ${BOLD}Agent${RESET} ${status_color}${current_agent} [${agent_status}]${RESET}$([ "$retry_count" -gt 0 ] && echo -e "  ${RED}R${retry_count}${RESET}")"
   echo ""
 }
 
-# ── Sprint Map column (left) ──
 render_sprint_map_lines() {
   if [ ! -f "$PROGRESS" ]; then return; fi
 
@@ -106,47 +116,37 @@ render_sprint_map_lines() {
       *)           icon="○" ;;
     esac
 
-    if [ ${#notes} -gt 28 ]; then
-      notes="${notes:0:26}.."
-    fi
+    if [ ${#notes} -gt 28 ]; then notes="${notes:0:26}.."; fi
 
     printf "%s S%-2s %2df %-11s %s\n" "$icon" "$s" "$feat_count" "$status" "$notes"
   done <<< "$sprint_keys"
 }
 
-# ── Prompt History column (right) ──
 render_prompt_history_lines() {
   echo -e "${BOLD}Prompt History${RESET}"
 
-  # Source 1: progress.log (user/dispatcher interventions)
   if [ -f "$PROGRESS_LOG" ]; then
-    grep -v '^#' "$PROGRESS_LOG" | grep -v '^$' | tail -15 | while IFS= read -r line; do
-      # Format: 2026-04-13 | agent | action | detail
+    grep -v '^#' "$PROGRESS_LOG" 2>/dev/null | grep -v '^$' | tail -12 | while IFS= read -r line; do
       local ts agent action detail
       ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
       agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
       action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
       detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
 
-      # Short date (MM-DD)
-      local short_ts
+      local short_ts icon color
       short_ts=$(echo "$ts" | sed 's/^[0-9]*-//')
 
-      # Icon by agent/action
-      local icon color
       case "$agent" in
         dispatcher*)  icon="▸" ; color="$MAGENTA" ;;
         brainstormer) icon="◇" ; color="$CYAN" ;;
         planner*)     icon="□" ; color="$YELLOW" ;;
         generator*)   icon="▶" ; color="$GREEN" ;;
         eval*)        icon="✦" ; color="$RED" ;;
+        user|manual)  icon="★" ; color="$BOLD" ;;
         *)            icon="·" ; color="$DIM" ;;
       esac
 
-      # Truncate detail
-      if [ ${#detail} -gt 35 ]; then
-        detail="${detail:0:33}.."
-      fi
+      if [ ${#detail} -gt 30 ]; then detail="${detail:0:28}.."; fi
 
       echo -e "${color}${icon}${RESET} ${DIM}${short_ts}${RESET} ${agent} ${DIM}${action}${RESET}"
       if [ -n "$detail" ]; then
@@ -158,17 +158,14 @@ render_prompt_history_lines() {
   fi
 }
 
-# ── Side-by-side rendering ──
 render_two_columns() {
-  local term_width
+  local term_width col_width
   term_width=$(get_term_width)
-  local col_width=$(( (term_width - 7) / 2 ))  # 7 = indent(4) + separator(3)
+  col_width=$(( (term_width - 7) / 2 ))
   if [ "$col_width" -lt 30 ]; then col_width=30; fi
-  if [ "$col_width" -gt 60 ]; then col_width=60; fi
+  if [ "$col_width" -gt 55 ]; then col_width=55; fi
 
-  # Capture each column into temp arrays
-  local left_lines=()
-  local right_lines=()
+  local left_lines=() right_lines=()
 
   while IFS= read -r line; do
     left_lines+=("$line")
@@ -178,28 +175,22 @@ render_two_columns() {
     right_lines+=("$line")
   done < <(render_prompt_history_lines 2>/dev/null)
 
-  # Determine max rows
   local left_count=${#left_lines[@]}
   local right_count=${#right_lines[@]}
   local max_rows=$left_count
   if [ "$right_count" -gt "$max_rows" ]; then max_rows=$right_count; fi
 
-  # Print separator
   local sep=""
   for ((i=0; i<term_width-4; i++)); do sep+="─"; done
   echo -e "  ${DIM}${sep}${RESET}"
 
-  # Print rows side by side
   for ((i=0; i<max_rows; i++)); do
     local left_text="${left_lines[$i]:-}"
     local right_text="${right_lines[$i]:-}"
 
-    # Strip ANSI for length calculation
     local left_plain
-    left_plain=$(echo -e "$left_text" | sed 's/\x1b\[[0-9;]*m//g')
+    left_plain=$(echo -e "$left_text" | strip_ansi)
     local left_len=${#left_plain}
-
-    # Pad left column
     local pad_needed=$(( col_width - left_len ))
     if [ "$pad_needed" -lt 0 ]; then pad_needed=0; fi
     local padding=""
@@ -231,11 +222,6 @@ render_build_status() {
   echo ""
 }
 
-# Strip all ANSI escape sequences from a string
-strip_ansi() {
-  sed 's/\x1b\[[0-9;]*m//g; s/\x1b\[[0-9;]*[a-zA-Z]//g'
-}
-
 render_failure_info() {
   if [ ! -f "$PROGRESS" ]; then return; fi
 
@@ -245,13 +231,8 @@ render_failure_info() {
   if [ -n "$failure_agent" ] && [ "$failure_agent" != "null" ]; then
     local failure_loc failure_msg
     failure_loc=$(jq -r '.failure.location // ""' "$PROGRESS")
-    # Get raw message, strip ANSI codes, take first meaningful line
     failure_msg=$(jq -r '.failure.message // ""' "$PROGRESS" | strip_ansi | tr '\n' ' ' | sed 's/  */ /g')
-
-    # Truncate to 80 chars
-    if [ ${#failure_msg} -gt 80 ]; then
-      failure_msg="${failure_msg:0:78}.."
-    fi
+    if [ ${#failure_msg} -gt 80 ]; then failure_msg="${failure_msg:0:78}.."; fi
 
     echo -e "  ${RED}${BOLD}FAIL${RESET} ${RED}${failure_agent} → ${failure_loc}${RESET}"
     if [ -n "$failure_msg" ]; then
@@ -261,38 +242,228 @@ render_failure_info() {
   fi
 }
 
-# ── Render all sections ──
-render_all() {
-  render_header
-  render_sprint_overview
-  render_build_status
-  render_failure_info
+render_agent_info() {
+  # Next action hint
+  if [ ! -f "$PROGRESS" ]; then return; fi
 
-  # Two-column: Sprint Map | Prompt History
-  render_two_columns
+  local next_agent agent_status
+  next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
+  agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 
-  # Feature progress (reuse existing lib)
-  if [ -f "$FEATURES" ]; then
-    render_progress "$PROJECT_ROOT" 2>/dev/null
+  if [ "$next_agent" != "none" ] && [ "$next_agent" != "null" ] && [ "$agent_status" != "blocked" ]; then
+    echo -e "  ${CYAN}Next → ${next_agent}${RESET}  ${DIM}(type 'next' to start)${RESET}"
   fi
 
-  # Agent sequence bar
+  # Agent bar
   render_agent_bar "$PROJECT_ROOT" 2>/dev/null
   echo ""
-
-  echo -e "  ${DIM}Refreshing every 2s  |  Ctrl+C to exit${RESET}"
 }
 
-# ── Main Loop ──
-tput civis 2>/dev/null
-trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
-
-clear
-
-while true; do
-  buf=$(render_all 2>/dev/null)
+# ══════════════════════════════════════════
+# Full dashboard render
+# ══════════════════════════════════════════
+render_dashboard() {
   tput cup 0 0 2>/dev/null
+  tput civis 2>/dev/null
+
+  local buf
+  buf=$(
+    render_header
+    render_sprint_overview
+    render_build_status
+    render_failure_info
+    render_two_columns
+
+    if [ -f "$FEATURES" ]; then
+      render_progress "$PROJECT_ROOT" 2>/dev/null
+    fi
+
+    render_agent_info
+  )
   echo "$buf"
   tput ed 2>/dev/null
-  sleep 2
+  tput cnorm 2>/dev/null
+}
+
+# ══════════════════════════════════════════
+# Command handlers
+# ══════════════════════════════════════════
+
+cmd_log() {
+  local msg="$1"
+  if [ -z "$msg" ]; then
+    echo -e "  ${RED}Usage: log <message>${RESET}"
+    return
+  fi
+
+  local ts
+  ts=$(date +"%Y-%m-%d")
+  echo "${ts} | manual | note | ${msg}" >> "$PROGRESS_LOG"
+  echo -e "  ${GREEN}Logged:${RESET} ${msg}"
+}
+
+cmd_clear_fail() {
+  if [ ! -f "$PROGRESS" ]; then return; fi
+
+  jq '.failure = {agent: null, location: null, message: null, retry_target: null} |
+      .sprint.status = "in_progress" |
+      .sprint.retry_count = 0 |
+      .agent_status = "completed"' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
+  echo -e "  ${GREEN}Failure state cleared.${RESET}"
+}
+
+cmd_next() {
+  # Find the Agent Session pane and send the next agent command
+  local tmux_target="harness-studio.2"  # Agent Session pane
+
+  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
+    echo -e "  ${RED}tmux session not found. Run inside harness-studio.${RESET}"
+    return
+  fi
+
+  local next_agent
+  next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
+
+  if [ "$next_agent" = "none" ] || [ "$next_agent" = "null" ]; then
+    echo -e "  ${YELLOW}No next agent in queue.${RESET}"
+    return
+  fi
+
+  echo -e "  ${CYAN}Starting ${next_agent} in Agent Session pane...${RESET}"
+
+  # Log the manual intervention
+  local ts
+  ts=$(date +"%Y-%m-%d")
+  echo "${ts} | manual | start-agent | ${next_agent}" >> "$PROGRESS_LOG"
+
+  # Send command to Agent Session pane
+  tmux send-keys -t "$tmux_target" "/harness-${next_agent}" Enter
+}
+
+cmd_retry() {
+  local tmux_target="harness-studio.2"
+
+  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
+    echo -e "  ${RED}tmux session not found.${RESET}"
+    return
+  fi
+
+  local current_agent
+  current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
+
+  if [ "$current_agent" = "none" ] || [ "$current_agent" = "null" ]; then
+    echo -e "  ${YELLOW}No current agent to retry.${RESET}"
+    return
+  fi
+
+  echo -e "  ${CYAN}Retrying ${current_agent} in Agent Session pane...${RESET}"
+
+  local ts
+  ts=$(date +"%Y-%m-%d")
+  echo "${ts} | manual | retry | ${current_agent}" >> "$PROGRESS_LOG"
+
+  tmux send-keys -t "$tmux_target" "/harness-${current_agent}" Enter
+}
+
+cmd_stop() {
+  local tmux_target="harness-studio.2"
+
+  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
+    echo -e "  ${RED}tmux session not found.${RESET}"
+    return
+  fi
+
+  echo -e "  ${YELLOW}Sending Ctrl+C to Agent Session...${RESET}"
+  tmux send-keys -t "$tmux_target" C-c
+
+  local ts
+  ts=$(date +"%Y-%m-%d")
+  echo "${ts} | manual | stop | user-initiated" >> "$PROGRESS_LOG"
+}
+
+show_help() {
+  echo ""
+  echo -e "  ${BOLD}Commands${RESET}"
+  echo -e "  ${CYAN}status${RESET} / ${CYAN}s${RESET}          Refresh dashboard"
+  echo -e "  ${CYAN}next${RESET}   / ${CYAN}n${RESET}          Start next agent in Agent Session"
+  echo -e "  ${CYAN}retry${RESET}  / ${CYAN}r${RESET}          Retry current agent"
+  echo -e "  ${CYAN}stop${RESET}              Send Ctrl+C to Agent Session"
+  echo -e "  ${CYAN}log${RESET} <message>     Add note to progress.log"
+  echo -e "  ${CYAN}clear-fail${RESET}        Clear failure state"
+  echo -e "  ${CYAN}help${RESET}  / ${CYAN}h${RESET}          Show this help"
+  echo -e "  ${CYAN}quit${RESET}  / ${CYAN}q${RESET}          Exit dashboard"
+  echo ""
+}
+
+# ══════════════════════════════════════════
+# Main — Interactive loop
+# ══════════════════════════════════════════
+clear
+render_dashboard
+
+echo ""
+echo -e "  ${DIM}Type 'help' for commands. Dashboard auto-refreshes every 5s.${RESET}"
+echo ""
+
+# Background auto-refresh
+(
+  while true; do
+    sleep 5
+    # Signal main process to refresh
+    kill -USR1 $$ 2>/dev/null || exit 0
+  done
+) &
+REFRESH_PID=$!
+
+# Trap USR1 to refresh dashboard
+trap 'render_dashboard' USR1
+trap 'kill $REFRESH_PID 2>/dev/null; exit 0' EXIT INT TERM
+
+while true; do
+  echo -ne "  ${BOLD}harness>${RESET} "
+  # Read with timeout so USR1 can interrupt
+  if read -t 5 -r input; then
+    # Trim whitespace
+    input=$(echo "$input" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+    case "$input" in
+      status|s)
+        render_dashboard
+        ;;
+      next|n)
+        cmd_next
+        ;;
+      retry|r)
+        cmd_retry
+        ;;
+      stop)
+        cmd_stop
+        ;;
+      log\ *)
+        cmd_log "${input#log }"
+        ;;
+      clear-fail)
+        cmd_clear_fail
+        ;;
+      help|h)
+        show_help
+        ;;
+      quit|q)
+        echo -e "  ${DIM}Goodbye.${RESET}"
+        exit 0
+        ;;
+      "")
+        # Empty input — just refresh
+        render_dashboard
+        ;;
+      *)
+        # Unknown command — treat as manual note
+        echo -e "  ${DIM}Unknown command. Logging as note.${RESET}"
+        cmd_log "$input"
+        ;;
+    esac
+  else
+    # Timeout — auto-refresh
+    render_dashboard
+  fi
 done

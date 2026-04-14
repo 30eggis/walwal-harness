@@ -1,6 +1,6 @@
 {
   "name": "@walwal-harness/cli",
-  "version": "3.6.6",
+  "version": "3.7.0",
   "description": "Production harness for AI agent engineering — Planner, Generator(BE/FE), Evaluator(Func/Visual), optional Brainstormer (requirements refinement). Supports React and Flutter FE stacks.",
   "bin": {
     "walwal-harness": "bin/init.js"
