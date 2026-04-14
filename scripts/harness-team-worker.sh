@@ -280,7 +280,11 @@ while true; do
     gen_prompt=$(build_gen_prompt "$feature_id" "$attempt" "$eval_feedback")
 
     gen_start=$(date +%s)
-    gen_output=$(cd "$PROJECT_ROOT" && claude -p "$gen_prompt" --model "$GEN_MODEL" --output-format text 2>&1) || true
+    log "${DIM}  claude -p --dangerously-skip-permissions --model ${GEN_MODEL}${RESET}"
+    gen_output=$(cd "$PROJECT_ROOT" && claude -p "$gen_prompt" \
+      --dangerously-skip-permissions \
+      --model "$GEN_MODEL" \
+      --output-format text 2>&1 | tee /dev/stderr) 2>&1 || true
     gen_elapsed=$(( $(date +%s) - gen_start ))
 
     files_changed=$(cd "$PROJECT_ROOT" && git diff --name-only 2>/dev/null | wc -l | tr -d ' ')
@@ -308,7 +312,11 @@ while true; do
     eval_prompt=$(build_eval_prompt "$feature_id")
 
     eval_start=$(date +%s)
-    eval_output=$(cd "$PROJECT_ROOT" && claude -p "$eval_prompt" --model "$EVAL_MODEL" --output-format text 2>&1) || true
+    log "${DIM}  claude -p --dangerously-skip-permissions --model ${EVAL_MODEL}${RESET}"
+    eval_output=$(cd "$PROJECT_ROOT" && claude -p "$eval_prompt" \
+      --dangerously-skip-permissions \
+      --model "$EVAL_MODEL" \
+      --output-format text 2>&1 | tee /dev/stderr) 2>&1 || true
     eval_elapsed=$(( $(date +%s) - eval_start ))
 
     # Parse result
