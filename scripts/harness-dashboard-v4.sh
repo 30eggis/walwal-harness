@@ -44,18 +44,21 @@ render_queue_summary() {
   fi
 
   local ready blocked in_prog passed failed total concurrency
-  ready=$(jq '.queue.ready | length' "$QUEUE" 2>/dev/null)
-  blocked=$(jq '.queue.blocked | length' "$QUEUE" 2>/dev/null)
-  in_prog=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null)
-  passed=$(jq '.queue.passed | length' "$QUEUE" 2>/dev/null)
-  failed=$(jq '.queue.failed | length' "$QUEUE" 2>/dev/null)
-  concurrency=$(jq '.concurrency // 3' "$QUEUE" 2>/dev/null)
+  ready=$(jq '.queue.ready | length' "$QUEUE" 2>/dev/null || echo 0)
+  blocked=$(jq '.queue.blocked | length' "$QUEUE" 2>/dev/null || echo 0)
+  in_prog=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null || echo 0)
+  passed=$(jq '.queue.passed | length' "$QUEUE" 2>/dev/null || echo 0)
+  failed=$(jq '.queue.failed | length' "$QUEUE" 2>/dev/null || echo 0)
+  concurrency=$(jq '.concurrency // 3' "$QUEUE" 2>/dev/null || echo 3)
+  ready=${ready:-0}; blocked=${blocked:-0}; in_prog=${in_prog:-0}; passed=${passed:-0}; failed=${failed:-0}
   total=$((ready + blocked + in_prog + passed + failed))
 
   # Progress bar
   local pct=0
   if [ "$total" -gt 0 ]; then pct=$(( passed * 100 / total )); fi
-  local bar_w=20 filled=$(( pct * bar_w / 100 )) empty=$(( bar_w - filled ))
+  local bar_w=20
+  local filled=$(( pct * bar_w / 100 ))
+  local empty=$(( bar_w - filled ))
   local bar=""
   for ((i=0; i<filled; i++)); do bar+="█"; done
   for ((i=0; i<empty; i++)); do bar+="░"; done
@@ -112,45 +115,37 @@ render_teams() {
 render_feature_list() {
   if [ ! -f "$QUEUE" ] || [ ! -f "$FEATURES" ]; then return; fi
 
-  local total
-  total=$(jq '.features | length' "$FEATURES" 2>/dev/null)
-  if [ "${total:-0}" -eq 0 ]; then return; fi
-
   echo -e "  ${BOLD}Features${RESET}"
 
-  local i=0
-  while [ "$i" -lt "$total" ]; do
-    local fid fname status_icon
-    fid=$(jq -r ".features[$i].id" "$FEATURES" 2>/dev/null)
-    fname=$(jq -r ".features[$i].name // .features[$i].description // \"\"" "$FEATURES" 2>/dev/null)
-    if [ ${#fname} -gt 22 ]; then fname="${fname:0:20}.."; fi
-
-    # Determine status from queue
-    local in_passed in_failed in_progress in_ready in_blocked
-    in_passed=$(jq -r --arg f "$fid" '.queue.passed // [] | map(select(. == $f)) | length' "$QUEUE" 2>/dev/null)
-    in_failed=$(jq -r --arg f "$fid" '.queue.failed // [] | map(select(. == $f)) | length' "$QUEUE" 2>/dev/null)
-    in_progress=$(jq -r --arg f "$fid" '.queue.in_progress[$f] // empty' "$QUEUE" 2>/dev/null)
-    in_ready=$(jq -r --arg f "$fid" '.queue.ready // [] | map(select(. == $f)) | length' "$QUEUE" 2>/dev/null)
-
-    if [ "${in_passed:-0}" -gt 0 ]; then
-      status_icon="${GREEN}●${RESET}"
-    elif [ -n "$in_progress" ] && [ "$in_progress" != "" ]; then
-      local team phase
-      team=$(echo "$in_progress" | jq -r '.team // "?"' 2>/dev/null)
-      phase=$(echo "$in_progress" | jq -r '.phase // "?"' 2>/dev/null)
-      status_icon="${CYAN}◐${RESET} T${team}:${phase}"
-    elif [ "${in_failed:-0}" -gt 0 ]; then
-      status_icon="${RED}✗${RESET}"
-    elif [ "${in_ready:-0}" -gt 0 ]; then
-      status_icon="${YELLOW}○${RESET}"
-    else
-      status_icon="${DIM}◌${RESET}"  # blocked
-    fi
-
-    printf "  %b %-6s %-24s\n" "$status_icon" "$fid" "$fname"
-
-    i=$((i + 1))
+  # Single jq call: merge feature-list + queue state → pre-formatted lines
+  jq -r --slurpfile q "$QUEUE" '
+    ($q[0].queue.passed // []) as $passed |
+    ($q[0].queue.failed // []) as $failed |
+    ($q[0].queue.ready // []) as $ready |
+    ($q[0].queue.in_progress // {}) as $prog |
+    .features[] |
+    .id as $fid |
+    (.name // .description // "?" | if length > 22 then .[0:20] + ".." else . end) as $fname |
+    (if ($fid | IN($passed[])) then "P"
+     elif $prog[$fid] then "I|\($prog[$fid].team)|\($prog[$fid].phase)"
+     elif ($fid | IN($failed[])) then "F"
+     elif ($fid | IN($ready[])) then "R"
+     else "B" end) as $st |
+    "\($st)\t\($fid)\t\($fname)"
+  ' "$FEATURES" 2>/dev/null | while IFS=$'\t' read -r st fid fname; do
+    case "$st" in
+      P)    printf "  ${GREEN}●${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      F)    printf "  ${RED}✗${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      R)    printf "  ${YELLOW}○${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      B)    printf "  ${DIM}◌${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      I\|*) # in_progress: extract team and phase
+            team=$(echo "$st" | cut -d'|' -f2)
+            phase=$(echo "$st" | cut -d'|' -f3)
+            printf "  ${CYAN}◐${RESET} %-6s %-18s T%s:%s\n" "$fid" "$fname" "$team" "$phase" ;;
+      *)    printf "  ? %-6s %s\n" "$fid" "$fname" ;;
+    esac
   done
+
   echo ""
 }
 
@@ -169,8 +164,7 @@ trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
 clear
 
 while true; do
-  local buf
-  buf=$(render_all 2>/dev/null)
+  buf=$(render_all 2>&1)
   tput cup 0 0 2>/dev/null
   echo "$buf"
   tput ed 2>/dev/null
