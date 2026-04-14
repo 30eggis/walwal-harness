@@ -51,7 +51,27 @@ current_agent=${CURRENT_AGENT} (running) 인데 /harness-${REQUESTED_SKILL} 호�
   fi
 fi
 
-# ── Compact context 주입 ──
+# ── v4 Parallel Mode 감지 ──
+FEATURE_QUEUE="$CWD/.harness/actions/feature-queue.json"
+if [ -f "$FEATURE_QUEUE" ]; then
+  V4_PASSED=$(jq '.queue.passed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+  V4_TOTAL=$(jq '[.queue.ready, (.queue.blocked | keys), (.queue.in_progress | keys), .queue.passed, .queue.failed] | flatten | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+  V4_FAILED=$(jq '.queue.failed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+
+  cat <<EOF
+[harness-v4] ${V4_PASSED}/${V4_TOTAL} features passed | ${V4_FAILED} failed
+
+## v4 Parallel Mode Active
+- 3 Agent Teams이 feature-queue에서 자율적으로 Gen→Eval 루프 실행 중
+- 당신은 **오케스트레이터** 역할: 대시보드 모니터링, 실패 대응, 수동 개입
+- /harness-generator-*, /harness-evaluator-* 스킬 호출 금지 (Teams가 처리)
+- 할 수 있는 것: 코드 리뷰, 아키텍처 결정, failed feature 분석, requeue 판단
+- skip: "harness skip" 시 일반 대화
+EOF
+  exit 0
+fi
+
+# ── Compact context 주입 (v3 mode) ──
 cat <<EOF
 [harness] S${SPRINT_NUM} | ${PIPELINE} | agent=${CURRENT_AGENT} (${AGENT_STATUS}) | next=${NEXT_AGENT}
 ${CONTEXT_WARNING}

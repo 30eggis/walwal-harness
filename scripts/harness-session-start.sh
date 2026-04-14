@@ -27,6 +27,24 @@ next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 
 # ─────────────────────────────────────────
+# v4 Parallel Mode — feature-queue.json이 존재하면 v4 안내
+# ─────────────────────────────────────────
+FEATURE_QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
+if [ -f "$FEATURE_QUEUE" ]; then
+  passed=$(jq '.queue.passed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+  total=$(jq '[.queue.ready, (.queue.blocked | keys), (.queue.in_progress | keys), .queue.passed, .queue.failed] | flatten | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+  in_prog=$(jq '.queue.in_progress | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+  failed=$(jq '.queue.failed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+
+  echo "# Harness v4 — Parallel Agent Teams active"
+  echo "# Queue: ${passed}/${total} passed, ${in_prog} in progress, ${failed} failed"
+  echo "# Teams are running autonomously. You are the orchestrator."
+  echo "# Role: Monitor dashboard, resolve failures, manual interventions only."
+  echo "# Do NOT run /harness-generator-* or /harness-evaluator-* — Teams handle Gen+Eval."
+  exit 0
+fi
+
+# ─────────────────────────────────────────
 # init 상태: 첫 안내
 # ─────────────────────────────────────────
 if [ "$sprint_status" = "init" ]; then
