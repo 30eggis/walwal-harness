@@ -89,8 +89,8 @@ PANE_T3=$(tmux split-window -v -p 50 -t "$PANE_T2" -c "$PROJECT_ROOT" \
   -P -F '#{pane_id}' \
   "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-team-worker.sh\" 3 \"${PROJECT_ROOT}\"'")
 
-# ── Prepare Main pane (unset nvm noise, clear) ──
-tmux send-keys -t "$PANE_MAIN" "unset npm_config_prefix 2>/dev/null; clear" Enter
+# ── Launch Claude in Main pane ──
+tmux send-keys -t "$PANE_MAIN" "unset npm_config_prefix 2>/dev/null; clear && claude --dangerously-skip-permissions" Enter
 
 # ── Pane titles ──
 tmux select-pane -t "$PANE_MAIN" -T "Main"
