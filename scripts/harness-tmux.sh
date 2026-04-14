@@ -85,6 +85,20 @@ tmux split-window -v -t "${SESSION_NAME}.2" -c "$PROJECT_ROOT"
 # Pane 3 (bottom-right): Eval Watcher
 tmux send-keys -t "${SESSION_NAME}.3" "bash ${SCRIPT_DIR}/harness-eval-watcher.sh '${PROJECT_ROOT}' ${USE_AI}" Enter
 
+# ── Launch Claude in Main pane ──
+HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
+CLAUDE_CMD="claude --dangerously-skip-permissions"
+
+# If handoff.json exists, pick up model from it
+if [ -f "$HANDOFF" ]; then
+  _model=$(jq -r '.model // empty' "$HANDOFF" 2>/dev/null)
+  if [ -n "$_model" ] && [ "$_model" != "null" ]; then
+    CLAUDE_CMD="$CLAUDE_CMD --model $_model"
+  fi
+fi
+
+tmux send-keys -t "${SESSION_NAME}.0" "$CLAUDE_CMD" Enter
+
 # ── Layout adjustments ──
 # Select left pane (Main) — this is where the user works
 tmux select-pane -t "${SESSION_NAME}.0"
