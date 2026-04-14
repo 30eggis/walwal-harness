@@ -225,25 +225,24 @@ function installSkills() {
     return;
   }
 
+  // harness- 프리픽스 스킬 전체 삭제 후 재복사 — 잔류 방지
+  if (fs.existsSync(CLAUDE_SKILLS_DIR)) {
+    const existing = fs.readdirSync(CLAUDE_SKILLS_DIR, { withFileTypes: true });
+    for (const entry of existing) {
+      if (entry.isDirectory() && entry.name.startsWith('harness-')) {
+        fs.rmSync(path.join(CLAUDE_SKILLS_DIR, entry.name), { recursive: true, force: true });
+      }
+    }
+    log('  Cleared existing harness-* skills');
+  }
+
   const skills = fs.readdirSync(skillsSrc, { withFileTypes: true })
     .filter(d => d.isDirectory())
     .map(d => d.name);
 
-  // Remove obsolete skills (cleaned up in v4)
-  const obsoleteSkills = ['harness-generator-frontend-flutter', 'harness-evaluator-functional-flutter', 'harness-team'];
-  for (const obs of obsoleteSkills) {
-    const obsPath = path.join(CLAUDE_SKILLS_DIR, obs);
-    if (fs.existsSync(obsPath)) {
-      fs.rmSync(obsPath, { recursive: true, force: true });
-      log(`  Removed obsolete: ${obs}`);
-    }
-  }
-
   for (const skill of skills) {
     const src = path.join(skillsSrc, skill);
     const dest = path.join(CLAUDE_SKILLS_DIR, `harness-${skill}`);
-
-    // Skills are ALWAYS overwritten — they are harness-managed, not user-editable
     copyDir(src, dest);
     log(`  Installed: harness-${skill}`);
   }
@@ -260,63 +259,28 @@ function installScripts() {
   const scriptsSrc = path.join(PKG_ROOT, 'scripts');
   const scriptsDest = path.join(PROJECT_ROOT, 'scripts');
 
-  // Remove obsolete scripts from previous versions
-  const obsoleteScripts = [
-    'harness-studio-v4.sh',
-    'harness-control-v4.sh',
-    'harness-prompts-v4.sh',
-    'harness-team-worker.sh',
-  ];
-  for (const obs of obsoleteScripts) {
-    const obsPath = path.join(scriptsDest, obs);
-    if (fs.existsSync(obsPath)) {
-      fs.unlinkSync(obsPath);
-      log(`  Removed obsolete: ${obs}`);
-    }
+  // 전체 삭제 후 재복사 — 버전 간 잔류 파일 방지
+  if (fs.existsSync(scriptsDest)) {
+    fs.rmSync(scriptsDest, { recursive: true, force: true });
+    log('  Cleared existing scripts/');
   }
 
-  // Core scripts are ALWAYS overwritten on update (not user-editable)
-  // These contain harness logic that must stay in sync with the CLI version
-  const coreScripts = new Set([
-    'harness-next.sh',
-    'harness-session-start.sh',
-    'harness-statusline.sh',
-    'harness-user-prompt-submit.sh',
-    'harness-dashboard.sh',
-    'harness-monitor.sh',
-    'harness-eval-watcher.sh',
-    'harness-tmux.sh',
-    'harness-control.sh',
-    'harness-dashboard-v4.sh',
-    'harness-queue-manager.sh',
-  ]);
-
   if (fs.existsSync(scriptsSrc)) {
-    ensureDir(scriptsDest);
-    const entries = fs.readdirSync(scriptsSrc, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(scriptsSrc, entry.name);
-      const destPath = path.join(scriptsDest, entry.name);
-      if (entry.isDirectory()) {
-        // lib/ and other subdirectories — always overwrite
-        copyDir(srcPath, destPath);
-        try {
-          const subFiles = fs.readdirSync(destPath);
-          for (const f of subFiles) {
-            if (f.endsWith('.sh')) {
-              fs.chmodSync(path.join(destPath, f), '755');
-            }
-          }
-        } catch (e) {}
-      } else {
-        // Core scripts: always overwrite. Others: skip if exists (unless --force)
-        const isCore = coreScripts.has(entry.name);
-        if (isCore || !fileExists(destPath) || isForce) {
-          copyFile(srcPath, destPath);
-          try { fs.chmodSync(destPath, '755'); } catch (e) {}
+    copyDir(scriptsSrc, scriptsDest);
+
+    // chmod +x for all .sh files (recursive)
+    function chmodRecursive(dir) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          chmodRecursive(full);
+        } else if (entry.name.endsWith('.sh')) {
+          try { fs.chmodSync(full, '755'); } catch (e) {}
         }
       }
     }
+    chmodRecursive(scriptsDest);
   }
 
   log('Scripts installation complete');
