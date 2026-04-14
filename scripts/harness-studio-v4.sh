@@ -72,10 +72,15 @@ fi
 PANE_MAIN=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 220 -y 55 \
   -P -F '#{pane_id}')
 
-# Column 2: Dashboard (split right from Main, 66% remaining → 33% each of 3 cols)
+# Column 2: Dashboard Progress (split right from Main, 66% remaining)
 PANE_DASH=$(tmux split-window -h -p 66 -t "$PANE_MAIN" -c "$PROJECT_ROOT" \
   -P -F '#{pane_id}' \
   "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard-v4.sh\" \"${PROJECT_ROOT}\"'")
+
+# Dashboard bottom: Prompts & Activity (split below Dashboard, 40% bottom)
+PANE_PROMPTS=$(tmux split-window -v -p 40 -t "$PANE_DASH" -c "$PROJECT_ROOT" \
+  -P -F '#{pane_id}' \
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-prompts-v4.sh\" \"${PROJECT_ROOT}\"'")
 
 # Column 3: Team 1 (split right from Dashboard, 50% of remaining = 33% total)
 PANE_T1=$(tmux split-window -h -p 50 -t "$PANE_DASH" -c "$PROJECT_ROOT" \
@@ -96,11 +101,12 @@ PANE_T3=$(tmux split-window -v -p 50 -t "$PANE_T2" -c "$PROJECT_ROOT" \
 tmux send-keys -t "$PANE_MAIN" "unset npm_config_prefix 2>/dev/null; clear && claude --dangerously-skip-permissions" Enter
 
 # ── Pane titles ──
-tmux select-pane -t "$PANE_MAIN" -T "Main"
-tmux select-pane -t "$PANE_DASH" -T "Dashboard"
-tmux select-pane -t "$PANE_T1"   -T "Team 1"
-tmux select-pane -t "$PANE_T2"   -T "Team 2"
-tmux select-pane -t "$PANE_T3"   -T "Team 3"
+tmux select-pane -t "$PANE_MAIN"    -T "Main"
+tmux select-pane -t "$PANE_DASH"    -T "Progress"
+tmux select-pane -t "$PANE_PROMPTS" -T "Prompts"
+tmux select-pane -t "$PANE_T1"      -T "Team 1"
+tmux select-pane -t "$PANE_T2"      -T "Team 2"
+tmux select-pane -t "$PANE_T3"      -T "Team 3"
 
 tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
 tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true

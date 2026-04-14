@@ -231,6 +231,7 @@ function installScripts() {
     'harness-control-v4.sh',
     'harness-queue-manager.sh',
     'harness-team-worker.sh',
+    'harness-prompts-v4.sh',
   ]);
 
   if (fs.existsSync(scriptsSrc)) {
