@@ -136,19 +136,44 @@ v4에서도 Planner는 먼저 실행해야 합니다:
 # Dispatcher → Planner → feature-list.json 생성
 ```
 
-### 3. Agent Teams 실행
+### 3. Studio 실행
 
-```
-❯ /harness-team
-```
-
-또는:
+**터미널에서** (Claude 세션 밖에서):
 
 ```bash
 npx walwal-harness v4
 ```
 
-### 4. tmux 레이아웃
+### 4. Teams 가동/중지
+
+Studio가 열리면 Main pane의 Claude에서:
+
+```
+❯ /harness-team-action    # Queue 초기화 + 3 Teams 백그라운드 실행
+❯ /harness-team-stop      # 모든 Teams 중지
+```
+
+**흐름 요약:**
+```
+npx walwal-harness v4     ← 터미널에서 Studio 실행
+  Main에서:
+    ❯ 하네스 엔지니어링 시작  ← Planner가 feature-list.json 생성
+    ❯ /harness-team-action   ← Queue 생성 + Teams 가동 → 자율 실행 시작
+    (모니터링, 개입, gotcha 등록...)
+    ❯ /harness-team-stop     ← 필요 시 중지
+```
+
+### 5. Team 관리 명령어
+
+| 명령 | 동작 |
+|------|------|
+| `/harness-team-action` | Queue 초기화 + 3 Teams 가동 |
+| `/harness-team-stop` | 모든 Teams 중지 |
+| `bash scripts/harness-queue-manager.sh status .` | Queue 상태 확인 |
+| `bash scripts/harness-queue-manager.sh requeue F-XXX .` | 실패한 Feature 재큐 |
+| `tail -f /tmp/harness-team-1.log` | Team 1 로그 실시간 확인 |
+
+### 6. tmux 레이아웃
 
 ```
 ┌──────────────┬──────────────┬──────────────┐
@@ -186,15 +211,20 @@ Team 1: dequeue F-002 → worktree 생성 → Gen → Gate → Eval
 - Feature PASS 시 main으로 **auto-merge** + worktree 즉시 삭제
 - Merge conflict 시 auto-rebase 시도
 
-### 6. Main에서 할 수 있는 것
+### 9. Main에서 할 수 있는 것
 
 Main Claude는 **오케스트레이터**입니다:
-- 대시보드 상태 확인 요청
-- 실패한 Feature 분석/피드백
-- 코드 리뷰, 아키텍처 판단
-- Gotcha 등록 (실수 지적 → 이후 Team에 반영)
 
-Main에서는 `/harness-generator-*`, `/harness-evaluator-*` 를 **직접 호출하지 않습니다** — Team이 처리합니다.
+| 할 수 있는 것 | 예시 |
+|--------------|------|
+| Teams 가동/중지 | `/harness-team-action`, `/harness-team-stop` |
+| 상태 확인 | `bash scripts/harness-queue-manager.sh status .` |
+| 실패 Feature 분석 | "F-003이 왜 실패했는지 로그 확인해줘" |
+| Feature 재큐 | `bash scripts/harness-queue-manager.sh requeue F-003 .` |
+| 코드 리뷰 | "F-002의 Sidebar 컴포넌트 리뷰해줘" |
+| Gotcha 등록 | "API 응답에 created_at은 ISO 8601이어야 해" |
+
+**하지 말 것:** `/harness-generator-*`, `/harness-evaluator-*` 직접 호출 — Team이 처리합니다.
 
 ---
 
