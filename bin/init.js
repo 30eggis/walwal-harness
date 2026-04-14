@@ -226,12 +226,8 @@ function installScripts() {
     'harness-eval-watcher.sh',
     'harness-tmux.sh',
     'harness-control.sh',
-    'harness-studio-v4.sh',
     'harness-dashboard-v4.sh',
-    'harness-control-v4.sh',
     'harness-queue-manager.sh',
-    'harness-team-worker.sh',
-    'harness-prompts-v4.sh',
   ]);
 
   if (fs.existsSync(scriptsSrc)) {
@@ -576,7 +572,7 @@ Usage:
   npx walwal-harness --force    Re-initialize (overwrites existing files)
   npx walwal-harness studio     Launch Harness Studio v3 (tmux 5-pane)
   npx walwal-harness studio --ai  Studio v3 + AI eval summary
-  npx walwal-harness v4          Launch Studio v4 (3 Parallel Agent Teams)
+  npx walwal-harness v4          Enable Agent Teams (set env var + init queue)
   npx walwal-harness --help     Show this help
 
 What it does:
@@ -627,24 +623,51 @@ function runStudio() {
 }
 
 function runStudioV4() {
-  const scriptsDir = path.join(PKG_ROOT, 'scripts');
-  const tmuxScript = path.join(scriptsDir, 'harness-studio-v4.sh');
-
-  if (!fs.existsSync(tmuxScript)) {
-    log('ERROR: harness-studio-v4.sh not found. Update @walwal-harness/cli to >= 4.0.0');
-    process.exit(1);
+  // Enable Agent Teams in project settings
+  const settingsPath = path.join(PROJECT_ROOT, '.claude', 'settings.json');
+  let settings = {};
+  if (fileExists(settingsPath)) {
+    try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (e) {}
   }
 
-  try {
-    execSync('which tmux', { stdio: 'ignore' });
-  } catch {
-    log('ERROR: tmux is required. Install with: brew install tmux');
-    process.exit(1);
+  if (!settings.env) settings.env = {};
+  settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] = '1';
+  ensureDir(path.dirname(settingsPath));
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+
+  // Initialize feature queue if feature-list.json exists
+  const featureList = path.join(PROJECT_ROOT, '.harness', 'actions', 'feature-list.json');
+  const featureQueue = path.join(PROJECT_ROOT, '.harness', 'actions', 'feature-queue.json');
+  const queueMgr = path.join(PKG_ROOT, 'scripts', 'harness-queue-manager.sh');
+
+  if (fs.existsSync(featureList) && fs.existsSync(queueMgr)) {
+    if (!fs.existsSync(featureQueue)) {
+      log('Initializing feature queue...');
+      try { execSync(`bash "${queueMgr}" init "${PROJECT_ROOT}"`, { stdio: 'inherit' }); } catch (e) {}
+    } else {
+      log('Recovering feature queue...');
+      try { execSync(`bash "${queueMgr}" recover "${PROJECT_ROOT}"`, { stdio: 'inherit' }); } catch (e) {}
+    }
   }
 
-  const cmd = `bash "${tmuxScript}" "${PROJECT_ROOT}"`.trim();
-  log('Launching Harness Studio v4 (Parallel Agent Teams)...');
-  execSync(cmd, { stdio: 'inherit' });
+  console.log('');
+  log('╔═══════════════════════════════════════════════════════════╗');
+  log('║  Agent Teams v4 ENABLED                                  ║');
+  log('╠═══════════════════════════════════════════════════════════╣');
+  log('║                                                          ║');
+  log('║  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 set in           ║');
+  log('║  .claude/settings.json                                   ║');
+  log('║                                                          ║');
+  log('║  Next steps:                                             ║');
+  log('║  1. Restart Claude Code (/exit → re-enter)               ║');
+  log('║  2. Run Planner: "하네스 엔지니어링 시작"                 ║');
+  log('║  3. Start Teams: /harness-team-action                    ║');
+  log('║                                                          ║');
+  log('║  Or use --teammate-mode tmux for split panes:            ║');
+  log('║  $ claude --teammate-mode tmux                           ║');
+  log('║                                                          ║');
+  log('╚═══════════════════════════════════════════════════════════╝');
+  console.log('');
 }
 
 function main() {
