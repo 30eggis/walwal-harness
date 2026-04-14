@@ -8,14 +8,28 @@ disable-model-invocation: false
 
 ## Step 0: Studio 레이아웃 자동 구축
 
-tmux 내부에서 실행 중이면, 3-column 레이아웃을 자동 구축합니다:
+3-column 대시보드 레이아웃을 자동 구축합니다:
 
 ```bash
 bash scripts/harness-studio-setup.sh .
 ```
 
-> 이미 구축됐으면 자동 skip (멱등).
-> tmux 밖이면 경고만 출력하고 계속 진행 (필수는 아님).
+스크립트 출력을 확인합니다:
+
+- **`Layout ready`** → 현재 터미널에 split 완료. 바로 Step 1로.
+- **`ATTACH_TMUX=harness-studio`** → 새 tmux 세션이 생성됨 (tmux 밖에서 실행한 경우).
+  사용자에게 아래 안내를 출력하고 **STOP**합니다:
+
+  ```
+  Studio 레이아웃이 준비되었습니다!
+  다른 터미널에서 아래 명령을 실행하세요:
+
+    tmux attach -t harness-studio
+
+  새 창에서 Claude가 자동 실행됩니다. 거기서 "팀 가동"을 입력하면 Teams가 시작됩니다.
+  ```
+
+- **`already set up`** → 이미 구축됨. 바로 Step 1로.
 
 ## Step 1: Queue 초기화
 
