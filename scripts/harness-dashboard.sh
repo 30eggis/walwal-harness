@@ -156,9 +156,8 @@ render_failure_info() {
   fi
 }
 
-# ── Main Loop ──
-while true; do
-  clear
+# ── Render to buffer, then overwrite screen in one shot ──
+render_all() {
   render_header
   render_sprint_overview
   render_build_status
@@ -175,5 +174,26 @@ while true; do
   echo ""
 
   echo -e "  ${DIM}Refreshing every 2s  |  Ctrl+C to exit${RESET}"
+}
+
+# ── Main Loop ──
+# Hide cursor during refresh to reduce flicker
+tput civis 2>/dev/null  # hide cursor
+trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
+
+# Initial clear
+clear
+
+while true; do
+  # Capture full output into buffer
+  buf=$(render_all 2>/dev/null)
+
+  # Move cursor to top-left and overwrite (no clear = no flicker)
+  tput cup 0 0 2>/dev/null
+  echo "$buf"
+
+  # Clear any leftover lines from previous render
+  tput ed 2>/dev/null
+
   sleep 2
 done

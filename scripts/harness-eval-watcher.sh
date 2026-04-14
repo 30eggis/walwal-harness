@@ -215,12 +215,10 @@ while true; do
 
   # Check agent status for eval-related transitions
   if [ -f "$PROGRESS" ]; then
-    local agent
-    agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
-    local status
-    status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
+    _agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
+    _status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 
-    if [[ "$agent" == evaluator-* ]] && [ "$status" = "running" ]; then
+    if [[ "$_agent" == evaluator-* ]] && [ "$_status" = "running" ]; then
       # Show that evaluator is active
       :
     fi
