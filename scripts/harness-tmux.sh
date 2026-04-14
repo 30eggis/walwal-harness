@@ -98,9 +98,10 @@ PANE_EVAL=$(tmux split-window -v -p 45 -t "$PANE_AGENT" -c "$PROJECT_ROOT" \
   -P -F '#{pane_id}' \
   "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-eval-watcher.sh\" \"${PROJECT_ROOT}\" ${USE_AI}'")
 
-# 6. Launch Claude in Agent Session (needs interactive shell, so use send-keys)
-#    Prefix with unset to avoid nvm warnings
-tmux send-keys -t "$PANE_AGENT" "unset npm_config_prefix 2>/dev/null; $CLAUDE_CMD" Enter
+# 6. Agent Session — leave as empty shell, ready for Control to launch claude
+#    Pre-unset nvm conflict variable
+tmux send-keys -t "$PANE_AGENT" "unset npm_config_prefix 2>/dev/null" Enter
+tmux send-keys -t "$PANE_AGENT" "clear" Enter
 
 # ── Pane titles ──
 tmux select-pane -t "$PANE_DASHBOARD" -T "Dashboard"

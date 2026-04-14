@@ -38,8 +38,23 @@ RED="\033[31m"
 CYAN="\033[36m"
 RESET="\033[0m"
 
-# ── Agent Session pane target ──
-AGENT_PANE="harness-studio.2"
+# ── Agent Session pane target (find by title) ──
+find_agent_pane() {
+  tmux list-panes -t harness-studio -F '#{pane_id} #{pane_title}' 2>/dev/null \
+    | grep "Agent Session" | awk '{print $1}' | head -1
+}
+
+CONFIG="$PROJECT_ROOT/.harness/config.json"
+
+# Build claude command from config
+build_claude_cmd() {
+  local agent="$1"
+  local model="opus"
+  if [ -f "$CONFIG" ]; then
+    model=$(jq -r ".agents[\"${agent}\"].model // \"opus\"" "$CONFIG" 2>/dev/null)
+  fi
+  echo "claude --dangerously-skip-permissions --model ${model}"
+}
 
 cmd_log() {
   local msg="$1"
@@ -63,8 +78,10 @@ cmd_clear_fail() {
 }
 
 cmd_next() {
-  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
-    echo -e "  ${RED}tmux session not found.${RESET}"
+  local pane
+  pane=$(find_agent_pane)
+  if [ -z "$pane" ]; then
+    echo -e "  ${RED}Agent Session pane not found.${RESET}"
     return
   fi
 
@@ -75,16 +92,25 @@ cmd_next() {
     return
   fi
 
-  echo -e "  ${CYAN}Starting ${next_agent} in Agent Session...${RESET}"
+  local claude_cmd
+  claude_cmd=$(build_claude_cmd "$next_agent")
+
+  echo -e "  ${CYAN}Starting ${next_agent}...${RESET}"
+  echo -e "  ${DIM}${claude_cmd}${RESET}"
+
   local ts
   ts=$(date +"%Y-%m-%d")
   echo "${ts} | manual | start-agent | ${next_agent}" >> "$PROGRESS_LOG"
-  tmux send-keys -t "$AGENT_PANE" "/harness-${next_agent}" Enter
+
+  # Launch claude in Agent Session pane with the agent's prompt
+  tmux send-keys -t "$pane" "${claude_cmd} -p '하네스 엔지니어링 시작'" Enter
 }
 
 cmd_retry() {
-  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
-    echo -e "  ${RED}tmux session not found.${RESET}"
+  local pane
+  pane=$(find_agent_pane)
+  if [ -z "$pane" ]; then
+    echo -e "  ${RED}Agent Session pane not found.${RESET}"
     return
   fi
 
@@ -95,21 +121,26 @@ cmd_retry() {
     return
   fi
 
+  local claude_cmd
+  claude_cmd=$(build_claude_cmd "$current_agent")
+
   echo -e "  ${CYAN}Retrying ${current_agent}...${RESET}"
   local ts
   ts=$(date +"%Y-%m-%d")
   echo "${ts} | manual | retry | ${current_agent}" >> "$PROGRESS_LOG"
-  tmux send-keys -t "$AGENT_PANE" "/harness-${current_agent}" Enter
+  tmux send-keys -t "$pane" "${claude_cmd} -p '하네스 엔지니어링 시작'" Enter
 }
 
 cmd_stop() {
-  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
-    echo -e "  ${RED}tmux session not found.${RESET}"
+  local pane
+  pane=$(find_agent_pane)
+  if [ -z "$pane" ]; then
+    echo -e "  ${RED}Agent Session pane not found.${RESET}"
     return
   fi
 
   echo -e "  ${YELLOW}Sending Ctrl+C to Agent Session...${RESET}"
-  tmux send-keys -t "$AGENT_PANE" C-c
+  tmux send-keys -t "$pane" C-c
   local ts
   ts=$(date +"%Y-%m-%d")
   echo "${ts} | manual | stop | user-initiated" >> "$PROGRESS_LOG"
