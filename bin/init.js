@@ -129,17 +129,56 @@ function scaffoldHarness() {
     }
   }
 
-  // Copy config.json
+  // config.json — ALWAYS update (harness system file, not user data)
+  // But preserve user's custom settings (pre_eval_gate.frontend_cwd, behavior, etc.)
   const configSrc = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
   const configDest = path.join(HARNESS_DIR, 'config.json');
-  if (fs.existsSync(configSrc) && (!fileExists(configDest) || isForce)) {
-    copyFile(configSrc, configDest);
+  if (fs.existsSync(configSrc)) {
+    if (fileExists(configDest) && !isForce) {
+      // Merge: keep user's customizations, update harness structure
+      try {
+        const existing = JSON.parse(fs.readFileSync(configDest, 'utf8'));
+        const template = JSON.parse(fs.readFileSync(configSrc, 'utf8'));
+        // Preserve user customizations
+        const userPreserve = {
+          behavior: existing.behavior,
+          'flow.pre_eval_gate.frontend_cwd': existing?.flow?.pre_eval_gate?.frontend_cwd,
+          'flow.pre_eval_gate.backend_cwd': existing?.flow?.pre_eval_gate?.backend_cwd,
+          'flow.pre_eval_gate.frontend_checks': existing?.flow?.pre_eval_gate?.frontend_checks,
+          'flow.pre_eval_gate.backend_checks': existing?.flow?.pre_eval_gate?.backend_checks,
+        };
+        // Write template, then re-apply user settings
+        fs.writeFileSync(configDest, JSON.stringify(template, null, 2) + '\n');
+        // Re-apply preserved user settings
+        const merged = JSON.parse(fs.readFileSync(configDest, 'utf8'));
+        if (userPreserve.behavior) merged.behavior = userPreserve.behavior;
+        if (userPreserve['flow.pre_eval_gate.frontend_cwd']) {
+          merged.flow.pre_eval_gate.frontend_cwd = userPreserve['flow.pre_eval_gate.frontend_cwd'];
+        }
+        if (userPreserve['flow.pre_eval_gate.backend_cwd']) {
+          merged.flow.pre_eval_gate.backend_cwd = userPreserve['flow.pre_eval_gate.backend_cwd'];
+        }
+        if (userPreserve['flow.pre_eval_gate.frontend_checks']) {
+          merged.flow.pre_eval_gate.frontend_checks = userPreserve['flow.pre_eval_gate.frontend_checks'];
+        }
+        if (userPreserve['flow.pre_eval_gate.backend_checks']) {
+          merged.flow.pre_eval_gate.backend_checks = userPreserve['flow.pre_eval_gate.backend_checks'];
+        }
+        fs.writeFileSync(configDest, JSON.stringify(merged, null, 2) + '\n');
+        log('config.json updated (user settings preserved)');
+      } catch (e) {
+        copyFile(configSrc, configDest);
+        log('config.json replaced (merge failed)');
+      }
+    } else {
+      copyFile(configSrc, configDest);
+    }
   }
 
-  // Copy HARNESS.md
+  // HARNESS.md — ALWAYS update
   const harnessMdSrc = path.join(PKG_ROOT, 'assets', 'templates', 'HARNESS.md');
   const harnessMdDest = path.join(HARNESS_DIR, 'HARNESS.md');
-  if (fs.existsSync(harnessMdSrc) && (!fileExists(harnessMdDest) || isForce)) {
+  if (fs.existsSync(harnessMdSrc)) {
     copyFile(harnessMdSrc, harnessMdDest);
   }
 
@@ -190,16 +229,23 @@ function installSkills() {
     .filter(d => d.isDirectory())
     .map(d => d.name);
 
+  // Remove obsolete skills (cleaned up in v4)
+  const obsoleteSkills = ['harness-generator-frontend-flutter', 'harness-evaluator-functional-flutter', 'harness-team'];
+  for (const obs of obsoleteSkills) {
+    const obsPath = path.join(CLAUDE_SKILLS_DIR, obs);
+    if (fs.existsSync(obsPath)) {
+      fs.rmSync(obsPath, { recursive: true, force: true });
+      log(`  Removed obsolete: ${obs}`);
+    }
+  }
+
   for (const skill of skills) {
     const src = path.join(skillsSrc, skill);
     const dest = path.join(CLAUDE_SKILLS_DIR, `harness-${skill}`);
 
-    if (!fileExists(dest) || isForce) {
-      copyDir(src, dest);
-      log(`  Installed: harness-${skill}`);
-    } else {
-      log(`  Skipped (exists): harness-${skill}`);
-    }
+    // Skills are ALWAYS overwritten — they are harness-managed, not user-editable
+    copyDir(src, dest);
+    log(`  Installed: harness-${skill}`);
   }
 
   log('Skills installation complete');
@@ -213,6 +259,21 @@ function installScripts() {
 
   const scriptsSrc = path.join(PKG_ROOT, 'scripts');
   const scriptsDest = path.join(PROJECT_ROOT, 'scripts');
+
+  // Remove obsolete scripts from previous versions
+  const obsoleteScripts = [
+    'harness-studio-v4.sh',
+    'harness-control-v4.sh',
+    'harness-prompts-v4.sh',
+    'harness-team-worker.sh',
+  ];
+  for (const obs of obsoleteScripts) {
+    const obsPath = path.join(scriptsDest, obs);
+    if (fs.existsSync(obsPath)) {
+      fs.unlinkSync(obsPath);
+      log(`  Removed obsolete: ${obs}`);
+    }
+  }
 
   // Core scripts are ALWAYS overwritten on update (not user-editable)
   // These contain harness logic that must stay in sync with the CLI version
@@ -421,6 +482,28 @@ function installUserPromptSubmitHook() {
 // ─────────────────────────────────────────
 // 4. AGENTS.md + CLAUDE.md
 // ─────────────────────────────────────────
+// ─────────────────────────────────────────
+// 3d. Agent Teams env var
+// ─────────────────────────────────────────
+function installAgentTeamsEnv() {
+  const settingsPath = path.join(PROJECT_ROOT, '.claude', 'settings.json');
+  let settings = {};
+  if (fileExists(settingsPath)) {
+    try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (e) {}
+  }
+
+  if (!settings.env) settings.env = {};
+
+  if (settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] !== '1') {
+    settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] = '1';
+    ensureDir(path.dirname(settingsPath));
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    log('Agent Teams enabled (CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)');
+  } else {
+    log('Agent Teams already enabled');
+  }
+}
+
 function setupAgentsMd() {
   const agentsMd = path.join(PROJECT_ROOT, 'AGENTS.md');
   const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md');
@@ -703,6 +786,7 @@ function main() {
   installSessionHook();
   installStatusline();
   installUserPromptSubmitHook();
+  installAgentTeamsEnv();
   setupAgentsMd();
   checkPlaywrightMcp();
   checkRecommendedSkills();
