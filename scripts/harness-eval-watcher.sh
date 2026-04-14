@@ -4,7 +4,7 @@
 # Usage: bash scripts/harness-eval-watcher.sh [project-root] [--ai]
 #   --ai  evaluation 완료 시 claude -p 로 AI 요약 생성 (API 비용 발생)
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -69,7 +69,7 @@ extract_eval_summary() {
 
   # Extract Verdict (PASS/FAIL)
   local verdict
-  verdict=$(grep -i "verdict\|result\|판정" "$file" | head -3)
+  verdict=$(grep -i "verdict\|result\|판정" "$file" 2>/dev/null | head -3 || true)
   if [ -n "$verdict" ]; then
     if echo "$verdict" | grep -qi "PASS"; then
       echo -e "  ${GREEN}${BOLD}VERDICT: PASS${RESET}"
@@ -83,7 +83,7 @@ extract_eval_summary() {
 
   # Extract Score
   local score_line
-  score_line=$(grep -iE "score|점수|weighted|가중" "$file" | head -3)
+  score_line=$(grep -iE "score|점수|weighted|가중" "$file" 2>/dev/null | head -3 || true)
   if [ -n "$score_line" ]; then
     echo -e "  ${BOLD}Score${RESET}"
     echo "$score_line" | while IFS= read -r line; do
@@ -107,7 +107,7 @@ extract_eval_summary() {
 
   # Extract individual rubric items (R1-R5 or V1-V5)
   local rubric_lines
-  rubric_lines=$(grep -E "^[|#].*[RV][1-5]" "$file" | head -10)
+  rubric_lines=$(grep -E "^[|#].*[RV][1-5]" "$file" 2>/dev/null | head -10 || true)
   if [ -n "$rubric_lines" ]; then
     echo -e "  ${BOLD}Rubric${RESET}"
     echo "$rubric_lines" | while IFS= read -r line; do
@@ -118,7 +118,7 @@ extract_eval_summary() {
 
   # Extract FAIL reasons
   local fail_lines
-  fail_lines=$(grep -iE "fail|실패|regression|불일치|위반" "$file" | head -5)
+  fail_lines=$(grep -iE "fail|실패|regression|불일치|위반" "$file" 2>/dev/null | head -5 || true)
   if [ -n "$fail_lines" ]; then
     echo -e "  ${RED}${BOLD}Issues${RESET}"
     echo "$fail_lines" | while IFS= read -r line; do
@@ -129,7 +129,7 @@ extract_eval_summary() {
 
   # Extract action items / recommendations
   local action_lines
-  action_lines=$(grep -iE "recommend|action|수정|개선|필요|re-generate" "$file" | head -5)
+  action_lines=$(grep -iE "recommend|action|수정|개선|필요|re-generate" "$file" 2>/dev/null | head -5 || true)
   if [ -n "$action_lines" ]; then
     echo -e "  ${YELLOW}${BOLD}Actions${RESET}"
     echo "$action_lines" | while IFS= read -r line; do

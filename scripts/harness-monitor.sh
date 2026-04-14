@@ -3,7 +3,7 @@
 # audit.log 스트리밍 + progress.json 변경 감지
 # Usage: bash scripts/harness-monitor.sh [project-root]
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

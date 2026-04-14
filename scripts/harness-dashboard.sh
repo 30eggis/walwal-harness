@@ -231,6 +231,11 @@ render_build_status() {
   echo ""
 }
 
+# Strip all ANSI escape sequences from a string
+strip_ansi() {
+  sed 's/\x1b\[[0-9;]*m//g; s/\x1b\[[0-9;]*[a-zA-Z]//g'
+}
+
 render_failure_info() {
   if [ ! -f "$PROGRESS" ]; then return; fi
 
@@ -240,18 +245,17 @@ render_failure_info() {
   if [ -n "$failure_agent" ] && [ "$failure_agent" != "null" ]; then
     local failure_loc failure_msg
     failure_loc=$(jq -r '.failure.location // ""' "$PROGRESS")
-    failure_msg=$(jq -r '.failure.message // ""' "$PROGRESS")
+    # Get raw message, strip ANSI codes, take first meaningful line
+    failure_msg=$(jq -r '.failure.message // ""' "$PROGRESS" | strip_ansi | tr '\n' ' ' | sed 's/  */ /g')
 
-    # Truncate long failure messages (take first 3 lines)
-    local short_msg
-    short_msg=$(echo "$failure_msg" | head -3 | tr '\n' ' ')
-    if [ ${#short_msg} -gt 80 ]; then
-      short_msg="${short_msg:0:78}.."
+    # Truncate to 80 chars
+    if [ ${#failure_msg} -gt 80 ]; then
+      failure_msg="${failure_msg:0:78}.."
     fi
 
     echo -e "  ${RED}${BOLD}FAIL${RESET} ${RED}${failure_agent} → ${failure_loc}${RESET}"
-    if [ -n "$short_msg" ]; then
-      echo -e "  ${DIM}${short_msg}${RESET}"
+    if [ -n "$failure_msg" ]; then
+      echo -e "  ${DIM}${failure_msg}${RESET}"
     fi
     echo ""
   fi

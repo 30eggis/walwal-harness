@@ -68,22 +68,17 @@ tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50
 
 # Split right column (40% width)
-tmux split-window -h -l 80 -t "$SESSION_NAME" -c "$PROJECT_ROOT"
-
-# Pane 1 (top-right): Dashboard
-tmux send-keys -t "${SESSION_NAME}.1" "bash ${SCRIPT_DIR}/harness-dashboard.sh '${PROJECT_ROOT}'" Enter
+# Use direct command execution (not send-keys) to avoid shell init noise (nvm warnings etc.)
+tmux split-window -h -l 80 -t "$SESSION_NAME" -c "$PROJECT_ROOT" \
+  "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"'"
 
 # Split pane 1 vertically for Monitor
-tmux split-window -v -t "${SESSION_NAME}.1" -c "$PROJECT_ROOT"
-
-# Pane 2 (mid-right): Monitor
-tmux send-keys -t "${SESSION_NAME}.2" "bash ${SCRIPT_DIR}/harness-monitor.sh '${PROJECT_ROOT}'" Enter
+tmux split-window -v -t "${SESSION_NAME}.1" -c "$PROJECT_ROOT" \
+  "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'"
 
 # Split pane 2 vertically for Eval
-tmux split-window -v -t "${SESSION_NAME}.2" -c "$PROJECT_ROOT"
-
-# Pane 3 (bottom-right): Eval Watcher
-tmux send-keys -t "${SESSION_NAME}.3" "bash ${SCRIPT_DIR}/harness-eval-watcher.sh '${PROJECT_ROOT}' ${USE_AI}" Enter
+tmux split-window -v -t "${SESSION_NAME}.2" -c "$PROJECT_ROOT" \
+  "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-eval-watcher.sh\" \"${PROJECT_ROOT}\" ${USE_AI}'"
 
 # ── Launch Claude in Main pane ──
 HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
