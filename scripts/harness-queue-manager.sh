@@ -297,6 +297,31 @@ cmd_status() {
   fi
 }
 
+# ══════════════════════════════════════════
+# recover — Move stale in_progress back to ready (after studio restart)
+# ══════════════════════════════════════════
+cmd_recover() {
+  if [ ! -f "$QUEUE" ]; then echo "[queue] Not initialized."; return; fi
+
+  local stale_count
+  stale_count=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null)
+
+  if [ "${stale_count:-0}" -eq 0 ]; then
+    echo "[queue] No stale in_progress entries."
+    return
+  fi
+
+  # Move all in_progress → ready, reset all teams to idle
+  jq '
+    .queue.ready += [.queue.in_progress | keys[]] |
+    .queue.ready |= unique |
+    .queue.in_progress = {} |
+    .teams |= with_entries(.value = { status: "idle", feature: null, branch: null, pid: null })
+  ' "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
+
+  echo "[queue] Recovered ${stale_count} stale features back to ready queue."
+}
+
 # ── Dispatch ──
 case "$CMD" in
   init)         cmd_init ;;
@@ -305,9 +330,10 @@ case "$CMD" in
   fail)         cmd_fail "$@" ;;
   requeue)      cmd_requeue "$@" ;;
   update_phase) cmd_update_phase "$@" ;;
+  recover)      cmd_recover ;;
   status)       cmd_status ;;
   *)
-    echo "Usage: harness-queue-manager.sh <init|dequeue|pass|fail|requeue|update_phase|status> [args]"
+    echo "Usage: harness-queue-manager.sh <init|dequeue|pass|fail|requeue|recover|update_phase|status> [args]"
     exit 1
     ;;
 esac

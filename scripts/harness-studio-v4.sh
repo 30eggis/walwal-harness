@@ -54,11 +54,14 @@ echo "Session: $SESSION_NAME"
 
 tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 
-# ── Initialize queue if not exists ──
+# ── Initialize or recover queue ──
 QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
 if [ ! -f "$QUEUE" ]; then
   echo "Initializing feature queue..."
   bash "$SCRIPT_DIR/harness-queue-manager.sh" init "$PROJECT_ROOT"
+else
+  echo "Recovering stale queue state..."
+  bash "$SCRIPT_DIR/harness-queue-manager.sh" recover "$PROJECT_ROOT"
 fi
 
 # ══════════════════════════════════════════
