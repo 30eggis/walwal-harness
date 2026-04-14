@@ -209,6 +209,17 @@
       "frontend_cwd": "",
       "timeout_seconds": 120,
       "on_fail": "reroute_to_generator"
+    },
+    "parallel": {
+      "comment": "v4 Parallel Agent Teams 설정. npx walwal-harness v4 로 실행.",
+      "enabled": false,
+      "concurrency": 3,
+      "max_attempts_per_feature": 3,
+      "gen_model": "sonnet",
+      "eval_model": "opus",
+      "branch_strategy": "feature-branch",
+      "merge_on_pass": true,
+      "rebase_on_conflict": true
     }
   },
   "evaluation": {

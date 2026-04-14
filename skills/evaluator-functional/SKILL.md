@@ -60,6 +60,32 @@ disable-model-invocation: true
 5. `actions/api-contract.json` — 기대 API 동작
 6. `.harness/progress.json`
 
+## v4 Feature-Level Mode (Parallel Agent Teams)
+
+v4에서 Team Worker가 `claude -p`로 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
+
+### Feature-Level Rules
+- `feature-list.json`에서 **지정된 FEATURE_ID의 AC만** 검증
+- Regression: `feature-queue.json`의 `passed` 목록에 있는 Feature들의 AC 재검증
+- Cross-Validation: Feature 단위에서는 skip (Sprint-End에서 수행)
+- Visual Evaluation: Feature 단위에서는 skip (Sprint-End에서 수행)
+- 출력 형식: `---EVAL-RESULT---` 블록 (Worker가 파싱 가능)
+
+### Feature-Level Scoring
+- 동일한 R1-R5 루브릭 적용
+- PASS 기준: 2.80/3.00 (변경 없음)
+- 1건이라도 Regression 실패 시 FAIL (변경 없음)
+
+### Output Format (Machine-Parseable)
+```
+---EVAL-RESULT---
+FEATURE: F-XXX
+VERDICT: PASS or FAIL
+SCORE: X.XX
+FEEDBACK: one paragraph summary
+---END-EVAL-RESULT---
+```
+
 ## Evaluation Steps
 
 ### Step 0: IA Structure Compliance (GATE)

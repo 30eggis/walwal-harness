@@ -40,11 +40,13 @@ CONFIG="$PROJECT_ROOT/.harness/config.json"
 PROGRESS_LOG="$PROJECT_ROOT/.harness/progress.log"
 QUEUE_MGR="$SCRIPT_DIR/harness-queue-manager.sh"
 
+# ── Lock file for git operations (prevent race conditions between teams) ──
+GIT_LOCK="$PROJECT_ROOT/.harness/.git-lock"
+
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
 GEN_MODEL="${GEN_MODEL:-sonnet}"
 EVAL_MODEL="${EVAL_MODEL:-opus}"
 
-# Read models from config if available
 if [ -f "$CONFIG" ]; then
   _gm=$(jq -r '.agents["generator-frontend"].model // empty' "$CONFIG" 2>/dev/null)
   _em=$(jq -r '.agents["evaluator-functional"].model // empty' "$CONFIG" 2>/dev/null)
@@ -68,20 +70,33 @@ log() {
 }
 
 log_progress() {
-  local action="$1" detail="$2"
-  local now
-  now=$(date +"%Y-%m-%d")
-  echo "${now} | team-${TEAM_ID} | ${action} | ${detail}" >> "$PROGRESS_LOG"
+  echo "$(date +"%Y-%m-%d") | team-${TEAM_ID} | ${1} | ${2}" >> "$PROGRESS_LOG"
+}
+
+# ── Git lock — serialize git checkout/merge across teams ──
+acquire_git_lock() {
+  local max_wait=60 waited=0
+  while [ -f "$GIT_LOCK" ]; do
+    sleep 1
+    waited=$((waited + 1))
+    if [ "$waited" -ge "$max_wait" ]; then
+      log "${RED}Git lock timeout (${max_wait}s). Removing stale lock.${RESET}"
+      rm -f "$GIT_LOCK"
+      break
+    fi
+  done
+  echo "T${TEAM_ID}" > "$GIT_LOCK"
+}
+
+release_git_lock() {
+  rm -f "$GIT_LOCK"
 }
 
 # ── Pre-eval gate ──
 run_pre_eval_gate() {
-  local feature_id="$1"
   local cwd="$PROJECT_ROOT"
 
-  # Read frontend_cwd from config
   if [ -f "$CONFIG" ]; then
-    local _cwd
     _cwd=$(jq -r '.flow.pre_eval_gate.frontend_cwd // empty' "$CONFIG" 2>/dev/null)
     if [ -n "$_cwd" ] && [ "$_cwd" != "null" ]; then
       cwd="$PROJECT_ROOT/$_cwd"
@@ -97,85 +112,86 @@ run_pre_eval_gate() {
     checks=("npx tsc --noEmit" "npx eslint src/")
   fi
 
-  local all_pass=true
+  local all_pass=true fail_cmds=""
   for cmd in "${checks[@]}"; do
-    if ! (cd "$cwd" && timeout 120s bash -c "$cmd" >/dev/null 2>&1); then
-      log "${RED}Gate FAIL:${RESET} $cmd"
+    if (cd "$cwd" && timeout 120s bash -c "$cmd" >/dev/null 2>&1); then
+      log "  ${GREEN}✓${RESET} $cmd"
+    else
+      log "  ${RED}✗${RESET} $cmd"
       all_pass=false
+      fail_cmds+="$cmd; "
     fi
   done
 
-  if [ "$all_pass" = true ]; then
-    log "${GREEN}Gate: tsc ✓ eslint ✓${RESET}"
-    return 0
-  else
-    return 1
-  fi
+  [ "$all_pass" = true ]
 }
 
 # ── Build generator prompt ──
 build_gen_prompt() {
-  local feature_id="$1"
-  local attempt="$2"
-  local eval_feedback="${3:-}"
+  local fid="$1" attempt="$2" feedback="${3:-}"
 
-  local feature_json
-  feature_json=$(jq --arg fid "$feature_id" '.features[] | select(.id == $fid)' "$FEATURES" 2>/dev/null)
+  local fobj
+  fobj=$(jq --arg fid "$fid" '.features[] | select(.id == $fid)' "$FEATURES" 2>/dev/null)
+  local fname fdesc ac_json deps_json
+  fname=$(echo "$fobj" | jq -r '.name // .description // ""')
+  fdesc=$(echo "$fobj" | jq -r '.description // ""')
+  ac_json=$(echo "$fobj" | jq -c '.ac // []')
+  deps_json=$(echo "$fobj" | jq -c '.depends_on // []')
 
-  local feature_name feature_desc ac_json
-  feature_name=$(echo "$feature_json" | jq -r '.name // .description // ""')
-  feature_desc=$(echo "$feature_json" | jq -r '.description // ""')
-  ac_json=$(echo "$feature_json" | jq -c '.ac // []')
+  local project_name
+  project_name=$(jq -r '.project_name // ""' "$PROJECT_ROOT/.harness/progress.json" 2>/dev/null)
 
-  local prompt="You are Generator-Frontend for a harness engineering project.
+  cat <<PROMPT
+You are Generator-Frontend for a harness engineering project.
 
-PROJECT: $(jq -r '.project_name // ""' "$PROJECT_ROOT/.harness/progress.json" 2>/dev/null)
+PROJECT: ${project_name}
 CONVENTIONS: Read CONVENTIONS.md if it exists.
 
-YOUR TASK: Implement ONLY feature ${feature_id}: ${feature_name}
-Description: ${feature_desc}
+YOUR TASK: Implement ONLY feature ${fid}: ${fname}
+Description: ${fdesc}
+Dependencies (already implemented): ${deps_json}
 Acceptance Criteria: ${ac_json}
 
 Read these files for context:
-- .harness/actions/feature-list.json (filter to ${feature_id})
+- .harness/actions/feature-list.json (filter to ${fid})
 - .harness/actions/api-contract.json (relevant endpoints)
 - .harness/actions/plan.md (overall design)
 
 RULES:
-- Implement ONLY this feature, do not touch other features' code
+- Implement ONLY this single feature
+- Do NOT modify code belonging to other features
 - Follow existing code patterns and CONVENTIONS.md
-- Commit your changes with message: 'feat(${feature_id}): ${feature_name}'
-- Do NOT create tests (evaluator will handle that)"
+- When done, stage and commit with: git add -A && git commit -m 'feat(${fid}): ${fname}'
+PROMPT
 
-  if [ "$attempt" -gt 1 ] && [ -n "$eval_feedback" ]; then
-    prompt="$prompt
+  if [ "$attempt" -gt 1 ] && [ -n "$feedback" ]; then
+    cat <<RETRY
 
 PREVIOUS EVAL FEEDBACK (attempt ${attempt}):
-${eval_feedback}
+${feedback}
 
-Fix the issues from the feedback above. Focus specifically on the failed criteria."
+Fix the issues above. Focus specifically on the failed criteria.
+RETRY
   fi
-
-  echo "$prompt"
 }
 
 # ── Build evaluator prompt ──
 build_eval_prompt() {
-  local feature_id="$1"
+  local fid="$1"
 
-  local feature_json
-  feature_json=$(jq --arg fid "$feature_id" '.features[] | select(.id == $fid)' "$FEATURES" 2>/dev/null)
-
-  local feature_name ac_json
-  feature_name=$(echo "$feature_json" | jq -r '.name // .description // ""')
-  ac_json=$(echo "$feature_json" | jq -c '.ac // []')
+  local fobj
+  fobj=$(jq --arg fid "$fid" '.features[] | select(.id == $fid)' "$FEATURES" 2>/dev/null)
+  local fname ac_json
+  fname=$(echo "$fobj" | jq -r '.name // .description // ""')
+  ac_json=$(echo "$fobj" | jq -c '.ac // []')
 
   local passed_list
   passed_list=$(jq -r '.queue.passed // [] | join(", ")' "$QUEUE" 2>/dev/null)
 
-  echo "You are Evaluator-Functional for a harness engineering project.
+  cat <<PROMPT
+You are Evaluator-Functional for a harness engineering project.
 
-TASK: Evaluate feature ${feature_id}: ${feature_name}
+TASK: Evaluate feature ${fid}: ${fname}
 
 Acceptance Criteria to verify:
 ${ac_json}
@@ -192,23 +208,24 @@ R5: Error handling & edge cases (15%)
 PASS threshold: 2.80 / 3.00
 FAIL: any AC not met, any regression failure
 
-OUTPUT FORMAT (must be parseable):
+You MUST output this exact block (parseable by automation):
 ---EVAL-RESULT---
-FEATURE: ${feature_id}
+FEATURE: ${fid}
 VERDICT: PASS or FAIL
 SCORE: X.XX
-FEEDBACK: <one paragraph summary of issues or confirmation>
----END-EVAL-RESULT---"
+FEEDBACK: one paragraph summary
+---END-EVAL-RESULT---
+PROMPT
 }
 
-# ── Parse eval result ──
+# ── Parse eval result (macOS-compatible, no grep -P) ──
 parse_eval_result() {
   local output="$1"
 
   local verdict score feedback
-  verdict=$(echo "$output" | grep -oP 'VERDICT:\s*\K\w+' | head -1)
-  score=$(echo "$output" | grep -oP 'SCORE:\s*\K[0-9.]+' | head -1)
-  feedback=$(echo "$output" | sed -n 's/^FEEDBACK:\s*//p' | head -1)
+  verdict=$(echo "$output" | grep -E '^VERDICT:' | sed 's/VERDICT:[[:space:]]*//' | head -1)
+  score=$(echo "$output" | grep -E '^SCORE:' | sed 's/SCORE:[[:space:]]*//' | head -1)
+  feedback=$(echo "$output" | grep -E '^FEEDBACK:' | sed 's/FEEDBACK:[[:space:]]*//' | head -1)
 
   echo "${verdict:-UNKNOWN}|${score:-0.00}|${feedback:-no feedback}"
 }
@@ -223,14 +240,13 @@ while true; do
   # ── Dequeue next feature ──
   feature_id=$(bash "$QUEUE_MGR" dequeue "$TEAM_ID" "$PROJECT_ROOT" 2>/dev/null)
 
-  if [ -z "$feature_id" ] || [[ "$feature_id" == "[queue]"* ]]; then
-    log "${DIM}No features in queue. Waiting 10s...${RESET}"
+  if [ -z "$feature_id" ] || [[ "$feature_id" == "["* ]]; then
+    log "${DIM}No features ready. Waiting 10s...${RESET}"
     sleep 10
 
     # Check if completely done
-    local remaining
-    remaining=$(jq '(.queue.ready | length) + (.queue.blocked | length) + (.queue.in_progress | length)' "$QUEUE" 2>/dev/null)
-    if [ "${remaining:-1}" -eq 0 ]; then
+    remaining=$(jq '(.queue.ready | length) + (.queue.blocked | length) + (.queue.in_progress | length)' "$QUEUE" 2>/dev/null || echo "1")
+    if [ "${remaining}" -eq 0 ] 2>/dev/null; then
       log "${GREEN}${BOLD}ALL FEATURES COMPLETE. Team ${TEAM_ID} exiting.${RESET}"
       log_progress "complete" "All features done"
       exit 0
@@ -241,16 +257,18 @@ while true; do
   log "${CYAN}▶ Dequeued ${feature_id}${RESET}"
   log_progress "dequeue" "${feature_id}"
 
-  # ── Create feature branch ──
-  local branch="feature/${feature_id}"
-  (cd "$PROJECT_ROOT" && git checkout -b "$branch" main 2>/dev/null) || \
+  # ── Create feature branch (with lock) ──
+  branch="feature/${feature_id}"
+  acquire_git_lock
+  (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null && git checkout -b "$branch" 2>/dev/null) || \
   (cd "$PROJECT_ROOT" && git checkout "$branch" 2>/dev/null) || true
+  release_git_lock
   log "Branch: ${branch}"
 
   # ── Gen→Eval Loop ──
-  local attempt=1
-  local eval_feedback=""
-  local passed=false
+  attempt=1
+  eval_feedback=""
+  passed=false
 
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
     log "${BOLD}── Attempt ${attempt}/${MAX_ATTEMPTS} ──${RESET}"
@@ -259,18 +277,17 @@ while true; do
     log "Gen ${feature_id} (${GEN_MODEL})..."
     bash "$QUEUE_MGR" update_phase "$feature_id" "gen" "$attempt" "$PROJECT_ROOT" 2>/dev/null
 
-    local gen_prompt
     gen_prompt=$(build_gen_prompt "$feature_id" "$attempt" "$eval_feedback")
 
-    local gen_output
+    gen_start=$(date +%s)
     gen_output=$(cd "$PROJECT_ROOT" && claude -p "$gen_prompt" --model "$GEN_MODEL" --output-format text 2>&1) || true
+    gen_elapsed=$(( $(date +%s) - gen_start ))
 
-    local files_changed
-    files_changed=$(cd "$PROJECT_ROOT" && git diff --name-only | wc -l | tr -d ' ')
-    log "Gen complete — ${files_changed} files changed"
-    log_progress "gen" "${feature_id} attempt ${attempt}: ${files_changed} files"
+    files_changed=$(cd "$PROJECT_ROOT" && git diff --name-only 2>/dev/null | wc -l | tr -d ' ')
+    log "Gen done (${gen_elapsed}s) — ${files_changed} files"
+    log_progress "gen" "${feature_id} attempt ${attempt}: ${files_changed} files, ${gen_elapsed}s"
 
-    # Auto-commit gen output
+    # Auto-commit
     (cd "$PROJECT_ROOT" && git add -A && git commit -m "feat(${feature_id}): gen attempt ${attempt}" --no-verify 2>/dev/null) || true
 
     # ── Pre-eval gate ──
@@ -288,72 +305,103 @@ while true; do
     log "Eval ${feature_id} (${EVAL_MODEL})..."
     bash "$QUEUE_MGR" update_phase "$feature_id" "eval" "$attempt" "$PROJECT_ROOT" 2>/dev/null
 
-    local eval_prompt
     eval_prompt=$(build_eval_prompt "$feature_id")
 
-    local eval_output
+    eval_start=$(date +%s)
     eval_output=$(cd "$PROJECT_ROOT" && claude -p "$eval_prompt" --model "$EVAL_MODEL" --output-format text 2>&1) || true
+    eval_elapsed=$(( $(date +%s) - eval_start ))
 
     # Parse result
-    local result_line verdict score feedback
     result_line=$(parse_eval_result "$eval_output")
     verdict=$(echo "$result_line" | cut -d'|' -f1)
     score=$(echo "$result_line" | cut -d'|' -f2)
     feedback=$(echo "$result_line" | cut -d'|' -f3-)
 
-    log_progress "eval" "${feature_id} attempt ${attempt}: ${verdict} (${score})"
+    log_progress "eval" "${feature_id} attempt ${attempt}: ${verdict} (${score}) ${eval_elapsed}s"
 
     if [ "$verdict" = "PASS" ]; then
-      log "${GREEN}${BOLD}✓ PASS${RESET} ${feature_id} — ${score}/3.00"
+      log "${GREEN}${BOLD}✓ PASS${RESET} ${feature_id} — ${score}/3.00 (${eval_elapsed}s)"
       passed=true
       break
     else
-      log "${RED}✗ FAIL${RESET} ${feature_id} — ${score}/3.00"
+      log "${RED}✗ FAIL${RESET} ${feature_id} — ${score}/3.00 (${eval_elapsed}s)"
       log "${DIM}  ${feedback}${RESET}"
       eval_feedback="$feedback"
       attempt=$((attempt + 1))
     fi
   done
 
-  # ── Result processing ──
+  # ══════════════════════════════════════════
+  # Phase 3: Branch merge with conflict handling
+  # ══════════════════════════════════════════
   if [ "$passed" = true ]; then
-    # Merge to main
     log "Merging ${branch} → main..."
-    (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS" 2>/dev/null) || {
-      log "${YELLOW}Merge conflict — rebasing...${RESET}"
-      (cd "$PROJECT_ROOT" && git checkout "$branch" && git rebase main 2>/dev/null && \
-       git checkout main && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS (rebased)" 2>/dev/null) || {
-        log "${RED}Merge failed after rebase. Manual intervention needed.${RESET}"
-        bash "$QUEUE_MGR" fail "$feature_id" "$PROJECT_ROOT" 2>/dev/null
-        log_progress "merge-fail" "${feature_id}"
-        continue
-      }
-    }
+    acquire_git_lock
 
-    # Mark passed in queue
-    bash "$QUEUE_MGR" pass "$feature_id" "$PROJECT_ROOT" 2>/dev/null
-    log_progress "pass" "${feature_id} merged to main"
+    merge_ok=false
 
-    # Update feature-list.json passes
-    if [ -f "$FEATURES" ]; then
-      jq --arg fid "$feature_id" '
-        .features |= map(
-          if .id == $fid then
-            .passes = ((.passes // []) + ["generator-frontend", "evaluator-functional"] | unique)
-          else . end
-        )
-      ' "$FEATURES" > "${FEATURES}.tmp" && mv "${FEATURES}.tmp" "$FEATURES"
+    # Attempt 1: straight merge
+    if (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS" 2>/dev/null); then
+      merge_ok=true
+    else
+      # Attempt 2: abort failed merge, rebase, re-eval gate, then merge
+      log "${YELLOW}Conflict detected — rebasing ${branch} onto main...${RESET}"
+      (cd "$PROJECT_ROOT" && git merge --abort 2>/dev/null) || true
+      (cd "$PROJECT_ROOT" && git checkout "$branch" 2>/dev/null) || true
+
+      if (cd "$PROJECT_ROOT" && git rebase main 2>/dev/null); then
+        log "Rebase OK. Re-running gate..."
+
+        if run_pre_eval_gate "$feature_id"; then
+          log "Gate still PASS after rebase."
+          if (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS (rebased)" 2>/dev/null); then
+            merge_ok=true
+          fi
+        else
+          log "${RED}Gate FAIL after rebase — needs re-gen${RESET}"
+        fi
+      else
+        log "${RED}Rebase failed — conflicts too complex${RESET}"
+        (cd "$PROJECT_ROOT" && git rebase --abort 2>/dev/null) || true
+      fi
+    fi
+
+    release_git_lock
+
+    if [ "$merge_ok" = true ]; then
+      # Clean up feature branch
+      (cd "$PROJECT_ROOT" && git branch -d "$branch" 2>/dev/null) || true
+
+      bash "$QUEUE_MGR" pass "$feature_id" "$PROJECT_ROOT" 2>/dev/null
+      log_progress "pass" "${feature_id} merged to main"
+
+      # Update feature-list.json passes
+      if [ -f "$FEATURES" ]; then
+        jq --arg fid "$feature_id" '
+          .features |= map(
+            if .id == $fid then
+              .passes = ((.passes // []) + ["generator-frontend", "evaluator-functional"] | unique)
+            else . end
+          )
+        ' "$FEATURES" > "${FEATURES}.tmp" && mv "${FEATURES}.tmp" "$FEATURES"
+      fi
+
+      log "${GREEN}${BOLD}✓ ${feature_id} DONE${RESET}"
+    else
+      log "${RED}${BOLD}Merge failed — ${feature_id} marked as failed${RESET}"
+      (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null) || true
+      bash "$QUEUE_MGR" fail "$feature_id" "$PROJECT_ROOT" 2>/dev/null
+      log_progress "merge-fail" "${feature_id}"
     fi
 
   else
     log "${RED}${BOLD}✗ ${feature_id} FAILED after ${MAX_ATTEMPTS} attempts${RESET}"
+    acquire_git_lock
+    (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null) || true
+    release_git_lock
     bash "$QUEUE_MGR" fail "$feature_id" "$PROJECT_ROOT" 2>/dev/null
     log_progress "fail" "${feature_id} after ${MAX_ATTEMPTS} attempts"
-
-    # Return to main
-    (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null) || true
   fi
 
-  # Brief pause before next feature
   sleep 2
 done

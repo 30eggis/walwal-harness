@@ -43,6 +43,23 @@ disable-model-invocation: true
 
 **Backend 통합 러너가 동작 중이어야 함.** Gateway 미응답 시 → STOP.
 
+## v4 Feature-Level Mode (Parallel Agent Teams)
+
+v4에서 Team Worker가 `claude -p`로 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
+
+### Feature-Level Rules
+- `feature-list.json`에서 **지정된 FEATURE_ID만** 필터하여 구현
+- 다른 Feature의 코드를 수정하지 않음
+- `depends_on`에 명시된 Feature는 이미 구현/머지 완료된 상태
+- Feature branch (`feature/F-XXX`)에서 작업, 완료 시 commit
+- Sprint Contract는 작성하지 않음 (v4에서는 Feature 단위로 관리)
+
+### Feature-Level Prompt Template
+Worker가 전달하는 프롬프트에는 다음이 포함됨:
+- `FEATURE_ID`, `feature_name`, `description`, `ac` (Acceptance Criteria)
+- `depends_on` (이미 완료된 의존 Feature 목록)
+- Eval 재시도 시: 이전 Eval의 피드백
+
 ## Sprint Workflow
 
 1. **Sprint Contract FE 섹션 추가** — 컴포넌트, API 연동, 성공 기준

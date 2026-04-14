@@ -235,26 +235,30 @@ Total:                                $12.06
 
 ## 9. Implementation Phases
 
-### Phase 1: Feature Queue + Worker (this sprint)
-- [ ] `feature-queue.json` schema + topological sort
-- [ ] `harness-team-worker.sh` — single feature Gen→Eval loop
-- [ ] `harness-queue-manager.sh` — ready/blocked state transitions
-- [ ] progress-v4.json schema
+### Phase 1: Feature Queue + Worker ✅
+- [x] `feature-queue.json` schema + topological sort
+- [x] `harness-team-worker.sh` — single feature Gen→Eval loop
+- [x] `harness-queue-manager.sh` — ready/blocked state transitions
+- [x] `harness-studio-v4.sh` — 5-pane tmux layout
 
-### Phase 2: tmux Studio v4
-- [ ] Dashboard: Feature Queue + Team status visualization
-- [ ] 3 Team panes: worker log streaming
-- [ ] Control: start/pause/resume/assign/requeue
+### Phase 2: Worker hardening ✅
+- [x] `local` keyword bug fix (function scope)
+- [x] macOS grep -P → grep -E compatibility
+- [x] Git lock (`.harness/.git-lock`) — serialize checkout/merge across teams
+- [x] Timing logs (gen/eval elapsed seconds)
+- [x] Dashboard v4 + Control v4
 
-### Phase 3: Branch Orchestration
-- [ ] Auto feature branch creation
-- [ ] Merge + conflict detection
-- [ ] Auto-rebase + re-eval on conflict
+### Phase 3: Branch Orchestration ✅
+- [x] Auto feature branch creation (`feature/F-XXX`)
+- [x] Merge + conflict detection
+- [x] Auto-rebase + re-eval gate on conflict
+- [x] Branch cleanup on success
+- [x] Fail marking on unresolvable conflict
 
-### Phase 4: Skill Adaptation
-- [ ] Generator: FEATURE_ID filter parameter
-- [ ] Evaluator: single-feature mode
-- [ ] Planner: topological sort enforcement
+### Phase 4: Skill Adaptation ✅
+- [x] Generator SKILL.md: v4 Feature-Level Mode section
+- [x] Evaluator SKILL.md: v4 Feature-Level Mode + output format
+- [x] Config template: `flow.parallel` section (concurrency, models, branch strategy)
 
 ## 10. Migration Path
 
