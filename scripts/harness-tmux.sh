@@ -1,22 +1,21 @@
 #!/bin/bash
-# harness-tmux.sh — Harness Studio tmux 4-pane 레이아웃
+# harness-tmux.sh — Harness Studio tmux 5-pane 레이아웃
 #
-# ┌───────────────────────────┬─────────────────────────┐
-# │                           │ Monitor (compact)       │
-# │  Main: Control Center     ├─────────────────────────┤
-# │  (Dashboard + Manual      │ Agent Session            │
-# │   Prompt + Orchestration) │ (claude --skip-perms)    │
-# │                           ├─────────────────────────┤
-# │                           │ Eval Review              │
-# │                           │ (eval 결과 요약)          │
-# └───────────────────────────┴─────────────────────────┘
+# ┌─────────────────────────┬────────────────────────┐
+# │  Dashboard (auto-refresh)│ Monitor (compact)      │
+# │                          ├────────────────────────┤
+# │                          │ Agent Session (claude)  │
+# ├─────────────────────────┤                         │
+# │  Control (harness> _)    ├────────────────────────┤
+# │                          │ Eval Review             │
+# └─────────────────────────┴────────────────────────┘
 #
 # Usage:
 #   bash scripts/harness-tmux.sh [project-root]
 #   bash scripts/harness-tmux.sh /path/to/project --ai
 #
 # Options:
-#   --ai        Eval Review에서 claude -p 로 AI 요약 생성
+#   --ai        Eval Review에서 claude -p AI 요약
 #   --detach    세션 생성 후 attach 하지 않음
 #   --kill      기존 harness-studio 세션 종료
 
@@ -34,7 +33,7 @@ for arg in "$@"; do
     --ai)     USE_AI="--ai" ;;
     --detach) DETACH=true ;;
     --kill)
-      tmux kill-session -t "$SESSION_NAME" 2>/dev/null && echo "Session '$SESSION_NAME' killed." || echo "No session to kill."
+      tmux kill-session -t "$SESSION_NAME" 2>/dev/null && echo "Killed." || echo "No session."
       exit 0
       ;;
     *)
@@ -43,7 +42,6 @@ for arg in "$@"; do
   esac
 done
 
-# Auto-detect project root
 if [ -z "$PROJECT_ROOT" ]; then
   dir="$(pwd)"
   while [ "$dir" != "/" ]; do
@@ -53,18 +51,16 @@ if [ -z "$PROJECT_ROOT" ]; then
 fi
 
 if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT/.harness" ]; then
-  echo "Error: .harness/ directory not found."
-  echo "Usage: bash scripts/harness-tmux.sh [project-root]"
+  echo "Error: .harness/ not found."
   exit 1
 fi
 
 echo "Project: $PROJECT_ROOT"
 echo "Session: $SESSION_NAME"
 
-# Kill existing session if any
 tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 
-# ── Resolve Claude command for Agent Session ──
+# ── Resolve Claude command ──
 HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
 CLAUDE_CMD="claude --dangerously-skip-permissions"
 if [ -f "$HANDOFF" ]; then
@@ -75,66 +71,65 @@ if [ -f "$HANDOFF" ]; then
 fi
 
 # ══════════════════════════════════════════
-# Layout Construction
-# ══════════════════════════════════════════
-# ══════════════════════════════════════════
-# Pane layout:
-#   0 = Dashboard (top-left, auto-refresh)
-#   1 = Monitor (top-right, compact)
-#   2 = Agent Session (mid-right, claude)
-#   3 = Eval Review (bottom-right)
-#   4 = Control Prompt (bottom-left, interactive)
+# Build layout using explicit pane IDs
 # ══════════════════════════════════════════
 
-# Step 1: Create session → Pane 0 = Dashboard (top-left)
-tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50 \
-  "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"'"
+# 1. Create session → capture Dashboard pane ID
+PANE_DASHBOARD=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50 \
+  -P -F '#{pane_id}' \
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"'")
 
-# Step 2: Split right column (45%) → Pane 1 = Monitor (top-right, compact)
-tmux split-window -h -p 45 -t "$SESSION_NAME" -c "$PROJECT_ROOT" \
-  "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'"
+# 2. Split Dashboard horizontally (55% left / 45% right) → Monitor pane
+PANE_MONITOR=$(tmux split-window -h -p 45 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" \
+  -P -F '#{pane_id}' \
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'")
 
-# Step 3: Split Pane 1 vertically (80% below) → Pane 2 = Agent Session
-tmux split-window -v -p 80 -t "${SESSION_NAME}.1" -c "$PROJECT_ROOT"
-tmux send-keys -t "${SESSION_NAME}.2" "$CLAUDE_CMD" Enter
+# 3. Split Dashboard vertically (75% top / 25% bottom) → Control pane
+PANE_CONTROL=$(tmux split-window -v -p 25 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" \
+  -P -F '#{pane_id}' \
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-control.sh\" \"${PROJECT_ROOT}\"'")
 
-# Step 4: Split Pane 2 vertically (50%) → Pane 3 = Eval Review
-tmux split-window -v -p 50 -t "${SESSION_NAME}.2" -c "$PROJECT_ROOT" \
-  "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-eval-watcher.sh\" \"${PROJECT_ROOT}\" ${USE_AI}'"
+# 4. Split Monitor vertically (15% top / 85% bottom) → Agent Session pane
+PANE_AGENT=$(tmux split-window -v -p 85 -t "$PANE_MONITOR" -c "$PROJECT_ROOT" \
+  -P -F '#{pane_id}')
 
-# Step 5: Split Dashboard (Pane 0) vertically → Pane 4 = Control Prompt (bottom-left)
-# Dashboard gets ~75% height, Control Prompt gets ~25%
-tmux split-window -v -p 25 -t "${SESSION_NAME}.0" -c "$PROJECT_ROOT"
-tmux send-keys -t "${SESSION_NAME}.4" "bash ${SCRIPT_DIR}/harness-control.sh '${PROJECT_ROOT}'" Enter
+# 5. Split Agent Session vertically (55% top / 45% bottom) → Eval Review pane
+PANE_EVAL=$(tmux split-window -v -p 45 -t "$PANE_AGENT" -c "$PROJECT_ROOT" \
+  -P -F '#{pane_id}' \
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-eval-watcher.sh\" \"${PROJECT_ROOT}\" ${USE_AI}'")
 
-# ── Select Control Prompt as active (where user types) ──
-tmux select-pane -t "${SESSION_NAME}.4"
+# 6. Launch Claude in Agent Session (needs interactive shell, so use send-keys)
+#    Prefix with unset to avoid nvm warnings
+tmux send-keys -t "$PANE_AGENT" "unset npm_config_prefix 2>/dev/null; $CLAUDE_CMD" Enter
 
 # ── Pane titles ──
-tmux select-pane -t "${SESSION_NAME}.0" -T "Dashboard"
-tmux select-pane -t "${SESSION_NAME}.1" -T "Monitor"
-tmux select-pane -t "${SESSION_NAME}.2" -T "Agent Session"
-tmux select-pane -t "${SESSION_NAME}.3" -T "Eval Review"
-tmux select-pane -t "${SESSION_NAME}.4" -T "Control"
+tmux select-pane -t "$PANE_DASHBOARD" -T "Dashboard"
+tmux select-pane -t "$PANE_MONITOR"   -T "Monitor"
+tmux select-pane -t "$PANE_CONTROL"   -T "Control"
+tmux select-pane -t "$PANE_AGENT"     -T "Agent Session"
+tmux select-pane -t "$PANE_EVAL"      -T "Eval Review"
 
 tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
 tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
 
+# ── Focus on Control pane (where user types) ──
+tmux select-pane -t "$PANE_CONTROL"
+
 # ── Attach ──
 if [ "$DETACH" = true ]; then
   echo ""
-  echo "Session created. Attach with:"
-  echo "  tmux attach -t $SESSION_NAME"
+  echo "Session created. Attach: tmux attach -t $SESSION_NAME"
 else
   if [ -n "${TMUX:-}" ]; then
     tmux switch-client -t "$SESSION_NAME"
   else
     echo ""
     echo "Launching harness-studio..."
-    echo "  Control Center (left)  : Dashboard + manual prompting"
-    echo "  Monitor (right↑)       : Agent lifecycle (compact)"
-    echo "  Agent Session (right↔) : claude --dangerously-skip-permissions"
-    echo "  Eval Review (right↓)   : Evaluation summaries"
+    echo "  Dashboard (left↑)   : Auto-refresh progress"
+    echo "  Control (left↓)     : Manual commands (next/retry/stop/log)"
+    echo "  Monitor (right↑)    : Agent lifecycle (compact)"
+    echo "  Agent Session (right↔): claude --dangerously-skip-permissions"
+    echo "  Eval Review (right↓): Evaluation summaries"
     echo ""
     tmux attach -t "$SESSION_NAME"
   fi
