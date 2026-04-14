@@ -285,44 +285,44 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# v4 감지: feature-queue.json 존재 여부
-IS_V4=false
-if [ -f "$QUEUE" ]; then
-  IS_V4=true
-fi
+# 매 루프마다 v4/v3 동적 감지 — 시작 후에도 모드 전환 가능
+tput civis 2>/dev/null
+clear
 
-if [ "$IS_V4" = true ]; then
-  # ── v4: 팀별 섹션, auto-refresh ──
-  tput civis 2>/dev/null
-  clear
+CURRENT_MODE=""
 
-  while true; do
+while true; do
+  # 동적 모드 감지
+  if [ -f "$QUEUE" ]; then
+    NEW_MODE="v4"
+  else
+    NEW_MODE="v3"
+  fi
+
+  # 모드 전환 시 화면 초기화
+  if [ "$NEW_MODE" != "$CURRENT_MODE" ]; then
+    clear
+    CURRENT_MODE="$NEW_MODE"
+    if [ "$CURRENT_MODE" = "v3" ]; then
+      # v3 초기화
+      if [ -f "$PROGRESS" ]; then
+        LAST_AGENT=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
+        LAST_STATUS=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
+        LAST_SPRINT=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
+      fi
+      stream_audit
+    fi
+  fi
+
+  if [ "$CURRENT_MODE" = "v4" ]; then
     buf=$(render_v4 2>&1)
     tput cup 0 0 2>/dev/null
     echo "$buf"
     tput ed 2>/dev/null
-    sleep 3
-  done
-else
-  # ── v3: 단일 스트림, audit tail ──
-  print_v3_header
-
-  if [ -f "$PROGRESS" ]; then
-    LAST_AGENT=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
-    LAST_STATUS=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
-    LAST_SPRINT=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
-
-    echo -e "  ${BOLD}History${RESET}"
-    jq -r '.history // [] | .[] | "  \(.timestamp)  \(.agent) — \(.action): \(.detail)"' "$PROGRESS" 2>/dev/null
-    echo ""
-    echo -e "  ${DIM}── Live events below ──${RESET}"
-    echo ""
+  else
+    check_transitions
   fi
 
-  stream_audit
+  sleep 3
+done
 
-  while true; do
-    check_transitions
-    sleep 2
-  done
-fi
