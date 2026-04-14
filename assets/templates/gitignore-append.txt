@@ -1,0 +1,1 @@
+# For consumer projects, add .worktrees/ to .gitignore

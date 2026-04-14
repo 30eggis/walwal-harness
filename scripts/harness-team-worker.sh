@@ -1,16 +1,10 @@
 #!/bin/bash
-# harness-team-worker.sh — Team Worker: Feature-level Gen→Eval loop (v4.0)
+# harness-team-worker.sh — Team Worker v4: git worktree 격리 실행
 #
-# 1 Team = 1 프로세스. Feature Queue에서 feature를 꺼내
-# Gen→Gate→Eval 루프를 claude -p 헤드리스로 자율 실행한다.
+# 각 Team이 독립 worktree에서 작업하여 git 충돌 없이 병렬 실행.
+# Feature PASS → main merge → worktree 정리.
 #
-# Usage:
-#   bash scripts/harness-team-worker.sh <team_id> [project-root]
-#
-# Environment:
-#   MAX_ATTEMPTS=3  Feature당 최대 Gen→Eval 시도 횟수
-#   GEN_MODEL=sonnet  Generator 모델
-#   EVAL_MODEL=opus   Evaluator 모델
+# Usage: bash scripts/harness-team-worker.sh <team_id> [project-root]
 
 set -uo pipefail
 
@@ -39,9 +33,10 @@ FEATURES="$PROJECT_ROOT/.harness/actions/feature-list.json"
 CONFIG="$PROJECT_ROOT/.harness/config.json"
 PROGRESS_LOG="$PROJECT_ROOT/.harness/progress.log"
 QUEUE_MGR="$SCRIPT_DIR/harness-queue-manager.sh"
-
-# ── Lock file for git operations (prevent race conditions between teams) ──
 GIT_LOCK="$PROJECT_ROOT/.harness/.git-lock"
+
+# Worktree base directory
+WORKTREE_DIR="$PROJECT_ROOT/.worktrees/team-${TEAM_ID}"
 
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-3}"
 GEN_MODEL="${GEN_MODEL:-sonnet}"
@@ -54,7 +49,6 @@ if [ -f "$CONFIG" ]; then
   if [ -n "$_em" ]; then EVAL_MODEL="$_em"; fi
 fi
 
-# ── ANSI helpers ──
 BOLD="\033[1m"
 DIM="\033[2m"
 GREEN="\033[32m"
@@ -64,42 +58,101 @@ CYAN="\033[36m"
 RESET="\033[0m"
 
 ts() { date +"%H:%M:%S"; }
+log() { echo -e "[$(ts)] ${BOLD}T${TEAM_ID}${RESET} $*"; }
+log_progress() { echo "$(date +"%Y-%m-%d %H:%M") | team-${TEAM_ID} | ${1} | ${2}" >> "$PROGRESS_LOG"; }
 
-log() {
-  echo -e "[$(ts)] ${BOLD}T${TEAM_ID}${RESET} $*"
-}
-
-log_progress() {
-  echo "$(date +"%Y-%m-%d") | team-${TEAM_ID} | ${1} | ${2}" >> "$PROGRESS_LOG"
-}
-
-# ── Git lock — serialize git checkout/merge across teams ──
+# ── Git lock ──
 acquire_git_lock() {
-  local max_wait=60 waited=0
-  while [ -f "$GIT_LOCK" ]; do
-    sleep 1
+  local waited=0
+  while ! mkdir "$GIT_LOCK" 2>/dev/null; do
+    sleep 0.2
     waited=$((waited + 1))
-    if [ "$waited" -ge "$max_wait" ]; then
-      log "${RED}Git lock timeout (${max_wait}s). Removing stale lock.${RESET}"
-      rm -f "$GIT_LOCK"
-      break
-    fi
+    if [ "$waited" -ge 150 ]; then rm -rf "$GIT_LOCK"; mkdir "$GIT_LOCK" 2>/dev/null || true; break; fi
   done
-  echo "T${TEAM_ID}" > "$GIT_LOCK"
+}
+release_git_lock() { rm -rf "$GIT_LOCK" 2>/dev/null || true; }
+
+# ── Worktree management ──
+setup_worktree() {
+  local branch="$1"
+
+  acquire_git_lock
+
+  # Clean previous worktree if exists
+  if [ -d "$WORKTREE_DIR" ]; then
+    (cd "$PROJECT_ROOT" && git worktree remove "$WORKTREE_DIR" --force 2>/dev/null) || rm -rf "$WORKTREE_DIR"
+  fi
+
+  # Create fresh worktree from main
+  (cd "$PROJECT_ROOT" && git worktree add "$WORKTREE_DIR" -b "$branch" main 2>/dev/null) || \
+  (cd "$PROJECT_ROOT" && git worktree add "$WORKTREE_DIR" "$branch" 2>/dev/null) || {
+    release_git_lock
+    log "${RED}Failed to create worktree${RESET}"
+    return 1
+  }
+
+  release_git_lock
+
+  # Copy .harness to worktree (symlink for shared state)
+  ln -sf "$PROJECT_ROOT/.harness" "$WORKTREE_DIR/.harness" 2>/dev/null || true
+
+  log "Worktree: ${WORKTREE_DIR}"
+  return 0
 }
 
-release_git_lock() {
-  rm -f "$GIT_LOCK"
+cleanup_worktree() {
+  acquire_git_lock
+  if [ -d "$WORKTREE_DIR" ]; then
+    (cd "$PROJECT_ROOT" && git worktree remove "$WORKTREE_DIR" --force 2>/dev/null) || rm -rf "$WORKTREE_DIR"
+  fi
+  release_git_lock
 }
 
-# ── Pre-eval gate ──
+merge_to_main() {
+  local branch="$1"
+
+  acquire_git_lock
+
+  local merge_ok=false
+
+  # Try merge
+  if (cd "$PROJECT_ROOT" && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS" 2>/dev/null); then
+    merge_ok=true
+  else
+    # Conflict → abort, then try rebase in worktree
+    (cd "$PROJECT_ROOT" && git merge --abort 2>/dev/null) || true
+
+    log "${YELLOW}Merge conflict — rebasing in worktree...${RESET}"
+    if (cd "$WORKTREE_DIR" && git rebase main 2>/dev/null); then
+      # Retry merge after rebase
+      if (cd "$PROJECT_ROOT" && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS (rebased)" 2>/dev/null); then
+        merge_ok=true
+      fi
+    else
+      (cd "$WORKTREE_DIR" && git rebase --abort 2>/dev/null) || true
+      log "${RED}Rebase failed${RESET}"
+    fi
+  fi
+
+  # Clean up branch after merge
+  if [ "$merge_ok" = true ]; then
+    (cd "$PROJECT_ROOT" && git branch -d "$branch" 2>/dev/null) || true
+  fi
+
+  release_git_lock
+
+  [ "$merge_ok" = true ]
+}
+
+# ── Pre-eval gate (runs in worktree) ──
 run_pre_eval_gate() {
-  local cwd="$PROJECT_ROOT"
+  local work_dir="$WORKTREE_DIR"
 
+  # Resolve cwd within worktree
   if [ -f "$CONFIG" ]; then
     _cwd=$(jq -r '.flow.pre_eval_gate.frontend_cwd // empty' "$CONFIG" 2>/dev/null)
     if [ -n "$_cwd" ] && [ "$_cwd" != "null" ]; then
-      cwd="$PROJECT_ROOT/$_cwd"
+      work_dir="$WORKTREE_DIR/$_cwd"
     fi
   fi
 
@@ -107,26 +160,24 @@ run_pre_eval_gate() {
   if [ -f "$CONFIG" ]; then
     mapfile -t checks < <(jq -r '.flow.pre_eval_gate.frontend_checks[]' "$CONFIG" 2>/dev/null)
   fi
-
   if [ ${#checks[@]} -eq 0 ]; then
     checks=("npx tsc --noEmit" "npx eslint src/")
   fi
 
-  local all_pass=true fail_cmds=""
+  local all_pass=true
   for cmd in "${checks[@]}"; do
-    if (cd "$cwd" && timeout 120s bash -c "$cmd" >/dev/null 2>&1); then
+    if (cd "$work_dir" && timeout 120s bash -c "$cmd" >/dev/null 2>&1); then
       log "  ${GREEN}✓${RESET} $cmd"
     else
       log "  ${RED}✗${RESET} $cmd"
       all_pass=false
-      fail_cmds+="$cmd; "
     fi
   done
 
   [ "$all_pass" = true ]
 }
 
-# ── Build generator prompt ──
+# ── Build prompts ──
 build_gen_prompt() {
   local fid="$1" attempt="$2" feedback="${3:-}"
 
@@ -161,7 +212,7 @@ RULES:
 - Implement ONLY this single feature
 - Do NOT modify code belonging to other features
 - Follow existing code patterns and CONVENTIONS.md
-- When done, stage and commit with: git add -A && git commit -m 'feat(${fid}): ${fname}'
+- When done, stage and commit: git add -A && git commit -m 'feat(${fid}): ${fname}'
 PROMPT
 
   if [ "$attempt" -gt 1 ] && [ -n "$feedback" ]; then
@@ -175,7 +226,6 @@ RETRY
   fi
 }
 
-# ── Build evaluator prompt ──
 build_eval_prompt() {
   local fid="$1"
 
@@ -218,15 +268,12 @@ FEEDBACK: one paragraph summary
 PROMPT
 }
 
-# ── Parse eval result (macOS-compatible, no grep -P) ──
 parse_eval_result() {
   local output="$1"
-
   local verdict score feedback
   verdict=$(echo "$output" | grep -E '^VERDICT:' | sed 's/VERDICT:[[:space:]]*//' | head -1)
   score=$(echo "$output" | grep -E '^SCORE:' | sed 's/SCORE:[[:space:]]*//' | head -1)
   feedback=$(echo "$output" | grep -E '^FEEDBACK:' | sed 's/FEEDBACK:[[:space:]]*//' | head -1)
-
   echo "${verdict:-UNKNOWN}|${score:-0.00}|${feedback:-no feedback}"
 }
 
@@ -237,14 +284,12 @@ log "${CYAN}Team ${TEAM_ID} started${RESET} (gen=${GEN_MODEL}, eval=${EVAL_MODEL
 log_progress "start" "Team ${TEAM_ID} worker started"
 
 while true; do
-  # ── Dequeue next feature ──
+  # ── Dequeue ──
   feature_id=$(bash "$QUEUE_MGR" dequeue "$TEAM_ID" "$PROJECT_ROOT" 2>/dev/null)
 
   if [ -z "$feature_id" ] || [[ "$feature_id" == "["* ]]; then
     log "${DIM}No features ready. Waiting 10s...${RESET}"
     sleep 10
-
-    # Check if completely done
     remaining=$(jq '(.queue.ready | length) + (.queue.blocked | length) + (.queue.in_progress | length)' "$QUEUE" 2>/dev/null || echo "1")
     if [ "${remaining}" -eq 0 ] 2>/dev/null; then
       log "${GREEN}${BOLD}ALL FEATURES COMPLETE. Team ${TEAM_ID} exiting.${RESET}"
@@ -254,16 +299,16 @@ while true; do
     continue
   fi
 
-  log "${CYAN}▶ Dequeued ${feature_id}${RESET}"
+  log "${CYAN}▶ ${feature_id}${RESET}"
   log_progress "dequeue" "${feature_id}"
 
-  # ── Create feature branch (with lock) ──
+  # ── Setup worktree ──
   branch="feature/${feature_id}"
-  acquire_git_lock
-  (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null && git checkout -b "$branch" 2>/dev/null) || \
-  (cd "$PROJECT_ROOT" && git checkout "$branch" 2>/dev/null) || true
-  release_git_lock
-  log "Branch: ${branch}"
+  if ! setup_worktree "$branch"; then
+    bash "$QUEUE_MGR" fail "$feature_id" "$PROJECT_ROOT" 2>/dev/null
+    log_progress "fail" "${feature_id} worktree setup failed"
+    continue
+  fi
 
   # ── Gen→Eval Loop ──
   attempt=1
@@ -271,119 +316,82 @@ while true; do
   passed=false
 
   while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
-    log "${BOLD}── Attempt ${attempt}/${MAX_ATTEMPTS} ──${RESET}"
+    log "${BOLD}── ${feature_id} attempt ${attempt}/${MAX_ATTEMPTS} ──${RESET}"
 
-    # ── Generate ──
-    log "Gen ${feature_id} (${GEN_MODEL})..."
+    # ── Generate (in worktree) ──
+    log "Gen (${GEN_MODEL})..."
     bash "$QUEUE_MGR" update_phase "$feature_id" "gen" "$attempt" "$PROJECT_ROOT" 2>/dev/null
 
     gen_prompt=$(build_gen_prompt "$feature_id" "$attempt" "$eval_feedback")
 
     gen_start=$(date +%s)
-    log "${DIM}  claude -p --dangerously-skip-permissions --model ${GEN_MODEL}${RESET}"
-    gen_output=$(cd "$PROJECT_ROOT" && claude -p "$gen_prompt" \
+    gen_output=$(cd "$WORKTREE_DIR" && claude -p "$gen_prompt" \
       --dangerously-skip-permissions \
       --model "$GEN_MODEL" \
       --output-format text 2>&1 | tee /dev/stderr) 2>&1 || true
     gen_elapsed=$(( $(date +%s) - gen_start ))
 
-    files_changed=$(cd "$PROJECT_ROOT" && git diff --name-only 2>/dev/null | wc -l | tr -d ' ')
+    files_changed=$(cd "$WORKTREE_DIR" && git diff --name-only 2>/dev/null | wc -l | tr -d ' ')
     log "Gen done (${gen_elapsed}s) — ${files_changed} files"
-    log_progress "gen" "${feature_id} attempt ${attempt}: ${files_changed} files, ${gen_elapsed}s"
+    log_progress "gen" "${feature_id} #${attempt}: ${files_changed} files, ${gen_elapsed}s"
 
-    # Auto-commit
-    (cd "$PROJECT_ROOT" && git add -A && git commit -m "feat(${feature_id}): gen attempt ${attempt}" --no-verify 2>/dev/null) || true
+    # Auto-commit in worktree
+    (cd "$WORKTREE_DIR" && git add -A && git commit -m "feat(${feature_id}): attempt ${attempt}" --no-verify 2>/dev/null) || true
 
-    # ── Pre-eval gate ──
-    log "Pre-eval gate..."
+    # ── Pre-eval gate (in worktree) ──
+    log "Gate..."
     bash "$QUEUE_MGR" update_phase "$feature_id" "gate" "$attempt" "$PROJECT_ROOT" 2>/dev/null
 
-    if ! run_pre_eval_gate "$feature_id"; then
-      log "${RED}Gate FAIL — retrying gen${RESET}"
-      eval_feedback="Pre-eval gate failed: type check or lint errors. Fix compilation and lint issues."
+    if ! run_pre_eval_gate; then
+      log "${RED}Gate FAIL${RESET}"
+      eval_feedback="Pre-eval gate failed: type check or lint errors."
       attempt=$((attempt + 1))
       continue
     fi
 
-    # ── Evaluate ──
-    log "Eval ${feature_id} (${EVAL_MODEL})..."
+    # ── Evaluate (in worktree) ──
+    log "Eval (${EVAL_MODEL})..."
     bash "$QUEUE_MGR" update_phase "$feature_id" "eval" "$attempt" "$PROJECT_ROOT" 2>/dev/null
 
     eval_prompt=$(build_eval_prompt "$feature_id")
 
     eval_start=$(date +%s)
-    log "${DIM}  claude -p --dangerously-skip-permissions --model ${EVAL_MODEL}${RESET}"
-    eval_output=$(cd "$PROJECT_ROOT" && claude -p "$eval_prompt" \
+    eval_output=$(cd "$WORKTREE_DIR" && claude -p "$eval_prompt" \
       --dangerously-skip-permissions \
       --model "$EVAL_MODEL" \
       --output-format text 2>&1 | tee /dev/stderr) 2>&1 || true
     eval_elapsed=$(( $(date +%s) - eval_start ))
 
-    # Parse result
     result_line=$(parse_eval_result "$eval_output")
     verdict=$(echo "$result_line" | cut -d'|' -f1)
     score=$(echo "$result_line" | cut -d'|' -f2)
     feedback=$(echo "$result_line" | cut -d'|' -f3-)
 
-    log_progress "eval" "${feature_id} attempt ${attempt}: ${verdict} (${score}) ${eval_elapsed}s"
+    log_progress "eval" "${feature_id} #${attempt}: ${verdict} (${score}) ${eval_elapsed}s"
 
     if [ "$verdict" = "PASS" ]; then
-      log "${GREEN}${BOLD}✓ PASS${RESET} ${feature_id} — ${score}/3.00 (${eval_elapsed}s)"
+      log "${GREEN}${BOLD}✓ PASS ${score}/3.00${RESET} (${eval_elapsed}s)"
       passed=true
       break
     else
-      log "${RED}✗ FAIL${RESET} ${feature_id} — ${score}/3.00 (${eval_elapsed}s)"
+      log "${RED}✗ FAIL ${score}/3.00${RESET} (${eval_elapsed}s)"
       log "${DIM}  ${feedback}${RESET}"
       eval_feedback="$feedback"
       attempt=$((attempt + 1))
     fi
   done
 
-  # ══════════════════════════════════════════
-  # Phase 3: Branch merge with conflict handling
-  # ══════════════════════════════════════════
+  # ── Result ──
   if [ "$passed" = true ]; then
-    log "Merging ${branch} → main..."
-    acquire_git_lock
+    log "Merging → main..."
 
-    merge_ok=false
-
-    # Attempt 1: straight merge
-    if (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS" 2>/dev/null); then
-      merge_ok=true
-    else
-      # Attempt 2: abort failed merge, rebase, re-eval gate, then merge
-      log "${YELLOW}Conflict detected — rebasing ${branch} onto main...${RESET}"
-      (cd "$PROJECT_ROOT" && git merge --abort 2>/dev/null) || true
-      (cd "$PROJECT_ROOT" && git checkout "$branch" 2>/dev/null) || true
-
-      if (cd "$PROJECT_ROOT" && git rebase main 2>/dev/null); then
-        log "Rebase OK. Re-running gate..."
-
-        if run_pre_eval_gate "$feature_id"; then
-          log "Gate still PASS after rebase."
-          if (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null && git merge --no-ff "$branch" -m "merge: ${feature_id} PASS (rebased)" 2>/dev/null); then
-            merge_ok=true
-          fi
-        else
-          log "${RED}Gate FAIL after rebase — needs re-gen${RESET}"
-        fi
-      else
-        log "${RED}Rebase failed — conflicts too complex${RESET}"
-        (cd "$PROJECT_ROOT" && git rebase --abort 2>/dev/null) || true
-      fi
-    fi
-
-    release_git_lock
-
-    if [ "$merge_ok" = true ]; then
-      # Clean up feature branch
-      (cd "$PROJECT_ROOT" && git branch -d "$branch" 2>/dev/null) || true
-
+    if merge_to_main "$branch"; then
+      # Cleanup worktree after successful merge
+      cleanup_worktree
       bash "$QUEUE_MGR" pass "$feature_id" "$PROJECT_ROOT" 2>/dev/null
-      log_progress "pass" "${feature_id} merged to main"
+      log_progress "pass" "${feature_id} merged & cleaned"
 
-      # Update feature-list.json passes
+      # Update feature-list.json
       if [ -f "$FEATURES" ]; then
         jq --arg fid "$feature_id" '
           .features |= map(
@@ -396,18 +404,15 @@ while true; do
 
       log "${GREEN}${BOLD}✓ ${feature_id} DONE${RESET}"
     else
-      log "${RED}${BOLD}Merge failed — ${feature_id} marked as failed${RESET}"
-      (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null) || true
+      cleanup_worktree
       bash "$QUEUE_MGR" fail "$feature_id" "$PROJECT_ROOT" 2>/dev/null
+      log "${RED}Merge failed → ${feature_id} FAILED${RESET}"
       log_progress "merge-fail" "${feature_id}"
     fi
-
   else
-    log "${RED}${BOLD}✗ ${feature_id} FAILED after ${MAX_ATTEMPTS} attempts${RESET}"
-    acquire_git_lock
-    (cd "$PROJECT_ROOT" && git checkout main 2>/dev/null) || true
-    release_git_lock
+    cleanup_worktree
     bash "$QUEUE_MGR" fail "$feature_id" "$PROJECT_ROOT" 2>/dev/null
+    log "${RED}${BOLD}✗ ${feature_id} FAILED (${MAX_ATTEMPTS} attempts)${RESET}"
     log_progress "fail" "${feature_id} after ${MAX_ATTEMPTS} attempts"
   fi
 
