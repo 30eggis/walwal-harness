@@ -133,10 +133,55 @@ render_features() {
   done
 }
 
+render_bottleneck_alert() {
+  if [ ! -f "$QUEUE" ] || [ ! -f "$FEATURES" ]; then return; fi
+
+  local failed_list blocked_count idle_teams in_prog
+  failed_list=$(jq -r '.queue.failed[]' "$QUEUE" 2>/dev/null)
+  blocked_count=$(jq '.queue.blocked | length' "$QUEUE" 2>/dev/null || echo 0)
+  in_prog=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null || echo 0)
+  idle_teams=0
+
+  # Count idle teams
+  local team_count
+  team_count=$(jq '.teams | length' "$QUEUE" 2>/dev/null || echo 0)
+  for i in $(seq 1 "$team_count"); do
+    local ts
+    ts=$(jq -r ".teams[\"$i\"].status // \"idle\"" "$QUEUE" 2>/dev/null)
+    if [ "$ts" = "idle" ]; then idle_teams=$((idle_teams + 1)); fi
+  done
+
+  if [ -z "$failed_list" ]; then return; fi
+
+  # Check each failed feature for blocking impact
+  while IFS= read -r fid; do
+    [ -z "$fid" ] && continue
+    # Count how many blocked features depend on this fid
+    local deps_on_this
+    deps_on_this=$(jq --arg fid "$fid" '[.queue.blocked | to_entries[] | select(.value | index($fid))] | length' "$QUEUE" 2>/dev/null || echo 0)
+
+    if [ "$deps_on_this" -gt 0 ]; then
+      echo ""
+      echo -e "  ${RED}${BOLD}⚠ BOTTLENECK${RESET} ${RED}${fid}${RESET} failed → ${YELLOW}${deps_on_this} features blocked${RESET}"
+      if [ "$idle_teams" -gt 0 ]; then
+        echo -e "  ${BOLD}→ requeue:${RESET} bash scripts/harness-queue-manager.sh requeue ${fid} ."
+      fi
+    fi
+  done <<< "$failed_list"
+
+  # All teams idle + nothing in progress = stalled
+  if [ "$idle_teams" -eq "$team_count" ] && [ "$in_prog" -eq 0 ] && [ "$blocked_count" -gt 0 ]; then
+    echo ""
+    echo -e "  ${RED}${BOLD}!! STALLED${RESET} — All teams idle, ${blocked_count} features blocked"
+    echo -e "  ${BOLD}→ requeue failed features or check dependency graph${RESET}"
+  fi
+}
+
 render_all() {
   render_header
   render_queue_summary
   render_teams
+  render_bottleneck_alert
   echo ""
   render_features
 }
