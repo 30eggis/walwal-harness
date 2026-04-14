@@ -66,7 +66,27 @@ Agent({
 
 ## 실시간 로깅 (필수)
 
-모든 Phase 전환 시 반드시 아래 두 명령을 실행하세요. Monitor 대시보드에 실시간 반영됩니다.
+Monitor 패널에서 **각 에이전트(Gen / Eval / Result)가 지금 무엇을 하고 있는지**가 보여야 합니다.
+Phase 전환뿐 아니라 **내부 하위 단계**(파일 읽기, 파일 쓰기, 테스트 실행, AC 검증 등)까지
+progress.log에 한 줄씩 남기세요. 대시보드는 3초마다 tail합니다.
+
+**로깅 원칙**
+- 의미 있는 동작마다 **한 줄씩** 즉시 기록 (파일 단위가 아니라 행위 단위)
+- ACTION 토큰은 아래 표에서 선택 (Monitor가 아이콘/색을 매핑)
+- DETAIL은 구체적으로 — 파일명, AC 번호, 에러 메시지 요약, 결정 사유
+
+| ACTION | 사용 시점 | DETAIL 예시 |
+|--------|-----------|-------------|
+| `gen-start`  | Gen Phase 시작 | `F-001 start — 6 AC` |
+| `gen-read`   | 소스/계약 읽기 | `read api-contract.json (POST /users)` |
+| `gen-write`  | 파일 생성/수정 | `write apps/service-user/src/user.controller.ts` |
+| `gen-test`   | 자체 게이트(tsc/eslint/jest) | `tsc OK · eslint 0 · jest 12/12` |
+| `gen-done`   | Gen Phase 종료 | `F-001 done — 5 files, 142 LOC` |
+| `eval-start` | Evaluator Agent 호출 시작 | `F-001 spawning evaluator` |
+| `eval-check` | AC 개별 검증 진행 | `AC-3 — verify POST /users returns 201` |
+| `eval-done`  | Eval 결과 수신 | `verdict=PASS score=2.95` |
+| `result` / `pass` | PASS 확정 | `F-001 PASS — queue.pass` |
+| `fail`       | FAIL 확정(재시도/최종) | `FAIL #1 — AC-2 missing` |
 
 **progress.log 기록** (하네스 루트의 progress.log에 append):
 ```bash
@@ -86,35 +106,53 @@ bash {HARNESS_ROOT}/scripts/harness-queue-manager.sh update_phase {FEATURE_ID} {
 **시작 시 로깅:**
 ```bash
 HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')
-echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | gen | {FEATURE_ID} start" >> "$HARNESS_ROOT/.harness/progress.log"
+LOG="$HARNESS_ROOT/.harness/progress.log"
+logev() { echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | $1 | $2" >> "$LOG"; }
+
+logev gen-start "{FEATURE_ID} start"
 bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" update_phase {FEATURE_ID} gen "$HARNESS_ROOT"
 ```
 
-1. Feature 정보 확인:
+1. Feature 정보 확인 — **각 읽기마다 로그**:
+   ```bash
+   logev gen-read "feature-list.json → {FEATURE_ID}"
+   logev gen-read "api-contract.json → {관련 엔드포인트}"
+   ```
    - `jq '.features[] | select(.id == "{FEATURE_ID}")' .harness/actions/feature-list.json`
    - `.harness/actions/api-contract.json`에서 관련 엔드포인트 확인
    - AC(Acceptance Criteria) 목록을 정확히 파악
 
-2. 코드 생성:
+2. 코드 생성 — **파일 쓰기마다 로그**:
+   ```bash
+   logev gen-write "apps/service-user/src/user.controller.ts"
+   logev gen-write "libs/shared-dto/src/user.dto.ts"
+   ```
    - AGENTS.md의 IA-MAP에 따라 올바른 디렉토리에 코드 작성
    - AC의 모든 항목을 충족하도록 구현
 
-3. Pre-eval 게이트 (자체):
+3. Pre-eval 게이트 (자체) — **결과 로그**:
+   ```bash
+   logev gen-test "tsc OK · eslint 0w 0e · jest 12/12"
+   ```
    - tsc (타입 체크) 실행
    - eslint (린트) 실행
    - 컴파일 에러가 있으면 직접 수정 (Eval에 넘기지 않음)
 
 **Gen 완료 로깅:**
 ```bash
-echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | gen | {FEATURE_ID} done — {변경파일수} files" >> "$HARNESS_ROOT/.harness/progress.log"
+logev gen-done "{FEATURE_ID} done — {변경파일수} files, {LOC} LOC"
 ```
 
 ## Phase 2: Evaluator (독립 평가 — Agent 도구 사용)
 
-**Eval 시작 로깅:**
+**Eval 시작 로깅 (하위 단계 포함):**
 ```bash
-echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | eval | {FEATURE_ID} eval start" >> "$HARNESS_ROOT/.harness/progress.log"
+logev eval-start "{FEATURE_ID} spawning evaluator"
 bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" update_phase {FEATURE_ID} eval "$HARNESS_ROOT"
+# Evaluator가 AC를 하나씩 검증할 때마다:
+# logev eval-check "AC-3 — POST /users returns 201"
+# 최종:
+# logev eval-done "verdict=PASS score=2.95"
 ```
 
 코드 생성이 완료되면 **별도 Agent를 생성하여 평가**합니다.
@@ -163,20 +201,20 @@ Evaluator Agent 결과를 확인합니다:
 
 ### PASS인 경우 (VERDICT: PASS, SCORE ≥ 2.80):
 ```bash
-echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | pass | {FEATURE_ID} PASS score={SCORE}" >> "$HARNESS_ROOT/.harness/progress.log"
+logev result "{FEATURE_ID} PASS score={SCORE} — merging"
 bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" pass {FEATURE_ID} "$HARNESS_ROOT"
 ```
 변경 파일 목록과 AC 충족 요약을 Lead에게 반환.
 
 ### FAIL인 경우:
 ```bash
-echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | fail | {FEATURE_ID} FAIL #{ATTEMPT} — {사유요약}" >> "$HARNESS_ROOT/.harness/progress.log"
+logev fail "{FEATURE_ID} FAIL #{ATTEMPT} — {사유요약}"
 ```
 1. Evaluator의 FEEDBACK을 읽고 코드를 수정 (Phase 1로 돌아감)
 2. 수정 후 다시 Phase 2 (새 Evaluator Agent 생성 — 이전 Eval 컨텍스트 없음)
 3. 최대 3회 시도. 3회 모두 FAIL이면:
    ```bash
-   echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | fail | {FEATURE_ID} FINAL FAIL after 3 attempts" >> "$HARNESS_ROOT/.harness/progress.log"
+   logev fail "{FEATURE_ID} FINAL FAIL after 3 attempts"
    bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" fail {FEATURE_ID} "$HARNESS_ROOT"
    ```
    실패 사유와 마지막 Eval 결과를 Lead에게 반환.

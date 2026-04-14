@@ -10,7 +10,19 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-PROJECT_ROOT="${1:-}"
+# ── Args ──
+# Usage: harness-monitor.sh [project-root] [--team N]
+#   --team N  → 단일 팀만 렌더 (tmux per-team pane 용도)
+PROJECT_ROOT=""
+TEAM_FILTER=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --team) TEAM_FILTER="$2"; shift 2 ;;
+    --team=*) TEAM_FILTER="${1#--team=}"; shift ;;
+    *) [ -z "$PROJECT_ROOT" ] && PROJECT_ROOT="$1"; shift ;;
+  esac
+done
+
 if [ -z "$PROJECT_ROOT" ]; then
   source "$SCRIPT_DIR/lib/harness-render-progress.sh"
   PROJECT_ROOT="$(resolve_harness_root ".")" || {
@@ -58,8 +70,18 @@ render_v4_header() {
   echo ""
 }
 
+# 고정폭 배너 구분선 (터미널 너비에 맞춰 채움)
+banner_line() {
+  local cols
+  cols=$(tput cols 2>/dev/null || echo 78)
+  local line=""
+  for ((i=0; i<cols; i++)); do line+="━"; done
+  echo "$line"
+}
+
 render_team_section() {
   local team_num="$1"
+  local log_lines="${2:-10}"
   local color
   color=$(team_color "$team_num")
 
@@ -90,89 +112,115 @@ render_team_section() {
     *)    phase_str="" ;;
   esac
 
-  # 헤더 라인
-  printf "%b%b T%s%b " "$color" "$icon" "$team_num" "$RESET"
+  # ── 큰 배너 ──
+  local bar
+  bar=$(banner_line)
+  printf "%b%s%b\n" "$color" "$bar" "$RESET"
+
+  printf "%b%b TEAM %s%b" "$color$BOLD" "$icon" "$team_num" "$RESET"
   if [ "$t_feature" != "—" ] && [ "$t_feature" != "null" ]; then
-    printf "%s " "$t_feature"
+    printf "  %b%s%b" "$BOLD" "$t_feature" "$RESET"
     if [ -n "$phase_str" ]; then
-      printf "%b%s%b" "$color" "$phase_str" "$RESET"
+      printf "  %b[%s]%b" "$color" "$phase_str" "$RESET"
     fi
     if [ -n "$t_attempt" ] && [ "$t_attempt" != "—" ] && [ "$t_attempt" != "1" ]; then
-      printf " %b#%s%b" "$DIM" "$t_attempt" "$RESET"
+      printf " %battempt #%s%b" "$YELLOW" "$t_attempt" "$RESET"
     fi
   else
-    printf "%bidle%b" "$DIM" "$RESET"
+    printf "  %bidle%b" "$DIM" "$RESET"
   fi
   echo ""
+  printf "%b%s%b\n" "$color" "$bar" "$RESET"
 
-  # 팀 로그 (progress.log에서 team-N 엔트리만 추출)
+  # ── 팀 로그 ──
+  local have_logs=0
   if [ -f "$PROGRESS_LOG" ]; then
-    grep -i "team-${team_num}\|team_${team_num}" "$PROGRESS_LOG" 2>/dev/null | tail -5 | while IFS= read -r line; do
-      local ts action detail
-      ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
-      action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
-      detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
+    local matched
+    matched=$(grep -E "team-${team_num}\b|team_${team_num}\b" "$PROGRESS_LOG" 2>/dev/null | tail -"$log_lines")
+    if [ -n "$matched" ]; then
+      have_logs=1
+      local cols
+      cols=$(tput cols 2>/dev/null || echo 78)
+      # 포맷: [ts] [icon agent] detail (너무 길면 터미널 너비에서 줄바꿈)
+      local prefix_w=18  # "  HH:MM  ✦ eval  "
+      local detail_w=$(( cols - prefix_w ))
+      [ "$detail_w" -lt 20 ] && detail_w=20
 
-      local short_ts
-      short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}' | tail -1 || echo "$ts")
+      echo "$matched" | while IFS= read -r line; do
+        local ts action detail
+        ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
+        action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
+        detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
 
-      if [ ${#detail} -gt 35 ]; then detail="${detail:0:33}.."; fi
+        local short_ts
+        short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}' | tail -1 || echo "$ts")
 
-      # 액션별 아이콘
-      local a_icon="·" a_color="$DIM"
-      case "$action" in
-        gen)      a_icon="▶"; a_color="$GREEN" ;;
-        eval)     a_icon="✦"; a_color="$BLUE" ;;
-        pass)     a_icon="✓"; a_color="$GREEN" ;;
-        fail)     a_icon="✗"; a_color="$RED" ;;
-        dequeue)  a_icon="→"; a_color="$CYAN" ;;
-        gate)     a_icon="◆"; a_color="$YELLOW" ;;
-        *)        a_icon="·"; a_color="$DIM" ;;
-      esac
+        local a_icon="·" a_color="$DIM" a_label="$action"
+        case "$action" in
+          gen|gen-start|gen-read|gen-write|gen-test|gen-done)
+            a_icon="▶"; a_color="$GREEN"; a_label="Gen" ;;
+          eval|eval-start|eval-check|eval-done)
+            a_icon="✦"; a_color="$BLUE"; a_label="Eval" ;;
+          result|pass)
+            a_icon="✓"; a_color="$GREEN"; a_label="Result" ;;
+          fail)
+            a_icon="✗"; a_color="$RED"; a_label="Result" ;;
+          dequeue)  a_icon="→"; a_color="$CYAN"; a_label="Queue" ;;
+          gate)     a_icon="◆"; a_color="$YELLOW"; a_label="Gate" ;;
+          *)        a_icon="·"; a_color="$DIM"; a_label="$action" ;;
+        esac
 
-      printf "  %b%s%b %b%s%b %b%s%b\n" \
-        "$DIM" "$short_ts" "$RESET" \
-        "$a_color" "$a_icon" "$RESET" \
-        "$DIM" "$detail" "$RESET"
-    done
+        # 첫 줄
+        local first="${detail:0:$detail_w}"
+        printf "  %b%s%b %b%s%b %-6s %s\n" \
+          "$DIM" "$short_ts" "$RESET" \
+          "$a_color" "$a_icon" "$RESET" \
+          "$a_label" "$first"
+        # 이어질 줄 (긴 detail 은 접지 않고 들여쓰기로 이어서 출력)
+        local rest="${detail:$detail_w}"
+        while [ -n "$rest" ]; do
+          local chunk="${rest:0:$detail_w}"
+          rest="${rest:$detail_w}"
+          printf "  %*s%s\n" "$prefix_w" "" "$chunk"
+        done
+      done
+    fi
+  fi
+  if [ "$have_logs" -eq 0 ]; then
+    printf "  %b(no activity)%b\n" "$DIM" "$RESET"
   fi
 }
 
 render_v4() {
+  # 단일 팀 모드 (tmux per-team pane)
+  if [ -n "$TEAM_FILTER" ]; then
+    local rows log_lines
+    rows=$(tput lines 2>/dev/null || echo 20)
+    log_lines=$(( rows - 5 ))
+    [ "$log_lines" -lt 3 ] && log_lines=3
+    render_team_section "$TEAM_FILTER" "$log_lines"
+    return
+  fi
+
   render_v4_header
 
-  # 팀 수 확인
   local team_count=3
   if [ -f "$QUEUE" ]; then
     team_count=$(jq '.teams | length' "$QUEUE" 2>/dev/null || echo 3)
   fi
+  [ "$team_count" -lt 1 ] && team_count=3
+
+  local rows per_team log_lines
+  rows=$(tput lines 2>/dev/null || echo 40)
+  per_team=$(( (rows - 2) / team_count ))
+  log_lines=$(( per_team - 5 ))
+  if [ "$log_lines" -lt 3 ]; then log_lines=3; fi
+  if [ "$log_lines" -gt 15 ]; then log_lines=15; fi
 
   for i in $(seq 1 "$team_count"); do
-    render_team_section "$i"
+    render_team_section "$i" "$log_lines"
     echo ""
   done
-
-  # Lead/시스템 이벤트 (team이 아닌 엔트리)
-  echo -e "${BOLD}SYSTEM${RESET}"
-  if [ -f "$PROGRESS_LOG" ]; then
-    grep -v 'team-[0-9]' "$PROGRESS_LOG" 2>/dev/null | grep -v '^#' | grep -v '^$' | tail -5 | while IFS= read -r line; do
-      local ts agent action detail
-      ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
-      agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
-      action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
-      detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
-
-      local short_ts
-      short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}' | tail -1 || echo "$ts")
-
-      if [ ${#detail} -gt 35 ]; then detail="${detail:0:33}.."; fi
-
-      printf "  %b%s%b %s %b%s%b\n" \
-        "$DIM" "$short_ts" "$RESET" \
-        "$agent" \
-        "$DIM" "$detail" "$RESET"
-    done
-  fi
 }
 
 # ══════════════════════════════════════════
@@ -292,8 +340,8 @@ clear
 CURRENT_MODE=""
 
 while true; do
-  # 동적 모드 감지
-  if [ -f "$QUEUE" ]; then
+  # 동적 모드 감지 (--team 지정 시 항상 v4)
+  if [ -n "$TEAM_FILTER" ] || [ -f "$QUEUE" ]; then
     NEW_MODE="v4"
   else
     NEW_MODE="v3"

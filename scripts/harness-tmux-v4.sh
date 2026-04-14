@@ -2,11 +2,11 @@
 # harness-tmux-v4.sh — v4 Agent Teams: 원커맨드 실행
 #
 # ┌──────────────┬──────────────┬──────────────┐
-# │              │  Dashboard   │              │
-# │  Main Claude │  (v4 queue)  │  Team Monitor│
-# │  (Lead)      ├──────────────┤  (lifecycle) │
-# │              │  Prompt      │              │
-# │              │  History     │              │
+# │              │  Dashboard   │   TEAM 1     │
+# │  Main Claude │  (v4 queue)  ├──────────────┤
+# │  (Lead)      ├──────────────┤   TEAM 2     │
+# │              │  Prompt      ├──────────────┤
+# │              │  History     │   TEAM 3     │
 # └──────────────┴──────────────┴──────────────┘
 #
 # Usage:
@@ -80,10 +80,20 @@ PANE_MAIN=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 220 -y 
 PANE_MID=$(tmux split-window -h -p 65 -t "$PANE_MAIN" -c "$PROJECT_ROOT" \
   -P -F '#{pane_id}')
 
-# 3. Split right section: Middle 45% | Right 55%
-PANE_RIGHT=$(tmux split-window -h -p 55 -t "$PANE_MID" -c "$PROJECT_ROOT" \
+# 3. Split right section: Middle 45% | Right 55% — Right는 TEAM 1 으로 시작
+PANE_T1=$(tmux split-window -h -p 55 -t "$PANE_MID" -c "$PROJECT_ROOT" \
   -P -F '#{pane_id}' \
-  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'")
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 1'")
+
+# 3b. Split TEAM 1 세로로 → TEAM 2 (하단 66%)
+PANE_T2=$(tmux split-window -v -p 66 -t "$PANE_T1" -c "$PROJECT_ROOT" \
+  -P -F '#{pane_id}' \
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 2'")
+
+# 3c. Split TEAM 2 세로로 → TEAM 3 (하단 50%)
+PANE_T3=$(tmux split-window -v -p 50 -t "$PANE_T2" -c "$PROJECT_ROOT" \
+  -P -F '#{pane_id}' \
+  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 3'")
 
 # 4. Split middle pane vertically: Dashboard (top 45%) | Prompt History (bottom 55%)
 PANE_HISTORY=$(tmux split-window -v -p 55 -t "$PANE_MID" -c "$PROJECT_ROOT" \
@@ -109,7 +119,9 @@ fi
 tmux select-pane -t "$PANE_MAIN"    -T "Lead (Main Claude)"
 tmux select-pane -t "$PANE_MID"     -T "Dashboard"
 tmux select-pane -t "$PANE_HISTORY" -T "Prompt History"
-tmux select-pane -t "$PANE_RIGHT"   -T "Team Monitor"
+tmux select-pane -t "$PANE_T1"      -T "TEAM 1"
+tmux select-pane -t "$PANE_T2"      -T "TEAM 2"
+tmux select-pane -t "$PANE_T3"      -T "TEAM 3"
 
 tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
 tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
