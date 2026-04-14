@@ -92,52 +92,48 @@ if [ -n "${TMUX:-}" ]; then
 fi
 
 # ══════════════════════════════════════════
-# Case B: tmux 밖에 있음 → 새 세션 생성
+# Case B: tmux 밖에 있음 → 새 세션 생성 + Terminal.app에서 자동 attach
 # ══════════════════════════════════════════
 
-# 이미 세션이 있으면 attach만
+# 이미 세션이 있으면 Terminal.app에서 attach만
 if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
-  echo "[studio] Session '$SESSION_NAME' already exists. Attaching..."
-  echo "[studio] ATTACH_TMUX=$SESSION_NAME"
+  echo "[studio] Session '$SESSION_NAME' already exists. Opening Terminal..."
+  osascript -e "tell application \"Terminal\" to do script \"tmux attach -t $SESSION_NAME\"" 2>/dev/null \
+    || echo "[studio] ATTACH_TMUX=$SESSION_NAME"
+  echo "[studio] OPENED_TERMINAL=true"
   exit 0
 fi
 
 echo "[studio] Creating new tmux session with 3-column layout..."
 
-# 1. 새 세션 → Left pane (Claude 실행)
-PANE_MAIN=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 220 -y 55 \
-  -P -F '#{pane_id}')
-
-# 2. Left 35% | Right 65%
-PANE_MID=$(tmux split-window -h -p 65 -t "$PANE_MAIN" -c "$PROJECT_ROOT" \
+# 1. 새 세션 → Left pane (Dashboard 전용 — Claude는 현재 세션에서 계속)
+PANE_DASH=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 220 -y 55 \
   -P -F '#{pane_id}' \
   "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard-v4.sh\" \"${PROJECT_ROOT}\"'")
 
-# 3. Middle 45% | Right 55%
-PANE_RIGHT=$(tmux split-window -h -p 55 -t "$PANE_MID" -c "$PROJECT_ROOT" \
+# 2. Split: Dashboard | Monitor
+PANE_RIGHT=$(tmux split-window -h -p 50 -t "$PANE_DASH" -c "$PROJECT_ROOT" \
   -P -F '#{pane_id}' \
   "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'")
 
-# 4. Dashboard top 45% | History bottom 55%
-PANE_HISTORY=$(tmux split-window -v -p 55 -t "$PANE_MID" -c "$PROJECT_ROOT" \
+# 3. Split Dashboard vertically: Dashboard top | History bottom
+PANE_HISTORY=$(tmux split-window -v -p 55 -t "$PANE_DASH" -c "$PROJECT_ROOT" \
   -P -F '#{pane_id}' \
   "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"'")
 
-# 5. Left pane에서 Claude 자동 실행
-tmux send-keys -t "$PANE_MAIN" "unset npm_config_prefix 2>/dev/null" Enter
-tmux send-keys -t "$PANE_MAIN" "clear && $CLAUDE_CMD" Enter
-
 # Pane titles
-tmux select-pane -t "$PANE_MAIN"    -T "Lead (Claude)"
-tmux select-pane -t "$PANE_MID"     -T "Dashboard"
+tmux select-pane -t "$PANE_DASH"    -T "Dashboard"
 tmux select-pane -t "$PANE_HISTORY" -T "Command History"
 tmux select-pane -t "$PANE_RIGHT"   -T "Team Monitor"
 
 tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
 tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
 
-# Focus on Claude pane
-tmux select-pane -t "$PANE_MAIN"
+# Terminal.app에서 자동으로 tmux attach
+osascript -e "tell application \"Terminal\"
+  activate
+  do script \"tmux attach -t $SESSION_NAME\"
+end tell" 2>/dev/null
 
 echo "[studio] Session '$SESSION_NAME' created."
-echo "[studio] ATTACH_TMUX=$SESSION_NAME"
+echo "[studio] OPENED_TERMINAL=true"
