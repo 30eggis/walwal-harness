@@ -73,8 +73,33 @@ Agent({
 ## 할당된 Feature
 - Feature ID: {FEATURE_ID}
 - 프로젝트 루트: 현재 디렉토리 (worktree 복사본)
+- 하네스 루트: 메인 프로젝트 루트 (worktree가 아닌 원본)
+
+## 실시간 로깅 (필수)
+
+모든 Phase 전환 시 반드시 아래 두 명령을 실행하세요. Monitor 대시보드에 실시간 반영됩니다.
+
+**progress.log 기록** (하네스 루트의 progress.log에 append):
+```bash
+echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | {ACTION} | {DETAIL}" >> {HARNESS_ROOT}/.harness/progress.log
+```
+
+**queue phase 업데이트** (feature-queue.json의 팀 상태 갱신):
+```bash
+bash {HARNESS_ROOT}/scripts/harness-queue-manager.sh update_phase {FEATURE_ID} {PHASE} .
+```
+
+> {HARNESS_ROOT}는 worktree의 원본 프로젝트 경로입니다. `git worktree list` 첫 줄에서 확인 가능합니다.
+> 워커 시작 시 먼저 실행: `HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')`
 
 ## Phase 1: Generator (코드 생성)
+
+**시작 시 로깅:**
+```bash
+HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')
+echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | gen | {FEATURE_ID} start" >> "$HARNESS_ROOT/.harness/progress.log"
+bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" update_phase {FEATURE_ID} gen "$HARNESS_ROOT"
+```
 
 1. Feature 정보 확인:
    - `jq '.features[] | select(.id == "{FEATURE_ID}")' .harness/actions/feature-list.json`
@@ -90,7 +115,18 @@ Agent({
    - eslint (린트) 실행
    - 컴파일 에러가 있으면 직접 수정 (Eval에 넘기지 않음)
 
+**Gen 완료 로깅:**
+```bash
+echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | gen | {FEATURE_ID} done — {변경파일수} files" >> "$HARNESS_ROOT/.harness/progress.log"
+```
+
 ## Phase 2: Evaluator (독립 평가 — Agent 도구 사용)
+
+**Eval 시작 로깅:**
+```bash
+echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | eval | {FEATURE_ID} eval start" >> "$HARNESS_ROOT/.harness/progress.log"
+bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" update_phase {FEATURE_ID} eval "$HARNESS_ROOT"
+```
 
 코드 생성이 완료되면 **별도 Agent를 생성하여 평가**합니다.
 이 Evaluator Agent는 당신(Generator)의 추론 과정을 모릅니다.
@@ -137,15 +173,24 @@ FEEDBACK: (FAIL인 경우만) 구체적 수정 지시
 Evaluator Agent 결과를 확인합니다:
 
 ### PASS인 경우 (VERDICT: PASS, SCORE ≥ 2.80):
-1. `bash scripts/harness-queue-manager.sh pass {FEATURE_ID} .` 실행
-2. 변경 파일 목록과 AC 충족 요약을 Lead에게 반환
+```bash
+echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | pass | {FEATURE_ID} PASS score={SCORE}" >> "$HARNESS_ROOT/.harness/progress.log"
+bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" pass {FEATURE_ID} "$HARNESS_ROOT"
+```
+변경 파일 목록과 AC 충족 요약을 Lead에게 반환.
 
 ### FAIL인 경우:
+```bash
+echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | fail | {FEATURE_ID} FAIL #{ATTEMPT} — {사유요약}" >> "$HARNESS_ROOT/.harness/progress.log"
+```
 1. Evaluator의 FEEDBACK을 읽고 코드를 수정 (Phase 1로 돌아감)
 2. 수정 후 다시 Phase 2 (새 Evaluator Agent 생성 — 이전 Eval 컨텍스트 없음)
 3. 최대 3회 시도. 3회 모두 FAIL이면:
-   - `bash scripts/harness-queue-manager.sh fail {FEATURE_ID} .` 실행
-   - 실패 사유와 마지막 Eval 결과를 Lead에게 반환
+   ```bash
+   echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | fail | {FEATURE_ID} FINAL FAIL after 3 attempts" >> "$HARNESS_ROOT/.harness/progress.log"
+   bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" fail {FEATURE_ID} "$HARNESS_ROOT"
+   ```
+   실패 사유와 마지막 Eval 결과를 Lead에게 반환.
 ```
 
 ## Step 4: 결과 수집 및 다음 라운드
