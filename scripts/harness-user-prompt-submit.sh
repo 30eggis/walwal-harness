@@ -58,6 +58,16 @@ if [ -f "$FEATURE_QUEUE" ]; then
   V4_TOTAL=$(jq '[.queue.ready, (.queue.blocked | keys), (.queue.in_progress | keys), .queue.passed, .queue.failed] | flatten | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
   V4_FAILED=$(jq '.queue.failed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
 
+  # Log user prompt to progress.log (truncated to 80 chars)
+  PROGRESS_LOG="$CWD/.harness/progress.log"
+  if [ -n "$PROMPT" ] && [ -f "$PROGRESS_LOG" ]; then
+    PROMPT_SHORT=$(echo "$PROMPT" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-80)
+    # Skip logging for empty or very short prompts
+    if [ ${#PROMPT_SHORT} -gt 2 ]; then
+      echo "$(date +"%Y-%m-%d %H:%M") | user-prompt | input | ${PROMPT_SHORT}" >> "$PROGRESS_LOG"
+    fi
+  fi
+
   cat <<EOF
 [harness-v4] ${V4_PASSED}/${V4_TOTAL} features passed | ${V4_FAILED} failed
 

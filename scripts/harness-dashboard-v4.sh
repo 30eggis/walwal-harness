@@ -149,21 +149,47 @@ render_feature_list() {
   echo ""
 }
 
-render_prompt_history() {
+render_user_prompts() {
   local log_file="$PROJECT_ROOT/.harness/progress.log"
   if [ ! -f "$log_file" ]; then return; fi
 
-  # Get terminal height to limit display
-  local term_h
-  term_h=$(tput lines 2>/dev/null || echo 50)
-  local max_lines=10  # show latest 10 entries
+  # Extract user-prompt entries (newest first, max 5)
+  local user_lines
+  user_lines=$(grep 'user-prompt' "$log_file" 2>/dev/null | tail -r 2>/dev/null | head -5)
 
-  echo -e "  ${BOLD}Prompt History${RESET} ${DIM}(newest first)${RESET}"
+  if [ -z "$user_lines" ]; then return; fi
 
-  # Read non-comment lines, reverse (newest first), take max_lines
-  grep -v '^#' "$log_file" 2>/dev/null | grep -v '^$' | tail -r 2>/dev/null | head -"$max_lines" | \
+  echo -e "  ${BOLD}Manual Prompts${RESET} ${DIM}(newest first)${RESET}"
+
+  echo "$user_lines" | while IFS= read -r line; do
+    local ts detail
+    ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
+    detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
+
+    # Short timestamp (HH:MM or MM-DD HH:MM)
+    local short_ts
+    short_ts=$(echo "$ts" | sed 's/^[0-9]*-//')
+
+    if [ ${#detail} -gt 55 ]; then detail="${detail:0:53}.."; fi
+
+    echo -e "  ${BOLD}★${RESET} ${DIM}${short_ts}${RESET} ${detail}"
+  done
+
+  echo ""
+}
+
+render_team_activity() {
+  local log_file="$PROJECT_ROOT/.harness/progress.log"
+  if [ ! -f "$log_file" ]; then return; fi
+
+  local max_lines=8
+
+  echo -e "  ${BOLD}Activity${RESET} ${DIM}(newest first)${RESET}"
+
+  # All non-user-prompt entries, newest first
+  grep -v '^#' "$log_file" 2>/dev/null | grep -v '^$' | grep -v 'user-prompt' | \
+  tail -r 2>/dev/null | head -"$max_lines" | \
   while IFS= read -r line; do
-    # Parse: date | agent | action | detail
     local ts agent action detail
     ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
     agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
@@ -174,14 +200,14 @@ render_prompt_history() {
     short_ts=$(echo "$ts" | sed 's/^[0-9]*-//')
 
     case "$agent" in
-      dispatcher*|dispatch) icon="▸"; color="$MAGENTA" ;;
-      team-*)               icon="⚡"; color="$CYAN" ;;
-      manual|user)          icon="★"; color="$BOLD" ;;
-      planner*)             icon="□"; color="$YELLOW" ;;
-      generator*|gen*)      icon="▶"; color="$GREEN" ;;
-      eval*)                icon="✦"; color="$RED" ;;
-      system)               icon="⚙"; color="$DIM" ;;
-      *)                    icon="·"; color="$DIM" ;;
+      dispatcher*) icon="▸"; color="$MAGENTA" ;;
+      team-*)      icon="⚡"; color="$CYAN" ;;
+      manual)      icon="★"; color="$BOLD" ;;
+      planner*)    icon="□"; color="$YELLOW" ;;
+      gen*)        icon="▶"; color="$GREEN" ;;
+      eval*)       icon="✦"; color="$RED" ;;
+      system)      icon="⚙"; color="$DIM" ;;
+      *)           icon="·"; color="$DIM" ;;
     esac
 
     if [ ${#detail} -gt 45 ]; then detail="${detail:0:43}.."; fi
@@ -196,7 +222,8 @@ render_all() {
   render_header
   render_queue_summary
   render_teams
-  render_prompt_history
+  render_user_prompts
+  render_team_activity
   render_feature_list
   echo -e "  ${DIM}Refreshing every 3s${RESET}"
 }
