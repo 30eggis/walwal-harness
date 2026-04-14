@@ -133,62 +133,15 @@
         ]
       }
     },
-    "generator-frontend-flutter": {
-      "role": "Flutter 앱 개발 — Riverpod, integrated_data_layer(Retrofit), i18n(ARB), build_runner",
-      "skill": "harness-generator-frontend-flutter",
-      "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
-      "outputs": ["code:flutter", "actions/sprint-contract.md"],
-      "order": 2,
-      "fe_stack": "flutter",
-      "model": "sonnet",
-      "thinking_mode": null
-    },
-    "evaluator-functional-flutter": {
-      "role": "Flutter 앱 검증 — flutter analyze, flutter test, build_runner 일관성, 안티패턴 정적 검증",
-      "skill": "harness-evaluator-functional-flutter",
-      "tools": ["bash:flutter", "bash:dart"],
-      "inputs": ["actions/sprint-contract.md"],
-      "outputs": ["actions/evaluation-functional.md"],
-      "fe_stack": "flutter",
-      "model": "opus",
-      "thinking_mode": "ultrathink"
-    }
   },
   "flow": {
     "sequence": ["dispatcher", "planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
     "pipeline_selection": {
-      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. fe_stack 필드로 React/Flutter를 구분. harness-next.sh가 pipeline.json.fe_stack 을 읽어 generator-frontend/evaluator-functional 을 Flutter 변형으로 치환한다.",
+      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정.",
       "pipelines": {
         "FULLSTACK": ["planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
         "FE-ONLY": ["planner:light", "generator-frontend", "evaluator-functional", "evaluator-visual"],
         "BE-ONLY": ["planner", "generator-backend", "evaluator-functional:api-only"]
-      },
-      "fe_stack_substitution": {
-        "comment": "pipeline.json.fe_stack + fe_target 에 따라 FE 에이전트 치환. Flutter Web 은 React 와 동일한 Playwright 기반 evaluator 를 사용한다.",
-        "flutter": {
-          "_doc": "fe_target = web | mobile | desktop. by_target 으로 분기.",
-          "by_target": {
-            "web": {
-              "_doc": "Flutter Web — 컴파일 결과가 HTML+JS+CSS 이므로 Playwright evaluator 사용 가능",
-              "generator-frontend": "generator-frontend-flutter",
-              "evaluator-functional": "evaluator-functional",
-              "evaluator-visual": "evaluator-visual"
-            },
-            "mobile": {
-              "_doc": "Flutter Mobile (Android/iOS) — 브라우저 없음, 정적 분석 evaluator 사용",
-              "generator-frontend": "generator-frontend-flutter",
-              "evaluator-functional": "evaluator-functional-flutter",
-              "evaluator-visual": "__skip__"
-            },
-            "desktop": {
-              "_doc": "Flutter Desktop (macOS/Windows/Linux) — 브라우저 없음, 정적 분석 evaluator 사용",
-              "generator-frontend": "generator-frontend-flutter",
-              "evaluator-functional": "evaluator-functional-flutter",
-              "evaluator-visual": "__skip__"
-            }
-          },
-          "_default_target": "mobile"
-        }
       }
     },
     "sprint_execution": {

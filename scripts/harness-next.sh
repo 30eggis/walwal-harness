@@ -59,21 +59,10 @@ if [ -f "$PIPELINE_JSON" ]; then
 fi
 
 # ─────────────────────────────────────────
-# fe_stack + fe_target 치환 헬퍼
-#   pipeline_selection.pipelines 에서 읽은 에이전트명을 fe_stack/fe_target 에 따라 치환
-#   - react: 그대로
-#   - flutter+web: generator-frontend → generator-frontend-flutter 만 치환, eval 은 그대로 (Playwright 사용 가능)
-#   - flutter+mobile/desktop: eval 도 정적 분석용으로 치환, evaluator-visual 은 __skip__
+# fe_stack 치환 (no-op — Flutter 지원 제거됨, 하위 호환용 stub)
 # ─────────────────────────────────────────
 substitute_fe_stack() {
-  local agent="$1"
-  if [ "$fe_stack" != "flutter" ]; then
-    echo "$agent"
-    return
-  fi
-  local sub
-  sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.${fe_stack}.by_target[\"${fe_target}\"][\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
-  echo "$sub"
+  echo "$1"
 }
 
 # ─────────────────────────────────────────
@@ -105,7 +94,7 @@ run_pre_eval_gate() {
   # current_agent가 generator가 아닌 경우 (예: dispatcher로 리라우팅된 상태),
   # completed_agents에서 마지막 generator를 찾는다
   case "$source_agent" in
-    generator-frontend|generator-frontend-flutter)
+    generator-frontend)
       location="frontend"
       checks_key="frontend_checks"
       ;;
@@ -118,7 +107,7 @@ run_pre_eval_gate() {
       local last_gen
       last_gen=$(jq -r '.completed_agents // [] | map(select(startswith("generator-"))) | last // empty' "$PROGRESS" 2>/dev/null)
       case "$last_gen" in
-        generator-frontend|generator-frontend-flutter)
+        generator-frontend)
           location="frontend"
           checks_key="frontend_checks"
           ;;
