@@ -77,36 +77,45 @@ fi
 # ══════════════════════════════════════════
 # Layout Construction
 # ══════════════════════════════════════════
-# Step 1: Create session → Pane 0 = Main (Control Center)
-tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50
+# ══════════════════════════════════════════
+# Pane layout:
+#   0 = Dashboard (top-left, auto-refresh)
+#   1 = Monitor (top-right, compact)
+#   2 = Agent Session (mid-right, claude)
+#   3 = Eval Review (bottom-right)
+#   4 = Control Prompt (bottom-left, interactive)
+# ══════════════════════════════════════════
 
-# Step 2: Split right column (45% width) → Pane 1 = Monitor (top-right, compact)
+# Step 1: Create session → Pane 0 = Dashboard (top-left)
+tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50 \
+  "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"'"
+
+# Step 2: Split right column (45%) → Pane 1 = Monitor (top-right, compact)
 tmux split-window -h -p 45 -t "$SESSION_NAME" -c "$PROJECT_ROOT" \
   "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'"
 
-# Step 3: Split Pane 1 vertically → Pane 2 = Agent Session (mid-right)
-# Monitor gets ~20% of right column height, remaining 80% split below
+# Step 3: Split Pane 1 vertically (80% below) → Pane 2 = Agent Session
 tmux split-window -v -p 80 -t "${SESSION_NAME}.1" -c "$PROJECT_ROOT"
-
-# Pane 2 = Agent Session (interactive shell, will run claude)
 tmux send-keys -t "${SESSION_NAME}.2" "$CLAUDE_CMD" Enter
 
-# Step 4: Split Pane 2 vertically → Pane 3 = Eval Review (bottom-right)
-# Agent Session and Eval Review split 1:1
+# Step 4: Split Pane 2 vertically (50%) → Pane 3 = Eval Review
 tmux split-window -v -p 50 -t "${SESSION_NAME}.2" -c "$PROJECT_ROOT" \
   "exec bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-eval-watcher.sh\" \"${PROJECT_ROOT}\" ${USE_AI}'"
 
-# ── Launch Dashboard in Main pane ──
-tmux send-keys -t "${SESSION_NAME}.0" "bash ${SCRIPT_DIR}/harness-dashboard.sh '${PROJECT_ROOT}'" Enter
+# Step 5: Split Dashboard (Pane 0) vertically → Pane 4 = Control Prompt (bottom-left)
+# Dashboard gets ~75% height, Control Prompt gets ~25%
+tmux split-window -v -p 25 -t "${SESSION_NAME}.0" -c "$PROJECT_ROOT"
+tmux send-keys -t "${SESSION_NAME}.4" "bash ${SCRIPT_DIR}/harness-control.sh '${PROJECT_ROOT}'" Enter
 
-# ── Select Main pane as active ──
-tmux select-pane -t "${SESSION_NAME}.0"
+# ── Select Control Prompt as active (where user types) ──
+tmux select-pane -t "${SESSION_NAME}.4"
 
 # ── Pane titles ──
-tmux select-pane -t "${SESSION_NAME}.0" -T "Control Center"
+tmux select-pane -t "${SESSION_NAME}.0" -T "Dashboard"
 tmux select-pane -t "${SESSION_NAME}.1" -T "Monitor"
 tmux select-pane -t "${SESSION_NAME}.2" -T "Agent Session"
 tmux select-pane -t "${SESSION_NAME}.3" -T "Eval Review"
+tmux select-pane -t "${SESSION_NAME}.4" -T "Control"
 
 tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
 tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true

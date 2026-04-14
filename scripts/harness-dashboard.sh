@@ -260,12 +260,9 @@ render_agent_info() {
 }
 
 # ══════════════════════════════════════════
-# Full dashboard render
+# Full dashboard render (in-place update)
 # ══════════════════════════════════════════
 render_dashboard() {
-  tput cup 0 0 2>/dev/null
-  tput civis 2>/dev/null
-
   local buf
   buf=$(
     render_header
@@ -280,190 +277,23 @@ render_dashboard() {
 
     render_agent_info
   )
+
+  tput civis 2>/dev/null
+  tput cup 0 0 2>/dev/null
   echo "$buf"
   tput ed 2>/dev/null
   tput cnorm 2>/dev/null
 }
 
 # ══════════════════════════════════════════
-# Command handlers
+# Main — Auto-refresh dashboard loop
 # ══════════════════════════════════════════
+tput civis 2>/dev/null
+trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
 
-cmd_log() {
-  local msg="$1"
-  if [ -z "$msg" ]; then
-    echo -e "  ${RED}Usage: log <message>${RESET}"
-    return
-  fi
-
-  local ts
-  ts=$(date +"%Y-%m-%d")
-  echo "${ts} | manual | note | ${msg}" >> "$PROGRESS_LOG"
-  echo -e "  ${GREEN}Logged:${RESET} ${msg}"
-}
-
-cmd_clear_fail() {
-  if [ ! -f "$PROGRESS" ]; then return; fi
-
-  jq '.failure = {agent: null, location: null, message: null, retry_target: null} |
-      .sprint.status = "in_progress" |
-      .sprint.retry_count = 0 |
-      .agent_status = "completed"' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
-  echo -e "  ${GREEN}Failure state cleared.${RESET}"
-}
-
-cmd_next() {
-  # Find the Agent Session pane and send the next agent command
-  local tmux_target="harness-studio.2"  # Agent Session pane
-
-  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
-    echo -e "  ${RED}tmux session not found. Run inside harness-studio.${RESET}"
-    return
-  fi
-
-  local next_agent
-  next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
-
-  if [ "$next_agent" = "none" ] || [ "$next_agent" = "null" ]; then
-    echo -e "  ${YELLOW}No next agent in queue.${RESET}"
-    return
-  fi
-
-  echo -e "  ${CYAN}Starting ${next_agent} in Agent Session pane...${RESET}"
-
-  # Log the manual intervention
-  local ts
-  ts=$(date +"%Y-%m-%d")
-  echo "${ts} | manual | start-agent | ${next_agent}" >> "$PROGRESS_LOG"
-
-  # Send command to Agent Session pane
-  tmux send-keys -t "$tmux_target" "/harness-${next_agent}" Enter
-}
-
-cmd_retry() {
-  local tmux_target="harness-studio.2"
-
-  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
-    echo -e "  ${RED}tmux session not found.${RESET}"
-    return
-  fi
-
-  local current_agent
-  current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
-
-  if [ "$current_agent" = "none" ] || [ "$current_agent" = "null" ]; then
-    echo -e "  ${YELLOW}No current agent to retry.${RESET}"
-    return
-  fi
-
-  echo -e "  ${CYAN}Retrying ${current_agent} in Agent Session pane...${RESET}"
-
-  local ts
-  ts=$(date +"%Y-%m-%d")
-  echo "${ts} | manual | retry | ${current_agent}" >> "$PROGRESS_LOG"
-
-  tmux send-keys -t "$tmux_target" "/harness-${current_agent}" Enter
-}
-
-cmd_stop() {
-  local tmux_target="harness-studio.2"
-
-  if ! tmux list-panes -t harness-studio 2>/dev/null | grep -q .; then
-    echo -e "  ${RED}tmux session not found.${RESET}"
-    return
-  fi
-
-  echo -e "  ${YELLOW}Sending Ctrl+C to Agent Session...${RESET}"
-  tmux send-keys -t "$tmux_target" C-c
-
-  local ts
-  ts=$(date +"%Y-%m-%d")
-  echo "${ts} | manual | stop | user-initiated" >> "$PROGRESS_LOG"
-}
-
-show_help() {
-  echo ""
-  echo -e "  ${BOLD}Commands${RESET}"
-  echo -e "  ${CYAN}status${RESET} / ${CYAN}s${RESET}          Refresh dashboard"
-  echo -e "  ${CYAN}next${RESET}   / ${CYAN}n${RESET}          Start next agent in Agent Session"
-  echo -e "  ${CYAN}retry${RESET}  / ${CYAN}r${RESET}          Retry current agent"
-  echo -e "  ${CYAN}stop${RESET}              Send Ctrl+C to Agent Session"
-  echo -e "  ${CYAN}log${RESET} <message>     Add note to progress.log"
-  echo -e "  ${CYAN}clear-fail${RESET}        Clear failure state"
-  echo -e "  ${CYAN}help${RESET}  / ${CYAN}h${RESET}          Show this help"
-  echo -e "  ${CYAN}quit${RESET}  / ${CYAN}q${RESET}          Exit dashboard"
-  echo ""
-}
-
-# ══════════════════════════════════════════
-# Main — Interactive loop
-# ══════════════════════════════════════════
 clear
-render_dashboard
-
-echo ""
-echo -e "  ${DIM}Type 'help' for commands. Dashboard auto-refreshes every 5s.${RESET}"
-echo ""
-
-# Background auto-refresh
-(
-  while true; do
-    sleep 5
-    # Signal main process to refresh
-    kill -USR1 $$ 2>/dev/null || exit 0
-  done
-) &
-REFRESH_PID=$!
-
-# Trap USR1 to refresh dashboard
-trap 'render_dashboard' USR1
-trap 'kill $REFRESH_PID 2>/dev/null; exit 0' EXIT INT TERM
 
 while true; do
-  echo -ne "  ${BOLD}harness>${RESET} "
-  # Read with timeout so USR1 can interrupt
-  if read -t 5 -r input; then
-    # Trim whitespace
-    input=$(echo "$input" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-    case "$input" in
-      status|s)
-        render_dashboard
-        ;;
-      next|n)
-        cmd_next
-        ;;
-      retry|r)
-        cmd_retry
-        ;;
-      stop)
-        cmd_stop
-        ;;
-      log\ *)
-        cmd_log "${input#log }"
-        ;;
-      clear-fail)
-        cmd_clear_fail
-        ;;
-      help|h)
-        show_help
-        ;;
-      quit|q)
-        echo -e "  ${DIM}Goodbye.${RESET}"
-        exit 0
-        ;;
-      "")
-        # Empty input — just refresh
-        render_dashboard
-        ;;
-      *)
-        # Unknown command — treat as manual note
-        echo -e "  ${DIM}Unknown command. Logging as note.${RESET}"
-        cmd_log "$input"
-        ;;
-    esac
-  else
-    # Timeout — auto-refresh
-    render_dashboard
-  fi
+  render_dashboard
+  sleep 3
 done

@@ -225,6 +225,7 @@ function installScripts() {
     'harness-monitor.sh',
     'harness-eval-watcher.sh',
     'harness-tmux.sh',
+    'harness-control.sh',
   ]);
 
   if (fs.existsSync(scriptsSrc)) {
