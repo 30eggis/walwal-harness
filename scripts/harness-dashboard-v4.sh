@@ -149,10 +149,54 @@ render_feature_list() {
   echo ""
 }
 
+render_prompt_history() {
+  local log_file="$PROJECT_ROOT/.harness/progress.log"
+  if [ ! -f "$log_file" ]; then return; fi
+
+  # Get terminal height to limit display
+  local term_h
+  term_h=$(tput lines 2>/dev/null || echo 50)
+  local max_lines=10  # show latest 10 entries
+
+  echo -e "  ${BOLD}Prompt History${RESET} ${DIM}(newest first)${RESET}"
+
+  # Read non-comment lines, reverse (newest first), take max_lines
+  grep -v '^#' "$log_file" 2>/dev/null | grep -v '^$' | tail -r 2>/dev/null | head -"$max_lines" | \
+  while IFS= read -r line; do
+    # Parse: date | agent | action | detail
+    local ts agent action detail
+    ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
+    agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
+    action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
+    detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
+
+    local short_ts icon color
+    short_ts=$(echo "$ts" | sed 's/^[0-9]*-//')
+
+    case "$agent" in
+      dispatcher*|dispatch) icon="▸"; color="$MAGENTA" ;;
+      team-*)               icon="⚡"; color="$CYAN" ;;
+      manual|user)          icon="★"; color="$BOLD" ;;
+      planner*)             icon="□"; color="$YELLOW" ;;
+      generator*|gen*)      icon="▶"; color="$GREEN" ;;
+      eval*)                icon="✦"; color="$RED" ;;
+      system)               icon="⚙"; color="$DIM" ;;
+      *)                    icon="·"; color="$DIM" ;;
+    esac
+
+    if [ ${#detail} -gt 45 ]; then detail="${detail:0:43}.."; fi
+
+    echo -e "  ${color}${icon}${RESET} ${DIM}${short_ts}${RESET} ${agent} ${DIM}${action}${RESET} ${detail}"
+  done
+
+  echo ""
+}
+
 render_all() {
   render_header
   render_queue_summary
   render_teams
+  render_prompt_history
   render_feature_list
   echo -e "  ${DIM}Refreshing every 3s${RESET}"
 }

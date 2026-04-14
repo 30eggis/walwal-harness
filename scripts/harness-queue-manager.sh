@@ -42,6 +42,25 @@ fi
 FEATURES="$PROJECT_ROOT/.harness/actions/feature-list.json"
 QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
 CONFIG="$PROJECT_ROOT/.harness/config.json"
+QUEUE_LOCK="$PROJECT_ROOT/.harness/.queue-lock"
+
+# ── Atomic queue lock — prevent race conditions between teams ──
+acquire_queue_lock() {
+  local max_wait=30 waited=0
+  while ! mkdir "$QUEUE_LOCK" 2>/dev/null; do
+    sleep 0.1
+    waited=$((waited + 1))
+    if [ "$waited" -ge $((max_wait * 10)) ]; then
+      rm -rf "$QUEUE_LOCK"
+      mkdir "$QUEUE_LOCK" 2>/dev/null || true
+      break
+    fi
+  done
+}
+
+release_queue_lock() {
+  rm -rf "$QUEUE_LOCK" 2>/dev/null || true
+}
 
 # ── Concurrency from config ──
 CONCURRENCY=3
@@ -122,12 +141,14 @@ cmd_dequeue() {
   if [ -z "$team_id" ]; then echo "[queue] Usage: dequeue <team_id>"; exit 1; fi
   if [ ! -f "$QUEUE" ]; then echo "[queue] Run 'init' first."; exit 1; fi
 
+  acquire_queue_lock
+
   local feature
   feature=$(jq -r '.queue.ready[0] // empty' "$QUEUE")
 
   if [ -z "$feature" ]; then
+    release_queue_lock
     echo "[queue] No features in ready queue."
-    # Check if all done
     local in_prog blocked
     in_prog=$(jq '.queue.in_progress | length' "$QUEUE")
     blocked=$(jq '.queue.blocked | length' "$QUEUE")
@@ -137,13 +158,13 @@ cmd_dequeue() {
     return 1
   fi
 
-  # Move feature from ready → in_progress, assign to team
   jq --arg fid "$feature" --arg tid "$team_id" '
     .queue.ready -= [$fid] |
     .queue.in_progress[$fid] = { team: ($tid | tonumber), phase: "gen", attempt: 1 } |
     .teams[$tid] = { status: "busy", feature: $fid, branch: ("feature/" + $fid), pid: null }
   ' "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
 
+  release_queue_lock
   echo "$feature"
 }
 
@@ -155,11 +176,11 @@ cmd_pass() {
   if [ -z "$fid" ]; then echo "[queue] Usage: pass <feature_id>"; exit 1; fi
   if [ ! -f "$QUEUE" ]; then echo "[queue] Run 'init' first."; exit 1; fi
 
-  # Get team that was working on this feature
+  acquire_queue_lock
+
   local team_id
   team_id=$(jq -r --arg fid "$fid" '.queue.in_progress[$fid].team // empty' "$QUEUE")
 
-  # Move from in_progress → passed, free team, unblock dependents
   jq --arg fid "$fid" --arg tid "${team_id:-0}" '
     # Remove from in_progress
     del(.queue.in_progress[$fid]) |
@@ -188,6 +209,7 @@ cmd_pass() {
 
   local newly_ready
   newly_ready=$(jq -r '.queue.ready | join(", ")' "$QUEUE")
+  release_queue_lock
   echo "[queue] $fid PASSED. Ready: [$newly_ready]"
 }
 
@@ -198,6 +220,8 @@ cmd_fail() {
   local fid="${1:-}"
   if [ -z "$fid" ]; then echo "[queue] Usage: fail <feature_id>"; exit 1; fi
   if [ ! -f "$QUEUE" ]; then exit 1; fi
+
+  acquire_queue_lock
 
   local team_id
   team_id=$(jq -r --arg fid "$fid" '.queue.in_progress[$fid].team // empty' "$QUEUE")
@@ -211,6 +235,7 @@ cmd_fail() {
     else . end)
   ' "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
 
+  release_queue_lock
   echo "[queue] $fid FAILED."
 }
 
@@ -239,6 +264,8 @@ cmd_update_phase() {
     exit 1
   fi
 
+  acquire_queue_lock
+
   local jq_expr
   jq_expr=".queue.in_progress[\"$fid\"].phase = \"$phase\""
   if [ -n "$attempt" ]; then
@@ -246,6 +273,7 @@ cmd_update_phase() {
   fi
 
   jq "$jq_expr" "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
+  release_queue_lock
 }
 
 # ══════════════════════════════════════════
