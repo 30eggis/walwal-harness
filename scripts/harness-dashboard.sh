@@ -317,6 +317,46 @@ render_team_bottleneck() {
 }
 
 # ══════════════════════════════════════════
+# Archive Prompt — 처리 완료된 프롬프트 목록
+# ══════════════════════════════════════════
+render_archive_prompts() {
+  if [ ! -f "$PROGRESS_LOG" ]; then return; fi
+
+  # user-prompt 엔트리 중 이후에 result/pass/completed 액션이 있는 것 = 처리 완료
+  local all_prompts
+  all_prompts=$(grep '| user-prompt |' "$PROGRESS_LOG" 2>/dev/null)
+  if [ -z "$all_prompts" ]; then return; fi
+
+  local total_prompts
+  total_prompts=$(echo "$all_prompts" | wc -l | tr -d ' ')
+
+  # 마지막 프롬프트를 제외한 모든 프롬프트 = archived (처리 완료)
+  local archived
+  if [ "$total_prompts" -le 1 ]; then return; fi
+  archived=$(echo "$all_prompts" | head -n $((total_prompts - 1)) | tail -8)
+
+  echo ""
+  echo -e "${BOLD}Archive Prompt${RESET}  ${DIM}(처리 완료)${RESET}"
+
+  echo "$archived" | while IFS= read -r line; do
+    local ts detail
+    ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
+    detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
+
+    local short_ts
+    short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}' | tail -1 || echo "$ts")
+
+    if [ ${#detail} -gt 45 ]; then detail="${detail:0:43}.."; fi
+
+    echo -e "  ${GREEN}✓${RESET} ${DIM}${short_ts}${RESET}  ${detail}"
+  done
+
+  if [ "$total_prompts" -gt 9 ]; then
+    echo -e "  ${DIM}… +$((total_prompts - 9)) more${RESET}"
+  fi
+}
+
+# ══════════════════════════════════════════
 # Render dispatch
 # ══════════════════════════════════════════
 render_dashboard() {
@@ -331,6 +371,7 @@ render_dashboard() {
       render_team_status
       render_team_features
       render_team_bottleneck
+      render_archive_prompts
       ;;
     *)
       render_solo_sprint_overview
@@ -341,8 +382,7 @@ render_dashboard() {
       fi
 
       render_solo_agent_info
-      echo ""
-      render_solo_prompt_history
+      render_archive_prompts
       ;;
   esac
 }
