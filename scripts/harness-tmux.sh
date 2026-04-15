@@ -181,7 +181,12 @@ elif ! tty -s 2>/dev/null; then
   # Non-terminal environment (e.g., Claude Code agent session)
   # Try opening Terminal.app on macOS, otherwise detach silently
   if [ "$(uname)" = "Darwin" ]; then
-    osascript -e "tell application \"Terminal\" to do script \"tmux attach -t $SESSION_NAME\"" 2>/dev/null && \
+    osascript -e "
+      tell application \"Terminal\"
+        do script \"tmux attach -t $SESSION_NAME\"
+        activate
+      end tell
+    " 2>/dev/null && \
       echo "OPENED_TERMINAL=true" || echo "Layout ready"
   else
     echo "Session created (non-terminal). Attach: tmux attach -t $SESSION_NAME"

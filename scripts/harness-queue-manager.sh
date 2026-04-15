@@ -246,11 +246,14 @@ cmd_requeue() {
   local fid="${1:-}"
   if [ -z "$fid" ]; then echo "[queue] Usage: requeue <feature_id>"; exit 1; fi
 
+  acquire_queue_lock
+
   jq --arg fid "$fid" '
     .queue.failed -= [$fid] |
     .queue.ready += [$fid]
   ' "$QUEUE" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
 
+  release_queue_lock
   echo "[queue] $fid requeued to ready."
 }
 
