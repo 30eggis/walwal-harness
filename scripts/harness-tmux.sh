@@ -3,13 +3,13 @@
 #
 # Team Mode (--team):
 # ┌──────────────┬──────────────┬──────────────┐
-# │  Prompt      │  Dashboard   │   TEAM 1     │
-# │  History     │  (queue +    │  Gen | Eval   │
-# │              │   status)    ├──────────────┤
-# ├──────────────┤              │   TEAM 2     │
-# │  Controller  │              │  Gen | Eval   │
-# │  (Claude /   │              ├──────────────┤
-# │   Codex)     │              │   TEAM 3     │
+# │              │              │   TEAM 1     │
+# │  Prompt      │  Dashboard   │  Gen | Eval   │
+# │  History     │  (queue +    ├──────────────┤
+# │              │   status +   │   TEAM 2     │
+# │              │   archive)   │  Gen | Eval   │
+# │              │              ├──────────────┤
+# │              │              │   TEAM 3     │
 # └──────────────┴──────────────┴──────────────┘
 #
 # Rendering strategy:
@@ -124,12 +124,6 @@ launch_iterm2_team() {
               end tell
             end tell
           end tell
-
-          -- Split down → Controller (bottom-left)
-          set ctrlPane to (split horizontally with default profile)
-          tell ctrlPane
-            write text "cd '${PROJECT_ROOT}' && clear"
-          end tell
         end tell
       end tell
     end tell
@@ -185,19 +179,16 @@ launch_tmux_team() {
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 2'")
   PANE_T3=$(tmux split-window -v -p 50 -t "$PANE_T2" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 3'")
-  PANE_CTRL=$(tmux split-window -v -p 55 -t "$PANE_LEFT" -c "$PROJECT_ROOT" -P -F '#{pane_id}')
 
   tmux send-keys -t "$PANE_LEFT" "bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"" Enter
   tmux send-keys -t "$PANE_MID" "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
-  tmux send-keys -t "$PANE_CTRL" "clear" Enter
 
   tmux select-pane -t "$PANE_LEFT"  -T "Prompt History"
-  tmux select-pane -t "$PANE_CTRL"  -T "Controller"
   tmux select-pane -t "$PANE_MID"   -T "Dashboard"
   tmux select-pane -t "$PANE_T1"    -T "TEAM 1"
   tmux select-pane -t "$PANE_T2"    -T "TEAM 2"
   tmux select-pane -t "$PANE_T3"    -T "TEAM 3"
-  tmux select-pane -t "$PANE_CTRL"
+  tmux select-pane -t "$PANE_LEFT"
 
   tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
   tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
