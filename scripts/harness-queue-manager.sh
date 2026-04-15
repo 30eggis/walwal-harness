@@ -65,14 +65,18 @@ release_queue_lock() {
 # ── Concurrency from config ──
 CONCURRENCY=3
 if [ -f "$CONFIG" ]; then
-  _c=$(jq -r '.flow.parallel.concurrency // 3' "$CONFIG" 2>/dev/null)
+  _c=$(jq -r '.flow.team.concurrency // .flow.parallel.concurrency // 3' "$CONFIG" 2>/dev/null)
   if [ "$_c" -gt 0 ] 2>/dev/null; then CONCURRENCY=$_c; fi
 fi
 
 # ══════════════════════════════════════════
 # init — Build queue from feature-list.json
+# Usage: init [sprint_number]
+#   sprint_number: optional, filter features by sprint (default: all)
 # ══════════════════════════════════════════
 cmd_init() {
+  local sprint_filter="${1:-all}"
+
   if [ ! -f "$FEATURES" ]; then
     echo "[queue] feature-list.json not found."
     exit 1
@@ -80,7 +84,7 @@ cmd_init() {
 
   # Build dependency graph and topological sort
   # Output: feature-queue.json with ready (no deps) and blocked (has deps)
-  jq --argjson concurrency "$CONCURRENCY" '
+  jq --argjson concurrency "$CONCURRENCY" --arg sprint "$sprint_filter" '
     # Build passed set (features already passed by evaluator)
     def passed_set:
       [.features[] | select(
@@ -88,9 +92,15 @@ cmd_init() {
         ((.passes // []) | any(. == "evaluator-functional"))
       ) | .id] ;
 
+    # Filter features by sprint if specified
+    def target_features:
+      if $sprint == "all" then .features
+      else [.features[] | select((.sprint // 1) == ($sprint | tonumber))]
+      end ;
+
     # Separate ready vs blocked
-    def classify(passed):
-      reduce .features[] as $f (
+    def classify(features; passed):
+      reduce features[] as $f (
         { ready: [], blocked: {} };
         ($f.depends_on // []) as $deps |
         if ($f.id | IN(passed[])) then .  # already passed, skip
@@ -104,10 +114,12 @@ cmd_init() {
       ) ;
 
     passed_set as $passed |
-    classify($passed) as $classified |
+    target_features as $targets |
+    classify($targets; $passed) as $classified |
     {
-      version: "4.0",
+      version: "5.0",
       concurrency: $concurrency,
+      current_sprint: (if $sprint == "all" then null else ($sprint | tonumber) end),
       queue: {
         ready: $classified.ready,
         blocked: $classified.blocked,
@@ -129,8 +141,67 @@ cmd_init() {
   blocked_count=$(jq '.queue.blocked | length' "$QUEUE")
   passed_count=$(jq '.queue.passed | length' "$QUEUE")
 
-  echo "[queue] Initialized: $ready_count ready, $blocked_count blocked, $passed_count already passed"
+  echo "[queue] Initialized (sprint=$sprint_filter): $ready_count ready, $blocked_count blocked, $passed_count already passed"
   echo "[queue] Concurrency: $CONCURRENCY teams"
+}
+
+# ══════════════════════════════════════════
+# next-sprint — Auto-advance to next sprint
+# Checks if current sprint is complete, loads next sprint features
+# ══════════════════════════════════════════
+cmd_next_sprint() {
+  if [ ! -f "$QUEUE" ]; then echo "[queue] Run 'init' first."; exit 1; fi
+  if [ ! -f "$FEATURES" ]; then echo "[queue] feature-list.json not found."; exit 1; fi
+
+  acquire_queue_lock
+
+  local ready in_prog failed
+  ready=$(jq '.queue.ready | length' "$QUEUE" 2>/dev/null || echo 0)
+  in_prog=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null || echo 0)
+  failed=$(jq '.queue.failed | length' "$QUEUE" 2>/dev/null || echo 0)
+
+  # Current sprint still has work
+  if [ "$ready" -gt 0 ] || [ "$in_prog" -gt 0 ]; then
+    release_queue_lock
+    echo "[queue] Current sprint still active: $ready ready, $in_prog in progress"
+    return 1
+  fi
+
+  # Failed features block advancement
+  if [ "$failed" -gt 0 ]; then
+    release_queue_lock
+    echo "[queue] Cannot advance: $failed failed features. Requeue or fix them first."
+    return 1
+  fi
+
+  # Find current sprint number
+  local current_sprint
+  current_sprint=$(jq -r '.current_sprint // 0' "$QUEUE" 2>/dev/null)
+  if [ "$current_sprint" = "null" ] || [ "$current_sprint" = "0" ]; then
+    # Detect from passed features
+    current_sprint=$(jq -r --slurpfile q "$QUEUE" '
+      [.features[] | select(.id as $fid | $q[0].queue.passed | index($fid)) | .sprint // 1] | max // 1
+    ' "$FEATURES" 2>/dev/null)
+  fi
+
+  local next_sprint=$((current_sprint + 1))
+
+  # Check if next sprint features exist
+  local next_count
+  next_count=$(jq --arg s "$next_sprint" '[.features[] | select((.sprint // 1) == ($s | tonumber))] | length' "$FEATURES" 2>/dev/null)
+
+  if [ "$next_count" -eq 0 ]; then
+    release_queue_lock
+    echo "[queue] ALL SPRINTS COMPLETE. No Sprint $next_sprint features found."
+    echo "[queue] Total passed: $(jq '.queue.passed | length' "$QUEUE")"
+    return 0
+  fi
+
+  release_queue_lock
+
+  # Re-init with next sprint (preserves passed from previous sprints)
+  echo "[queue] Sprint $current_sprint complete! Advancing to Sprint $next_sprint ($next_count features)"
+  cmd_init "$next_sprint"
 }
 
 # ══════════════════════════════════════════
@@ -355,16 +426,17 @@ cmd_recover() {
 
 # ── Dispatch ──
 case "$CMD" in
-  init)         cmd_init ;;
-  dequeue)      cmd_dequeue "$@" ;;
-  pass)         cmd_pass "$@" ;;
-  fail)         cmd_fail "$@" ;;
-  requeue)      cmd_requeue "$@" ;;
-  update_phase) cmd_update_phase "$@" ;;
-  recover)      cmd_recover ;;
-  status)       cmd_status ;;
+  init)          cmd_init "$@" ;;
+  dequeue)       cmd_dequeue "$@" ;;
+  pass)          cmd_pass "$@" ;;
+  fail)          cmd_fail "$@" ;;
+  requeue)       cmd_requeue "$@" ;;
+  update_phase)  cmd_update_phase "$@" ;;
+  recover)       cmd_recover ;;
+  next-sprint)   cmd_next_sprint ;;
+  status)        cmd_status ;;
   *)
-    echo "Usage: harness-queue-manager.sh <init|dequeue|pass|fail|requeue|recover|update_phase|status> [args]"
+    echo "Usage: harness-queue-manager.sh <init|dequeue|pass|fail|requeue|recover|next-sprint|update_phase|status> [args]"
     exit 1
     ;;
 esac

@@ -242,16 +242,31 @@ logev fail "{FEATURE_ID} FAIL #{ATTEMPT} — {사유요약}"
    NEW_FEATURE=$(bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" dequeue {N} "$HARNESS_ROOT")
    logev gen-start "$NEW_FEATURE auto-acquired"
    ```
-3. `ready=0`이면 → "Team-{N} 대기 중 — 모든 할당 피처 완료" 반환
+3. `ready=0`이면 → next-sprint 시도:
+   ```bash
+   NEXT=$(bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" next-sprint "$HARNESS_ROOT" 2>&1)
+   if echo "$NEXT" | grep -q "Advancing"; then
+     NEW_FEATURE=$(bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" dequeue {N} "$HARNESS_ROOT")
+     logev gen-start "$NEW_FEATURE auto-acquired (next sprint)"
+   else
+     logev result "Team-{N} 완료 — 모든 Sprint 처리됨"
+   fi
+   ```
 ```
 
-### Step 5: 결과 수집 및 다음 라운드
+### Step 5: 결과 수집 및 다음 라운드 (자동 Sprint 전환 포함)
 
 모든 Team Agent가 완료되면:
 1. 각 Agent 반환 메시지에서 PASS/FAIL 확인
 2. Queue 상태 재확인: `bash scripts/harness-queue-manager.sh status .`
 3. ready 큐에 새로 unblock된 feature가 있으면 → **Step 3으로 돌아가서** 추가 팀 생성
-4. ready=0, in_progress=0이면 → 최종 결과 보고
+4. ready=0, in_progress=0이면 → **자동 Sprint 전환 시도**:
+   ```bash
+   bash scripts/harness-queue-manager.sh next-sprint .
+   ```
+   - `"Advancing to Sprint N"` → 새 Sprint 피처가 queue에 로드됨 → **Step 3으로 돌아가서** 팀 생성
+   - `"ALL SPRINTS COMPLETE"` → 전체 프로젝트 완료 보고
+   - `"Cannot advance: N failed"` → 실패 피처 해결 필요, 사용자 개입 요청
 
 ## 핵심 원칙
 
