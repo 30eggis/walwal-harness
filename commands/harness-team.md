@@ -1,17 +1,23 @@
 # /harness-team — Team Mode 시작/재개
 
-Planner가 완료한 feature-list.json의 피처들을 3개 팀이 병렬로 Gen→Eval 사이클을 수행합니다.
+Planner가 완료한 feature-list.json의 피처들을 최대 3개 팀이 병렬로 Gen→Eval 사이클을 수행합니다.
+
+## 프로세스 설계 원칙
+
+1. **Worker = 1 Feature Only**: 각 Worker는 단일 피처만 처리하고 반환. 자동 다음 피처 획득하지 않음.
+2. **Lead = Orchestration Loop**: Lead가 Worker 완료 알림을 받고, merge → unblock 확인 → 새 Worker 생성을 반복.
+3. **Background Agent**: Worker를 `run_in_background: true`로 생성하여 Lead가 개별 완료에 즉시 반응.
+4. **Merge 후 재투입**: Worker PASS → Lead가 worktree merge → queue pass (unblock) → 새 Worker 생성.
 
 ## 실행 절차
 
 ### Step 0: 선행 조건 확인
 
 ```bash
-# Planner 아티팩트 확인
 [ -f .harness/actions/feature-list.json ] && [ -f .harness/actions/api-contract.json ] && echo "READY" || echo "NOT_READY"
 ```
 
-- **NOT_READY** → "Planner가 먼저 완료되어야 합니다. /harness-dispatcher 또는 프롬프트로 진행하세요." 안내 후 중단.
+- **NOT_READY** → "Planner가 먼저 완료되어야 합니다." 안내 후 중단.
 - **READY** → Step 1로 진행.
 
 ### Step 1: 모드 전환 + Queue 초기화
@@ -37,44 +43,110 @@ bash scripts/harness-queue-manager.sh status .
 bash scripts/harness-tmux.sh --team
 ```
 
-스크립트 출력을 확인합니다:
-- **`Layout ready`** → tmux 레이아웃 구축 완료. Step 3로.
-- **`OPENED_TERMINAL=true`** → 새 Terminal.app 창에 Studio 레이아웃이 자동 구축됨. Step 3로.
-- **`already set up`** → 이미 구축됨. Step 3로.
+### Step 3: 초기 Worker 생성
 
-### Step 3: Feature 할당 (dequeue)
-
-Queue status 결과를 확인하여 `ready` 큐에 feature가 있는지 확인합니다.
-ready feature 수와 설정된 concurrency(기본 3) 중 작은 값만큼 팀을 생성합니다.
-
-**각 팀마다** dequeue 명령으로 feature를 원자적으로 할당합니다:
+Queue에서 ready 피처를 최대 3개 dequeue하고, **각각 background Agent로 생성**합니다.
 
 ```bash
-bash scripts/harness-queue-manager.sh dequeue {TEAM_NUMBER} .
+# 각 팀마다 dequeue
+bash scripts/harness-queue-manager.sh dequeue 1 .
+bash scripts/harness-queue-manager.sh dequeue 2 .
+bash scripts/harness-queue-manager.sh dequeue 3 .
 ```
 
-dequeue 결과로 feature ID가 반환됩니다. 빈 결과면 해당 팀은 생성하지 않습니다.
-
-### Step 4: Agent 도구로 팀 생성 (Gen↔Eval 분리 사이클)
-
-dequeue로 할당받은 feature마다 **Agent 도구**를 호출합니다.
-**반드시 `isolation: "worktree"`를 사용**하여 각 팀이 독립된 코드 복사본에서 작업합니다.
-
-**독립적인 팀들은 단일 메시지에서 병렬로 호출**하세요 (한 번의 응답에 여러 Agent 도구 호출).
+dequeue 성공한 피처마다 **background Agent**를 생성합니다:
 
 ```
 Agent({
   description: "Team-{N}: {FEATURE_ID}",
   isolation: "worktree",
+  run_in_background: true,
   prompt: "<아래 Team Worker 프롬프트>"
 })
 ```
 
-### Team Worker 프롬프트
+**중요: `run_in_background: true`로 생성**하면 Lead가 블록되지 않고, 각 Worker 완료 시 알림을 받습니다.
+
+초기 생성 후 **Step 4 (Orchestration Loop)**로 진입합니다.
+
+### Step 4: Orchestration Loop (Lead 핵심 루프)
+
+**이 루프가 Team Mode의 핵심입니다. 모든 Sprint가 완료될 때까지 반복합니다.**
 
 ```
-당신은 Harness Team-{N} 워커입니다. 하나의 Feature에 대해 Gen→Eval 사이클을 수행합니다.
-완료 후 자동으로 다음 Feature를 dequeue하여 연속 작업합니다.
+ORCHESTRATION LOOP:
+
+  Background Agent 완료 알림을 받으면:
+
+  1. Worker 결과 분석:
+     - PASS인 경우 → Step 4a (Merge + Unblock)
+     - FAIL (재시도 가능)인 경우 → Step 4b (Retry)
+     - ESCALATED인 경우 → 사용자에게 알림, 해당 팀 유휴
+
+  2. Queue 상태 확인:
+     bash scripts/harness-queue-manager.sh status .
+
+  3. ready > 0 이면:
+     → 새 Worker를 background Agent로 생성 (Step 3과 동일)
+     → LOOP 계속
+
+  4. ready = 0 AND in_progress > 0 이면:
+     → 다른 Worker 완료를 대기
+     → LOOP 계속
+
+  5. ready = 0 AND in_progress = 0 이면:
+     → Sprint 전환 시도:
+       bash scripts/harness-queue-manager.sh next-sprint .
+       - "Advancing" → Step 3으로 (새 Sprint 피처 dequeue + Worker 생성)
+       - "ALL SPRINTS COMPLETE" → 최종 보고. LOOP 종료.
+       - "Cannot advance" → 실패 피처 사용자 개입 요청. LOOP 종료.
+```
+
+#### Step 4a: Merge + Unblock (PASS 처리)
+
+Worker가 PASS로 반환되면:
+
+1. **Worktree branch 확인**: Agent 반환 결과에서 worktree path와 branch 확인
+2. **Main에 merge**:
+   ```bash
+   git merge {BRANCH_NAME} --no-edit
+   ```
+   - 충돌 시: 자동 해결 시도 → 실패 시 사용자 개입 요청
+3. **Queue 업데이트** (unblock 포함):
+   ```bash
+   bash scripts/harness-queue-manager.sh pass {FEATURE_ID} .
+   ```
+   → 의존 피처가 자동으로 blocked → ready로 전이
+4. **진행 로그**:
+   ```bash
+   echo "$(date +'%Y-%m-%d %H:%M') | lead | pass | {FEATURE_ID} merged + unblocked deps" >> .harness/progress.log
+   ```
+
+#### Step 4b: Retry (FAIL 처리)
+
+Worker가 FAIL (재시도 가능)로 반환되면:
+
+1. 시도 횟수 확인 (최대 5회)
+2. 5회 미만:
+   ```bash
+   bash scripts/harness-queue-manager.sh requeue {FEATURE_ID} .
+   bash scripts/harness-queue-manager.sh dequeue {TEAM_NUMBER} .
+   ```
+   → 새 background Agent Worker 생성 (이전 Eval feedback 포함)
+3. 5회 도달:
+   ```bash
+   bash scripts/harness-queue-manager.sh fail {FEATURE_ID} .
+   echo "$(date +'%Y-%m-%d %H:%M') | lead | escalate | {FEATURE_ID} ESCALATED after 5 attempts" >> .harness/progress.log
+   ```
+   → 사용자 개입 요청
+
+---
+
+## Team Worker 프롬프트
+
+```
+당신은 Harness Team-{N} 워커입니다. **단일 Feature**에 대해 Gen→Eval 사이클을 수행합니다.
+완료 후 결과를 반환합니다. 다음 Feature는 Lead가 할당합니다.
 
 ## 할당된 Feature
 - Feature ID: {FEATURE_ID}
@@ -83,224 +155,129 @@ Agent({
 
 ## 실시간 로깅 (필수)
 
-Monitor 패널에서 **각 에이전트(Gen / Eval / Result)가 지금 무엇을 하고 있는지**가 보여야 합니다.
-Phase 전환뿐 아니라 **내부 하위 단계**(파일 읽기, 파일 쓰기, 테스트 실행, AC 검증 등)까지
-progress.log에 한 줄씩 남기세요. 대시보드는 3초마다 tail합니다.
-
-**로깅 원칙**
-- 의미 있는 동작마다 **한 줄씩** 즉시 기록 (파일 단위가 아니라 행위 단위)
-- ACTION 토큰은 아래 표에서 선택 (Monitor가 아이콘/색을 매핑)
-- DETAIL은 구체적으로 — 파일명, AC 번호, 에러 메시지 요약, 결정 사유
+**로깅 설정:**
+```bash
+HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')
+LOG="$HARNESS_ROOT/.harness/progress.log"
+logev() { echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | $1 | $2" >> "$LOG"; }
+```
 
 | ACTION | 사용 시점 | DETAIL 예시 |
 |--------|-----------|-------------|
 | `gen-start`  | Gen Phase 시작 | `F-001 start — 6 AC` |
 | `gen-read`   | 소스/계약 읽기 | `read api-contract.json (POST /users)` |
 | `gen-write`  | 파일 생성/수정 | `write apps/service-user/src/user.controller.ts` |
-| `gen-test`   | 자체 게이트(tsc/eslint/jest) | `tsc OK · eslint 0 · jest 12/12` |
+| `gen-test`   | 자체 게이트 | `tsc OK · eslint 0 · jest 12/12` |
 | `gen-done`   | Gen Phase 종료 | `F-001 done — 5 files, 142 LOC` |
-| `eval-start` | Evaluator Agent 호출 시작 | `F-001 spawning evaluator` |
-| `eval-check` | AC 개별 검증 진행 | `AC-3 — verify POST /users returns 201` |
-| `eval-done`  | Eval 결과 수신 | `verdict=PASS score=2.95` |
-| `result` / `pass` | PASS 확정 | `F-001 PASS — queue.pass` |
-| `fail`       | FAIL 확정(재시도/최종) | `FAIL #1 — AC-2 missing` |
-| `escalate`   | 5회 초과 실패 | `F-001 ESCALATED — user intervention required` |
+| `eval-start` | Evaluator 시작 | `F-001 spawning evaluator` |
+| `eval-check` | AC 검증 | `AC-3 — verify POST /users returns 201` |
+| `eval-done`  | Eval 결과 | `verdict=PASS score=2.95` |
+| `result`     | PASS 확정 | `F-001 PASS` |
+| `fail`       | FAIL 확정 | `FAIL #1 — AC-2 missing` |
 
-**progress.log 기록** (하네스 루트의 progress.log에 append):
+**queue phase 업데이트:**
 ```bash
-echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | {ACTION} | {DETAIL}" >> {HARNESS_ROOT}/.harness/progress.log
+bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" update_phase {FEATURE_ID} {PHASE} "$HARNESS_ROOT"
 ```
-
-**queue phase 업데이트** (feature-queue.json의 팀 상태 갱신):
-```bash
-bash {HARNESS_ROOT}/scripts/harness-queue-manager.sh update_phase {FEATURE_ID} {PHASE} .
-```
-
-> {HARNESS_ROOT}는 worktree의 원본 프로젝트 경로입니다. `git worktree list` 첫 줄에서 확인 가능합니다.
-> 워커 시작 시 먼저 실행: `HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')`
 
 ## Phase 1: Generator (코드 생성)
 
-**시작 시 로깅:**
 ```bash
-HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')
-LOG="$HARNESS_ROOT/.harness/progress.log"
-logev() { echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | $1 | $2" >> "$LOG"; }
-
 logev gen-start "{FEATURE_ID} start"
 bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" update_phase {FEATURE_ID} gen "$HARNESS_ROOT"
 ```
 
-1. Feature 정보 확인 — **각 읽기마다 로그**:
-   ```bash
-   logev gen-read "feature-list.json → {FEATURE_ID}"
-   logev gen-read "api-contract.json → {관련 엔드포인트}"
-   ```
-   - `jq '.features[] | select(.id == "{FEATURE_ID}")' .harness/actions/feature-list.json`
-   - `.harness/actions/api-contract.json`에서 관련 엔드포인트 확인
-   - AC(Acceptance Criteria) 목록을 정확히 파악
+1. Feature 정보 확인 (feature-list.json, api-contract.json)
+2. 코드 생성 (AGENTS.md IA-MAP 준수, AC 전체 충족)
+3. Pre-eval 게이트 (tsc, eslint — 에러 있으면 직접 수정)
 
-2. 코드 생성 — **파일 쓰기마다 로그**:
-   ```bash
-   logev gen-write "apps/service-user/src/user.controller.ts"
-   logev gen-write "libs/shared-dto/src/user.dto.ts"
-   ```
-   - AGENTS.md의 IA-MAP에 따라 올바른 디렉토리에 코드 작성
-   - AC의 모든 항목을 충족하도록 구현
-
-3. Pre-eval 게이트 (자체) — **결과 로그**:
-   ```bash
-   logev gen-test "tsc OK · eslint 0w 0e · jest 12/12"
-   ```
-   - tsc (타입 체크) 실행
-   - eslint (린트) 실행
-   - 컴파일 에러가 있으면 직접 수정 (Eval에 넘기지 않음)
-
-**Gen 완료 로깅:**
 ```bash
-logev gen-done "{FEATURE_ID} done — {변경파일수} files, {LOC} LOC"
+logev gen-done "{FEATURE_ID} done — {파일수} files"
 ```
 
-## Phase 2: Evaluator (독립 평가 — Agent 도구 사용)
+## Phase 2: Evaluator (독립 평가)
 
-**Eval 시작 로깅:**
 ```bash
 logev eval-start "{FEATURE_ID} spawning evaluator"
 bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" update_phase {FEATURE_ID} eval "$HARNESS_ROOT"
 ```
 
-코드 생성이 완료되면 **별도 Agent를 생성하여 평가**합니다.
-이 Evaluator Agent는 당신(Generator)의 추론 과정을 모릅니다.
-오직 코드와 AC만 보고 판단합니다.
+**별도 Agent 생성** (Generator의 추론 과정을 모르는 독립 평가):
 
 ```
 Agent({
   description: "Eval: {FEATURE_ID}",
-  prompt: "<아래 Evaluator 프롬프트>"
-})
-```
-
-#### Evaluator 프롬프트
-
-```
-당신은 독립 Evaluator입니다. Generator가 작성한 코드를 AC 기준으로 냉정하게 평가합니다.
+  prompt: "당신은 독립 Evaluator입니다. Generator가 작성한 코드를 AC 기준으로 냉정하게 평가합니다.
 Generator의 의도나 추론 과정은 알 수 없습니다. 오직 코드와 결과만 봅니다.
 
 ## 평가 대상
 - Feature ID: {FEATURE_ID}
-- AC 확인: `jq '.features[] | select(.id == "{FEATURE_ID}").acceptance_criteria' .harness/actions/feature-list.json`
+- AC: jq '.features[] | select(.id == \"{FEATURE_ID}\").acceptance_criteria' .harness/actions/feature-list.json
 
 ## 평가 기준
-1. AC 100% 충족 여부 (부분 통과 = FAIL)
-2. api-contract.json과의 일치 여부 (엔드포인트, 요청/응답 스키마)
-3. tsc, eslint 통과 여부
-4. 보안 취약점 여부 (OWASP Top 10)
-5. 기존 코드와의 regression 여부
+1. AC 100% 충족 (부분 통과 = FAIL)
+2. api-contract.json 일치
+3. tsc/eslint 통과
+4. OWASP Top 10 보안
+5. Regression 여부
 
 ## 출력 형식
-반드시 아래 형식으로 결과를 반환하세요:
-
 VERDICT: PASS 또는 FAIL
 SCORE: X.XX / 3.00
 EVIDENCE:
 - AC-1: [PASS/FAIL] 근거
-- AC-2: [PASS/FAIL] 근거
 - ...
-FEEDBACK: (FAIL인 경우만) 구체적 수정 지시
+FEEDBACK: (FAIL만) 구체적 수정 지시"
+})
 ```
 
-## Phase 3: 결과 처리
+## Phase 3: 결과 처리 + 반환
 
-Evaluator Agent 결과를 확인합니다:
-
-### PASS인 경우 (VERDICT: PASS, SCORE >= 2.80):
+### PASS (SCORE >= 2.80):
 ```bash
-logev result "{FEATURE_ID} PASS score={SCORE} — merging"
-bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" pass {FEATURE_ID} "$HARNESS_ROOT"
+logev result "{FEATURE_ID} PASS score={SCORE}"
 ```
-변경 파일 목록과 AC 충족 요약을 Lead에게 반환.
+Lead에게 반환: `PASS | {FEATURE_ID} | score={SCORE} | files={변경파일목록}`
 
-### FAIL인 경우:
+### FAIL (재시도 가능):
 ```bash
-logev fail "{FEATURE_ID} FAIL #{ATTEMPT} — {사유요약}"
+logev fail "{FEATURE_ID} FAIL #{ATTEMPT} — {사유}"
 ```
-1. Evaluator의 FEEDBACK을 읽고 코드를 수정 (Phase 1로 돌아감)
-2. 수정 후 다시 Phase 2 (새 Evaluator Agent 생성 — 이전 Eval 컨텍스트 없음)
-3. 최대 **5회** 시도. 5회 모두 FAIL이면:
-   ```bash
-   logev escalate "{FEATURE_ID} ESCALATED after 5 attempts — user intervention required"
-   bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" fail {FEATURE_ID} "$HARNESS_ROOT"
-   ```
-   실패 사유와 마지막 Eval 결과를 Lead에게 반환. **사용자 개입을 요청**합니다.
+시도 횟수가 5회 미만이면:
+- Evaluator FEEDBACK으로 코드 수정 → Phase 1로 돌아감 (같은 Worker 내에서 재시도)
+- 새 Evaluator Agent 생성 (이전 Eval 기억 없음)
 
-## Phase 4: 자동 업무 획득
-
-피처 PASS 또는 최종 FAIL 처리 후:
-1. Queue 상태 확인: `bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" status "$HARNESS_ROOT"`
-2. `ready` 큐에 피처가 있으면 → dequeue → **새 Gen-Eval 루프 시작** (Phase 1부터 반복)
-   ```bash
-   NEW_FEATURE=$(bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" dequeue {N} "$HARNESS_ROOT")
-   logev gen-start "$NEW_FEATURE auto-acquired"
-   ```
-3. `ready=0`이면 → next-sprint 시도:
-   ```bash
-   NEXT=$(bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" next-sprint "$HARNESS_ROOT" 2>&1)
-   if echo "$NEXT" | grep -q "Advancing"; then
-     NEW_FEATURE=$(bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" dequeue {N} "$HARNESS_ROOT")
-     logev gen-start "$NEW_FEATURE auto-acquired (next sprint)"
-   else
-     logev result "Team-{N} 완료 — 모든 Sprint 처리됨"
-   fi
-   ```
+5회 모두 FAIL:
+```bash
+logev fail "{FEATURE_ID} FINAL FAIL after 5 attempts"
+```
+Lead에게 반환: `ESCALATED | {FEATURE_ID} | attempts=5 | last_feedback={마지막_피드백}`
 ```
 
-### Step 5: 결과 수집 + 재투입 루프 (반드시 반복)
-
-**중요: 이 Step은 모든 Agent가 반환될 때마다 반복 실행해야 합니다.**
-피처 PASS 시 blocked 피처가 unblock되므로, 유휴 팀에 즉시 새 피처를 할당해야 합니다.
-
-```
-LOOP:
-  1. 현재 라운드의 모든 Team Agent 결과 수집 (PASS/FAIL 확인)
-  2. Queue 상태 재확인:
-     bash scripts/harness-queue-manager.sh status .
-
-  3. ready > 0 이면:
-     → Step 3으로 돌아감 (새로 unblock된 피처를 dequeue하여 팀 생성)
-     → 최대 3팀까지 병렬 Agent 재생성
-     → 생성 후 다시 이 LOOP의 1번으로 돌아와 결과 대기
-
-  4. ready = 0 AND in_progress > 0 이면:
-     → 아직 작업 중인 팀이 있음. 해당 Agent 결과를 기다림
-     → 결과 수신 후 다시 이 LOOP의 1번으로 돌아감
-
-  5. ready = 0 AND in_progress = 0 이면:
-     → 현재 Sprint의 모든 피처 처리 완료
-     → 자동 Sprint 전환 시도:
-       bash scripts/harness-queue-manager.sh next-sprint .
-       - "Advancing to Sprint N" → Step 3으로 돌아가 팀 생성
-       - "ALL SPRINTS COMPLETE" → 전체 프로젝트 완료 보고. LOOP 종료.
-       - "Cannot advance: N failed" → 실패 피처 사용자 개입 요청. LOOP 종료.
-```
-
-**이 LOOP를 건너뛰지 마세요.** 1개 팀만 시작했더라도, 그 팀이 PASS하면 blocked가 풀려서 2~3개 팀을 동시에 돌릴 수 있습니다. LOOP를 돌아야 유휴 팀이 즉시 새 피처를 받습니다.
+---
 
 ## 핵심 원칙
 
+### Worker = 1 Feature Only
+- Worker는 할당된 단일 피처만 처리하고 반환
+- 다음 피처 dequeue, next-sprint 시도는 **Lead만** 수행
+- Worktree는 해당 피처 전용 — 다른 피처 작업 금지
+
+### Lead = Merge + Orchestrate
+- Worker PASS 시 Lead가 branch merge → queue pass → unblock
+- 새로 ready된 피처에 즉시 Worker 재생성
+- Sprint 전환도 Lead가 판단
+
+### Background Agent로 비차단 실행
+- `run_in_background: true`로 Worker 생성
+- Lead가 각 Worker 완료에 즉시 반응
+- 3팀이 서로 다른 속도로 작업해도 유휴 팀 즉시 재활용
+
 ### 자기 의식 편향 차단
-- Generator가 자기 코드를 평가하지 않음
-- Evaluator는 항상 새 Agent (Generator의 추론 과정을 모름)
-- FAIL 후 재시도 시에도 새 Evaluator를 생성 (이전 Eval 기억 없음)
-
-### 중복 방지
-- dequeue는 원자적 (lock 사용) — 같은 feature를 두 번 할당 불가
-- ready가 0이면 팀을 생성하지 않음
-
-### 격리
-- 각 팀은 `isolation: "worktree"`로 독립 코드 복사본에서 작업
-- 팀 간 코드 충돌 없음
+- Evaluator는 항상 새 Agent (Generator의 추론 과정 모름)
+- FAIL 후 재시도 시에도 새 Evaluator 생성
 
 ### 에스컬레이션 (5회 초과)
 - 5회 연속 FAIL 시 사용자 개입 요청
-- escalate 로그 기록 → Dashboard에 즉시 표시
-- 해당 팀은 다음 피처로 이동하지 않고 대기
+- 해당 피처는 failed 상태로 남음
+- 다른 피처는 계속 진행 (의존하지 않는 경우)
