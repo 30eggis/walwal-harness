@@ -254,19 +254,36 @@ logev fail "{FEATURE_ID} FAIL #{ATTEMPT} — {사유요약}"
    ```
 ```
 
-### Step 5: 결과 수집 및 다음 라운드 (자동 Sprint 전환 포함)
+### Step 5: 결과 수집 + 재투입 루프 (반드시 반복)
 
-모든 Team Agent가 완료되면:
-1. 각 Agent 반환 메시지에서 PASS/FAIL 확인
-2. Queue 상태 재확인: `bash scripts/harness-queue-manager.sh status .`
-3. ready 큐에 새로 unblock된 feature가 있으면 → **Step 3으로 돌아가서** 추가 팀 생성
-4. ready=0, in_progress=0이면 → **자동 Sprint 전환 시도**:
-   ```bash
-   bash scripts/harness-queue-manager.sh next-sprint .
-   ```
-   - `"Advancing to Sprint N"` → 새 Sprint 피처가 queue에 로드됨 → **Step 3으로 돌아가서** 팀 생성
-   - `"ALL SPRINTS COMPLETE"` → 전체 프로젝트 완료 보고
-   - `"Cannot advance: N failed"` → 실패 피처 해결 필요, 사용자 개입 요청
+**중요: 이 Step은 모든 Agent가 반환될 때마다 반복 실행해야 합니다.**
+피처 PASS 시 blocked 피처가 unblock되므로, 유휴 팀에 즉시 새 피처를 할당해야 합니다.
+
+```
+LOOP:
+  1. 현재 라운드의 모든 Team Agent 결과 수집 (PASS/FAIL 확인)
+  2. Queue 상태 재확인:
+     bash scripts/harness-queue-manager.sh status .
+
+  3. ready > 0 이면:
+     → Step 3으로 돌아감 (새로 unblock된 피처를 dequeue하여 팀 생성)
+     → 최대 3팀까지 병렬 Agent 재생성
+     → 생성 후 다시 이 LOOP의 1번으로 돌아와 결과 대기
+
+  4. ready = 0 AND in_progress > 0 이면:
+     → 아직 작업 중인 팀이 있음. 해당 Agent 결과를 기다림
+     → 결과 수신 후 다시 이 LOOP의 1번으로 돌아감
+
+  5. ready = 0 AND in_progress = 0 이면:
+     → 현재 Sprint의 모든 피처 처리 완료
+     → 자동 Sprint 전환 시도:
+       bash scripts/harness-queue-manager.sh next-sprint .
+       - "Advancing to Sprint N" → Step 3으로 돌아가 팀 생성
+       - "ALL SPRINTS COMPLETE" → 전체 프로젝트 완료 보고. LOOP 종료.
+       - "Cannot advance: N failed" → 실패 피처 사용자 개입 요청. LOOP 종료.
+```
+
+**이 LOOP를 건너뛰지 마세요.** 1개 팀만 시작했더라도, 그 팀이 PASS하면 blocked가 풀려서 2~3개 팀을 동시에 돌릴 수 있습니다. LOOP를 돌아야 유휴 팀이 즉시 새 피처를 받습니다.
 
 ## 핵심 원칙
 
