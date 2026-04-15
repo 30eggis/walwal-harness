@@ -50,8 +50,8 @@
         "actions/api-contract.json"
       ],
       "model": "opus",
-      "thinking_mode": "ultraplan",
-      "thinking_mode_description": "최고 수준의 계획 모드. 아키텍처 결정, API 설계, 서비스 분할에 깊은 사고 필요."
+      "thinking_mode": null,
+      "thinking_mode_description": null
     },
     "generator-backend": {
       "role": "NestJS MSA 서비스 구현, API 엔드포인트, DB 스키마",

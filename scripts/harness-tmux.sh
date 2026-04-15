@@ -177,6 +177,16 @@ if [ "$DETACH" = true ]; then
   echo ""
   echo "Session created. Attach: tmux attach -t $SESSION_NAME"
   echo "Layout ready"
+elif ! tty -s 2>/dev/null; then
+  # Non-terminal environment (e.g., Claude Code agent session)
+  # Try opening Terminal.app on macOS, otherwise detach silently
+  if [ "$(uname)" = "Darwin" ]; then
+    osascript -e "tell application \"Terminal\" to do script \"tmux attach -t $SESSION_NAME\"" 2>/dev/null && \
+      echo "OPENED_TERMINAL=true" || echo "Layout ready"
+  else
+    echo "Session created (non-terminal). Attach: tmux attach -t $SESSION_NAME"
+    echo "Layout ready"
+  fi
 else
   if [ -n "${TMUX:-}" ]; then
     tmux switch-client -t "$SESSION_NAME"
