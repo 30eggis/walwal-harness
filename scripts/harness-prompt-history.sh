@@ -1,5 +1,5 @@
 #!/bin/bash
-# harness-prompt-history.sh — Prompt History pane for v4 tmux layout
+# harness-prompt-history.sh — Prompt History pane for tmux layout
 # progress.log + audit.log에서 유저 프롬프트/에이전트 활동 히스토리를 표시
 # Usage: bash scripts/harness-prompt-history.sh [project-root]
 

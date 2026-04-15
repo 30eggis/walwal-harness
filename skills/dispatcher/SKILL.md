@@ -25,13 +25,13 @@ disable-model-invocation: false
    - `pipeline` → 선택된 파이프라인 (FULLSTACK/FE-ONLY/BE-ONLY)
    - `sprint.number` → `1`, `sprint.status` → `"in_progress"` (신규 파이프라인인 경우에만)
 2. `.harness/progress.log`에 요약 한 줄 추가
-3. **v4 모드 감지**: `.harness/actions/feature-queue.json` 파일이 존재하는지 확인
-   - **존재**: v4 Parallel Agent Teams 활성 상태. 별도 안내 없이 즉시 STOP.
-     출력: `"✓ Dispatcher 완료. Agent Teams가 자율 실행 중입니다."`
-   - **미존재**: v3 Classic 모드.
-     출력: `"✓ Dispatcher 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+3. **모드 감지**: `.harness/progress.json`의 `mode` 필드 확인
+   - **`"team"`**: Team Mode 활성. 별도 안내 없이 즉시 STOP.
+     출력: `"✓ Dispatcher 완료. Team Mode가 자율 실행 중입니다."`
+   - **`"solo"` / `"paused"`**: Solo Mode.
+     출력: `"✓ Dispatcher 완료. 다음: /harness-solo 또는 프롬프트로 계속하세요."`
 4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-   - v4 모드에서는 `/harness-team 실행하시겠습니까?` 같은 **질문을 하지 않는다**. Teams는 이미 실행 중이거나 사용자가 별도로 시작한다.
+   - Team 모드에서는 `/harness-team 실행하시겠습니까?` 같은 **질문을 하지 않는다**. Teams는 이미 실행 중이거나 사용자가 별도로 시작한다.
 
 ## Auto-Routing (UserPromptSubmit Hook)
 

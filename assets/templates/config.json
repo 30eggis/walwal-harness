@@ -1,8 +1,8 @@
 {
   "harness": {
     "name": "6-Agent Production Harness",
-    "version": "3.3.0",
-    "description": "Dispatcher + NestJS MSA + React/Next.js + Playwright 기반 실무 하네스",
+    "version": "5.0.0",
+    "description": "Solo/Team 통합 하네스 — Dispatcher + NestJS MSA + React/Next.js + Playwright",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
   "agents": {
@@ -132,7 +132,7 @@
           "스크린샷 없이 '확인했다'고 주장하는 행위"
         ]
       }
-    },
+    }
   },
   "flow": {
     "sequence": ["dispatcher", "planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
@@ -163,11 +163,12 @@
       "timeout_seconds": 120,
       "on_fail": "reroute_to_generator"
     },
-    "parallel": {
-      "comment": "v4 Parallel Agent Teams 설정. npx walwal-harness v4 로 실행.",
-      "enabled": false,
+    "team": {
+      "comment": "Team Mode 설정. /harness-team 커맨드로 실행.",
       "concurrency": 3,
-      "max_attempts_per_feature": 3,
+      "max_retries_per_feature": 5,
+      "escalate_after": 3,
+      "auto_dequeue": true,
       "gen_model": "sonnet",
       "eval_model": "opus",
       "branch_strategy": "feature-branch",

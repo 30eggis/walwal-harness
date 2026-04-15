@@ -16,6 +16,7 @@ const { execSync } = require('child_process');
 const PKG_ROOT = path.resolve(__dirname, '..');
 const args = process.argv.slice(2);
 const subcommand = args.find(a => !a.startsWith('-')) || null;
+const subcommandArgs = args.filter(a => !a.startsWith('-') && a !== subcommand);
 const isAuto = args.includes('--auto');
 const isForce = args.includes('--force');
 const isHelp = args.includes('--help') || args.includes('-h');
@@ -100,14 +101,26 @@ function scaffoldHarness() {
   ensureDir(path.join(HARNESS_DIR, 'archive'));
   ensureDir(path.join(HARNESS_DIR, 'gotchas'));
 
-  // Copy gotchas initial files
+  // Copy gotchas — ALWAYS overwrite system templates, preserve user custom entries
   const gotchasSrc = path.join(PKG_ROOT, 'gotchas');
   if (fs.existsSync(gotchasSrc)) {
+    const CUSTOM_MARKER = '## Custom Gotchas';
     const files = fs.readdirSync(gotchasSrc);
     for (const file of files) {
-      const dest = path.join(HARNESS_DIR, 'gotchas', file);
-      if (!fileExists(dest) || isForce) {
-        copyFile(path.join(gotchasSrc, file), dest);
+      const destPath = path.join(HARNESS_DIR, 'gotchas', file);
+      const srcPath = path.join(gotchasSrc, file);
+      if (fileExists(destPath) && file.endsWith('.md')) {
+        // Preserve user-added custom section
+        const existing = fs.readFileSync(destPath, 'utf8');
+        const customIdx = existing.indexOf(CUSTOM_MARKER);
+        const userCustom = customIdx !== -1 ? existing.substring(customIdx) : '';
+        let newContent = fs.readFileSync(srcPath, 'utf8');
+        if (userCustom) {
+          newContent = newContent.trimEnd() + '\n\n' + userCustom;
+        }
+        fs.writeFileSync(destPath, newContent);
+      } else {
+        copyFile(srcPath, destPath);
       }
     }
   }
@@ -126,6 +139,25 @@ function scaffoldHarness() {
         content = content.replace(/\{\{DATE\}\}/g, new Date().toISOString().split('T')[0]);
         fs.writeFileSync(dest, content);
       }
+    }
+  }
+
+  // Migrate progress.json v1 → v2 (add mode + team_state fields)
+  const progressPath = path.join(HARNESS_DIR, 'progress.json');
+  if (fileExists(progressPath)) {
+    try {
+      const progress = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+      if (!progress.version || progress.version < 2) {
+        progress.version = 2;
+        progress.mode = progress.mode || 'solo';
+        if (!progress.team_state) {
+          progress.team_state = { active_teams: 0, paused_at: null, resume_from: null };
+        }
+        fs.writeFileSync(progressPath, JSON.stringify(progress, null, 2) + '\n');
+        log('progress.json migrated to v2 (mode + team_state added)');
+      }
+    } catch (e) {
+      log('WARNING: Could not migrate progress.json');
     }
   }
 
@@ -284,6 +316,42 @@ function installScripts() {
   }
 
   log('Scripts installation complete');
+}
+
+// ─────────────────────────────────────────
+// 3a. Commands → .claude/commands/
+// ─────────────────────────────────────────
+function installCommands() {
+  log('Installing commands to .claude/commands/...');
+
+  const commandsSrc = path.join(PKG_ROOT, 'commands');
+  if (!fs.existsSync(commandsSrc)) {
+    log('WARNING: commands/ directory not found in package');
+    return;
+  }
+
+  const commandsDest = path.join(PROJECT_ROOT, '.claude', 'commands');
+  ensureDir(commandsDest);
+
+  // Remove existing harness-* commands to prevent stale files
+  if (fs.existsSync(commandsDest)) {
+    const existing = fs.readdirSync(commandsDest);
+    for (const f of existing) {
+      if (f.startsWith('harness-')) {
+        fs.unlinkSync(path.join(commandsDest, f));
+      }
+    }
+    log('  Cleared existing harness-* commands');
+  }
+
+  // Copy all command files
+  const files = fs.readdirSync(commandsSrc).filter(f => f.endsWith('.md'));
+  for (const file of files) {
+    copyFile(path.join(commandsSrc, file), path.join(commandsDest, file));
+    log(`  Installed: /${file.replace('.md', '')}`);
+  }
+
+  log('Commands installation complete');
 }
 
 // ─────────────────────────────────────────
@@ -615,45 +683,43 @@ function showHelp() {
 ╚══════════════════════════════════════╝
 
 Usage:
-  npx walwal-harness            Initialize project for harness engineering
-  npx walwal-harness --force    Re-initialize (overwrites existing files)
-  npx walwal-harness studio     Launch Harness Studio v3 (tmux 5-pane)
-  npx walwal-harness studio --ai  Studio v3 + AI eval summary
-  npx walwal-harness v4          Enable Agent Teams (set env var + init queue)
-  npx walwal-harness --help     Show this help
+  npx walwal-harness              Initialize project for harness engineering
+  npx walwal-harness --force      Re-initialize (overwrites existing files)
+  npx walwal-harness team         Launch Team Mode (tmux studio + auto teams)
+  npx walwal-harness team --kill  Kill Team Mode tmux session
+  npx walwal-harness --help       Show this help
+
+Modes (use inside claude/codex session):
+  /harness-solo       Solo mode — prompting-based sequential pipeline
+  /harness-team       Team mode — auto parallel Gen-Eval loop (3 teams)
+  /harness-stop       Stop Team mode (preserves queue state)
 
 What it does:
   1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
   2. Installs skills to .claude/skills/ (dispatcher, planner, generators, evaluators)
-  3. Copies helper scripts to scripts/
-  4. Registers SessionStart hook (compact boot-time status)
-  5. Installs statusline (persistent 1-line status bar at terminal bottom)
-  6. Registers UserPromptSubmit hook (auto-route every prompt through harness-dispatcher)
+  3. Installs commands to .claude/commands/ (solo, team, stop)
+  4. Copies helper scripts to scripts/
+  5. Registers SessionStart + UserPromptSubmit hooks
+  6. Installs statusline (persistent 1-line status bar)
   7. Creates AGENTS.md + CLAUDE.md symlink
-  8. Checks Playwright MCP configuration
-  9. Checks recommended external skills (Vercel, design skills)
-
-Auto routing:
-  Every user prompt is routed through harness-dispatcher.
-  Per-message opt-out: say "harness skip" or "harness 없이".
-  Global disable: edit .harness/config.json → behavior.auto_route_dispatcher = false
 
 After init:
-  1. Restart Claude Code session (exit and re-enter) for skills to load
-  2. Say "하네스 엔지니어링 시작" or invoke /harness-dispatcher
+  1. Restart Claude Code session (/exit → re-enter directory)
+  2. Say "하네스 엔지니어링 시작" or /harness-dispatcher
+  3. After Planner completes: /harness-team (team) or continue prompting (solo)
 `);
 }
 
 // ─────────────────────────────────────────
 // Main
 // ─────────────────────────────────────────
-function runStudio() {
-  const useAi = args.includes('--ai') ? '--ai' : '';
+function runTeamStudio() {
+  const killMode = args.includes('--kill');
   const scriptsDir = path.join(PKG_ROOT, 'scripts');
   const tmuxScript = path.join(scriptsDir, 'harness-tmux.sh');
 
   if (!fs.existsSync(tmuxScript)) {
-    log('ERROR: harness-tmux.sh not found. Update @walwal-harness/cli to >= 3.6.0');
+    log('ERROR: harness-tmux.sh not found.');
     process.exit(1);
   }
 
@@ -664,57 +730,18 @@ function runStudio() {
     process.exit(1);
   }
 
-  const cmd = `bash "${tmuxScript}" "${PROJECT_ROOT}" ${useAi}`.trim();
-  log(`Launching Harness Studio...`);
-  execSync(cmd, { stdio: 'inherit' });
-}
+  if (killMode) {
+    const cmd = `bash "${tmuxScript}" --kill`;
+    execSync(cmd, { stdio: 'inherit' });
+    return;
+  }
 
-function runStudioV4() {
   // Enable Agent Teams in project settings
-  const settingsPath = path.join(PROJECT_ROOT, '.claude', 'settings.json');
-  let settings = {};
-  if (fileExists(settingsPath)) {
-    try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (e) {}
-  }
+  installAgentTeamsEnv();
 
-  if (!settings.env) settings.env = {};
-  settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] = '1';
-  ensureDir(path.dirname(settingsPath));
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-
-  // Initialize feature queue if feature-list.json exists
-  const featureList = path.join(PROJECT_ROOT, '.harness', 'actions', 'feature-list.json');
-  const featureQueue = path.join(PROJECT_ROOT, '.harness', 'actions', 'feature-queue.json');
-  const queueMgr = path.join(PKG_ROOT, 'scripts', 'harness-queue-manager.sh');
-
-  if (fs.existsSync(featureList) && fs.existsSync(queueMgr)) {
-    if (!fs.existsSync(featureQueue)) {
-      log('Initializing feature queue...');
-      try { execSync(`bash "${queueMgr}" init "${PROJECT_ROOT}"`, { stdio: 'inherit' }); } catch (e) {}
-    } else {
-      log('Recovering feature queue...');
-      try { execSync(`bash "${queueMgr}" recover "${PROJECT_ROOT}"`, { stdio: 'inherit' }); } catch (e) {}
-    }
-  }
-
-  console.log('');
-  log('╔═══════════════════════════════════════════════════════════╗');
-  log('║  Agent Teams v4 ENABLED                                  ║');
-  log('╠═══════════════════════════════════════════════════════════╣');
-  log('║                                                          ║');
-  log('║  CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 set in           ║');
-  log('║  .claude/settings.json                                   ║');
-  log('║                                                          ║');
-  log('║  Next steps:                                             ║');
-  log('║  1. Restart Claude Code (/exit → re-enter)               ║');
-  log('║  2. Run Planner: "하네스 엔지니어링 시작"                 ║');
-  log('║  3. Start Teams: /harness-team-action                    ║');
-  log('║                                                          ║');
-  log('║  Or use --teammate-mode tmux for split panes:            ║');
-  log('║  $ claude --teammate-mode tmux                           ║');
-  log('║                                                          ║');
-  log('╚═══════════════════════════════════════════════════════════╝');
-  console.log('');
+  const cmd = `bash "${tmuxScript}" "${PROJECT_ROOT}" --team`;
+  log('Launching Team Mode Studio...');
+  execSync(cmd, { stdio: 'inherit' });
 }
 
 function main() {
@@ -723,13 +750,15 @@ function main() {
     return;
   }
 
-  if (subcommand === 'studio') {
-    runStudio();
+  if (subcommand === 'team') {
+    runTeamStudio();
     return;
   }
 
-  if (subcommand === 'studio-v4' || subcommand === 'v4') {
-    runStudioV4();
+  // Legacy subcommands — redirect to new equivalents
+  if (subcommand === 'studio' || subcommand === 'studio-v4' || subcommand === 'v4') {
+    log('NOTE: "studio" and "v4" subcommands are replaced by "team".');
+    runTeamStudio();
     return;
   }
 
@@ -747,6 +776,7 @@ function main() {
   scaffoldHarness();
   installSkills();
   installScripts();
+  installCommands();
   installSessionHook();
   installStatusline();
   installUserPromptSubmitHook();
@@ -760,20 +790,21 @@ function main() {
   log('');
 
   if (isAuto) {
-    // postinstall context — Claude Code is likely already running
     log('╔═══════════════════════════════════════════════════════════╗');
-    log('║  IMPORTANT: Restart Claude Code for skills to activate!  ║');
-    log('║                                                          ║');
-    log('║  Claude Code discovers skills at session startup.        ║');
-    log('║  Type /exit, then re-enter this directory to begin.      ║');
+    log('║  Restart Claude Code for skills & commands to activate!  ║');
     log('║                                                          ║');
     log('║  Then say: "하네스 엔지니어링 시작"                        ║');
     log('║  Or invoke: /harness-dispatcher                          ║');
+    log('║                                                          ║');
+    log('║  After Planner completes:                                ║');
+    log('║    /harness-team  → Team mode (auto parallel)            ║');
+    log('║    /harness-solo  → Solo mode (prompting sequential)     ║');
     log('╚═══════════════════════════════════════════════════════════╝');
   } else {
     log('Next steps:');
     log('  1. Restart Claude Code session (/exit → re-enter directory)');
-    log('  2. Say "하네스 엔지니어링 시작" or invoke /harness-dispatcher');
+    log('  2. Say "하네스 엔지니어링 시작" or /harness-dispatcher');
+    log('  3. After Planner: /harness-team (team) or keep prompting (solo)');
   }
   console.log('');
 }

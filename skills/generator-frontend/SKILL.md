@@ -43,9 +43,9 @@ disable-model-invocation: true
 
 **Backend 통합 러너가 동작 중이어야 함.** Gateway 미응답 시 → STOP.
 
-## v4 Feature-Level Mode (Parallel Agent Teams)
+## Feature-Level Mode (Team Mode)
 
-v4에서 Team Worker가 `claude -p`로 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
+Team Mode에서 Team Worker가 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
 
 ### Feature-Level Rules
 - `feature-list.json`에서 **지정된 FEATURE_ID만** 필터하여 구현

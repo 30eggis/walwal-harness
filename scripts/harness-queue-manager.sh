@@ -1,5 +1,5 @@
 #!/bin/bash
-# harness-queue-manager.sh — Feature Queue Manager (v4.0)
+# harness-queue-manager.sh — Feature Queue Manager (v5 unified)
 #
 # feature-list.json에서 depends_on 그래프를 읽어 topological sort 후
 # feature-queue.json을 생성/관리한다.

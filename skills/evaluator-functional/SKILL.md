@@ -60,9 +60,9 @@ disable-model-invocation: true
 5. `actions/api-contract.json` — 기대 API 동작
 6. `.harness/progress.json`
 
-## v4 Feature-Level Mode (Parallel Agent Teams)
+## Feature-Level Mode (Team Mode)
 
-v4에서 Team Worker가 `claude -p`로 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
+Team Mode에서 Team Worker가 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
 
 ### Feature-Level Rules
 - `feature-list.json`에서 **지정된 FEATURE_ID의 AC만** 검증

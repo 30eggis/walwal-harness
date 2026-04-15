@@ -1,17 +1,9 @@
 #!/bin/bash
-# harness-dashboard.sh — Control Center: Dashboard + Manual Prompt
+# harness-dashboard.sh — Unified Dashboard (Solo + Team mode)
 #
-# 상단: 실시간 대시보드 (Sprint Map | Prompt History + Processing Status)
-# 하단: 사용자 명령 입력 (오케스트레이션)
-#
-# Commands:
-#   status / s      대시보드 즉시 갱신
-#   next / n        다음 에이전트 세션 시작 (Agent Session pane으로 전달)
-#   retry / r       현재 에이전트 재실행
-#   stop            에이전트 세션 중지
-#   log <message>   progress.log에 수동 메모 추가
-#   clear-fail      failure 상태 클리어
-#   quit / q        대시보드 종료
+# Reads progress.json.mode to decide rendering:
+#   solo: Sequential pipeline progress (sprint map, agent bar, prompt history)
+#   team: Queue summary, team status, feature list, bottleneck alerts
 #
 # Usage: bash scripts/harness-dashboard.sh [project-root]
 
@@ -30,6 +22,7 @@ fi
 
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
 FEATURES="$PROJECT_ROOT/.harness/actions/feature-list.json"
+QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
 PROGRESS_LOG="$PROJECT_ROOT/.harness/progress.log"
 
 # ── ANSI helpers ──
@@ -42,7 +35,6 @@ CYAN="\033[36m"
 MAGENTA="\033[35m"
 RESET="\033[0m"
 
-# ── Strip ANSI escape sequences ──
 strip_ansi() {
   sed 's/\x1b\[[0-9;]*m//g; s/\x1b\[[0-9;]*[a-zA-Z]//g'
 }
@@ -51,23 +43,38 @@ get_term_width() {
   tput cols 2>/dev/null || echo 80
 }
 
-# ══════════════════════════════════════════
-# Render functions
-# ══════════════════════════════════════════
+get_mode() {
+  if [ -f "$PROGRESS" ] && command -v jq &>/dev/null; then
+    jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null
+  else
+    echo "solo"
+  fi
+}
 
+# ══════════════════════════════════════════
+# Common header
+# ══════════════════════════════════════════
 render_header() {
-  local now project_name
+  local now project_name mode
   now=$(date +"%H:%M:%S")
   project_name=$(jq -r '.project_name // "Unknown"' "$PROGRESS" 2>/dev/null)
+  mode=$(get_mode)
 
-  echo -e "${BOLD}╔══════════════════════════════════════════════════════╗${RESET}"
-  echo -e "${BOLD}║  HARNESS CONTROL CENTER                              ║${RESET}"
-  echo -e "${BOLD}╚══════════════════════════════════════════════════════╝${RESET}"
-  echo -e "  ${DIM}${project_name}  |  ${now}${RESET}"
+  local mode_label
+  case "$mode" in
+    team)   mode_label="${GREEN}TEAM${RESET}" ;;
+    paused) mode_label="${YELLOW}PAUSED${RESET}" ;;
+    *)      mode_label="${CYAN}SOLO${RESET}" ;;
+  esac
+
+  echo -e "${BOLD}HARNESS DASHBOARD${RESET}  ${mode_label}  ${DIM}${project_name} | ${now}${RESET}"
   echo ""
 }
 
-render_sprint_overview() {
+# ══════════════════════════════════════════
+# Solo Mode rendering
+# ══════════════════════════════════════════
+render_solo_sprint_overview() {
   if [ ! -f "$PROGRESS" ]; then
     echo -e "  ${DIM}(waiting for harness init...)${RESET}"
     return
@@ -94,135 +101,7 @@ render_sprint_overview() {
   echo ""
 }
 
-render_sprint_map_lines() {
-  if [ ! -f "$PROGRESS" ]; then return; fi
-
-  local sprint_keys
-  sprint_keys=$(jq -r '.sprint_progress // {} | keys[]' "$PROGRESS" 2>/dev/null | sort -n)
-  if [ -z "$sprint_keys" ]; then return; fi
-
-  echo -e "${BOLD}Sprint Map${RESET}"
-
-  while IFS= read -r s; do
-    local status feat_count notes icon
-    status=$(jq -r ".sprint_progress[\"${s}\"].status // \"pending\"" "$PROGRESS")
-    feat_count=$(jq ".sprint_progress[\"${s}\"].features // [] | length" "$PROGRESS")
-    notes=$(jq -r ".sprint_progress[\"${s}\"].notes // \"\"" "$PROGRESS")
-
-    case "$status" in
-      completed)   icon="●" ;;
-      in_progress) icon="◐" ;;
-      scaffolded)  icon="◑" ;;
-      *)           icon="○" ;;
-    esac
-
-    if [ ${#notes} -gt 28 ]; then notes="${notes:0:26}.."; fi
-
-    printf "%s S%-2s %2df %-11s %s\n" "$icon" "$s" "$feat_count" "$status" "$notes"
-  done <<< "$sprint_keys"
-}
-
-render_prompt_history_lines() {
-  echo -e "${BOLD}Prompt History${RESET}"
-
-  if [ -f "$PROGRESS_LOG" ]; then
-    grep -v '^#' "$PROGRESS_LOG" 2>/dev/null | grep -v '^$' | tail -12 | while IFS= read -r line; do
-      local ts agent action detail
-      ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
-      agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
-      action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
-      detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
-
-      local short_ts icon color
-      short_ts=$(echo "$ts" | sed 's/^[0-9]*-//')
-
-      case "$agent" in
-        dispatcher*)  icon="▸" ; color="$MAGENTA" ;;
-        brainstormer) icon="◇" ; color="$CYAN" ;;
-        planner*)     icon="□" ; color="$YELLOW" ;;
-        generator*)   icon="▶" ; color="$GREEN" ;;
-        eval*)        icon="✦" ; color="$RED" ;;
-        user|manual)  icon="★" ; color="$BOLD" ;;
-        *)            icon="·" ; color="$DIM" ;;
-      esac
-
-      if [ ${#detail} -gt 30 ]; then detail="${detail:0:28}.."; fi
-
-      echo -e "${color}${icon}${RESET} ${DIM}${short_ts}${RESET} ${agent} ${DIM}${action}${RESET}"
-      if [ -n "$detail" ]; then
-        echo -e "  ${DIM}${detail}${RESET}"
-      fi
-    done
-  else
-    echo -e "${DIM}(no progress.log yet)${RESET}"
-  fi
-}
-
-render_two_columns() {
-  local term_width col_width
-  term_width=$(get_term_width)
-  col_width=$(( (term_width - 7) / 2 ))
-  if [ "$col_width" -lt 30 ]; then col_width=30; fi
-  if [ "$col_width" -gt 55 ]; then col_width=55; fi
-
-  local left_lines=() right_lines=()
-
-  while IFS= read -r line; do
-    left_lines+=("$line")
-  done < <(render_sprint_map_lines 2>/dev/null)
-
-  while IFS= read -r line; do
-    right_lines+=("$line")
-  done < <(render_prompt_history_lines 2>/dev/null)
-
-  local left_count=${#left_lines[@]}
-  local right_count=${#right_lines[@]}
-  local max_rows=$left_count
-  if [ "$right_count" -gt "$max_rows" ]; then max_rows=$right_count; fi
-
-  local sep=""
-  for ((i=0; i<term_width-4; i++)); do sep+="─"; done
-  echo -e "  ${DIM}${sep}${RESET}"
-
-  for ((i=0; i<max_rows; i++)); do
-    local left_text="${left_lines[$i]:-}"
-    local right_text="${right_lines[$i]:-}"
-
-    local left_plain
-    left_plain=$(echo -e "$left_text" | strip_ansi)
-    local left_len=${#left_plain}
-    local pad_needed=$(( col_width - left_len ))
-    if [ "$pad_needed" -lt 0 ]; then pad_needed=0; fi
-    local padding=""
-    for ((p=0; p<pad_needed; p++)); do padding+=" "; done
-
-    echo -e "  ${left_text}${padding} ${DIM}│${RESET} ${right_text}"
-  done
-
-  echo -e "  ${DIM}${sep}${RESET}"
-  echo ""
-}
-
-render_build_status() {
-  if [ ! -f "$PROGRESS" ]; then return; fi
-
-  local build_status tsc_status routes_total
-  build_status=$(jq -r '.build.build_status // "unknown"' "$PROGRESS" 2>/dev/null)
-  tsc_status=$(jq -r '.build.tsc_status // "unknown"' "$PROGRESS" 2>/dev/null)
-  routes_total=$(jq -r '.build.routes_total // 0' "$PROGRESS" 2>/dev/null)
-
-  if [ "$build_status" = "null" ] || [ "$build_status" = "unknown" ]; then return; fi
-
-  local build_color="$GREEN"
-  if [ "$build_status" != "passing" ]; then build_color="$RED"; fi
-  local tsc_color="$GREEN"
-  if [ "$tsc_status" != "clean" ]; then tsc_color="$RED"; fi
-
-  echo -e "  ${BOLD}Build${RESET}  ${build_color}${build_status}${RESET}  |  TSC: ${tsc_color}${tsc_status}${RESET}  |  Routes: ${routes_total}"
-  echo ""
-}
-
-render_failure_info() {
+render_solo_failure_info() {
   if [ ! -f "$PROGRESS" ]; then return; fi
 
   local failure_agent
@@ -242,8 +121,7 @@ render_failure_info() {
   fi
 }
 
-render_agent_info() {
-  # Next action hint
+render_solo_agent_info() {
   if [ ! -f "$PROGRESS" ]; then return; fi
 
   local next_agent agent_status
@@ -251,42 +129,226 @@ render_agent_info() {
   agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 
   if [ "$next_agent" != "none" ] && [ "$next_agent" != "null" ] && [ "$agent_status" != "blocked" ]; then
-    echo -e "  ${CYAN}Next → ${next_agent}${RESET}  ${DIM}(type 'next' to start)${RESET}"
+    echo -e "  ${CYAN}Next → /harness-${next_agent}${RESET}"
   fi
 
-  # Agent bar
   render_agent_bar "$PROJECT_ROOT" 2>/dev/null
   echo ""
 }
 
-# ══════════════════════════════════════════
-# Full dashboard render (in-place update)
-# ══════════════════════════════════════════
-render_dashboard() {
-  local buf
-  buf=$(
-    render_header
-    render_sprint_overview
-    render_build_status
-    render_failure_info
-    render_two_columns
+render_solo_prompt_history() {
+  echo -e "${BOLD}Recent Activity${RESET}"
 
-    if [ -f "$FEATURES" ]; then
-      render_progress "$PROJECT_ROOT" 2>/dev/null
-    fi
+  if [ -f "$PROGRESS_LOG" ]; then
+    grep -v '^#' "$PROGRESS_LOG" 2>/dev/null | grep -v '^$' | tail -10 | while IFS= read -r line; do
+      local ts agent action detail
+      ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
+      agent=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
+      action=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$3); print $3}')
+      detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
 
-    render_agent_info
-  )
+      local short_ts icon color
+      short_ts=$(echo "$ts" | sed 's/^[0-9]*-//')
 
-  tput civis 2>/dev/null
-  tput cup 0 0 2>/dev/null
-  echo "$buf"
-  tput ed 2>/dev/null
-  tput cnorm 2>/dev/null
+      case "$agent" in
+        dispatcher*)  icon="▸" ; color="$MAGENTA" ;;
+        planner*)     icon="□" ; color="$YELLOW" ;;
+        generator*)   icon="▶" ; color="$GREEN" ;;
+        eval*)        icon="✦" ; color="$RED" ;;
+        team-*)       icon="◆" ; color="$CYAN" ;;
+        user*)        icon="★" ; color="$BOLD" ;;
+        *)            icon="·" ; color="$DIM" ;;
+      esac
+
+      if [ ${#detail} -gt 40 ]; then detail="${detail:0:38}.."; fi
+
+      echo -e "${color}${icon}${RESET} ${DIM}${short_ts}${RESET} ${agent} ${DIM}${action}${RESET} ${detail}"
+    done
+  else
+    echo -e "${DIM}(no progress.log yet)${RESET}"
+  fi
 }
 
 # ══════════════════════════════════════════
-# Main — Auto-refresh dashboard loop
+# Team Mode rendering
+# ══════════════════════════════════════════
+render_team_queue_summary() {
+  if [ ! -f "$QUEUE" ]; then
+    echo -e "  ${DIM}(queue not initialized — run /harness-team)${RESET}"
+    return
+  fi
+
+  local ready blocked in_prog passed failed total
+  ready=$(jq '.queue.ready | length' "$QUEUE" 2>/dev/null || echo 0)
+  blocked=$(jq '.queue.blocked | length' "$QUEUE" 2>/dev/null || echo 0)
+  in_prog=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null || echo 0)
+  passed=$(jq '.queue.passed | length' "$QUEUE" 2>/dev/null || echo 0)
+  failed=$(jq '.queue.failed | length' "$QUEUE" 2>/dev/null || echo 0)
+  ready=${ready:-0}; blocked=${blocked:-0}; in_prog=${in_prog:-0}; passed=${passed:-0}; failed=${failed:-0}
+  total=$((ready + blocked + in_prog + passed + failed))
+
+  local pct=0
+  if [ "$total" -gt 0 ]; then pct=$(( passed * 100 / total )); fi
+  local bar_w=16
+  local filled=$(( pct * bar_w / 100 ))
+  local empty=$(( bar_w - filled ))
+  local bar=""
+  for ((i=0; i<filled; i++)); do bar+="█"; done
+  for ((i=0; i<empty; i++)); do bar+="░"; done
+
+  echo -e "  ${bar} ${passed}/${total} (${pct}%)  R:${GREEN}${ready}${RESET} B:${YELLOW}${blocked}${RESET} P:${CYAN}${in_prog}${RESET} ${GREEN}✓${passed}${RESET} ${RED}✗${failed}${RESET}"
+}
+
+render_team_status() {
+  if [ ! -f "$QUEUE" ]; then return; fi
+
+  local team_count
+  team_count=$(jq '.teams | length' "$QUEUE" 2>/dev/null)
+  if [ "${team_count:-0}" -eq 0 ]; then return; fi
+
+  echo ""
+  echo -e "${BOLD}Teams${RESET}"
+
+  for i in $(seq 1 "$team_count"); do
+    local t_status t_feature t_phase t_attempt
+    t_status=$(jq -r ".teams[\"$i\"].status // \"idle\"" "$QUEUE" 2>/dev/null)
+    t_feature=$(jq -r ".teams[\"$i\"].feature // \"—\"" "$QUEUE" 2>/dev/null)
+
+    if [ "$t_feature" != "—" ] && [ "$t_feature" != "null" ]; then
+      t_phase=$(jq -r --arg f "$t_feature" '.queue.in_progress[$f].phase // "?"' "$QUEUE" 2>/dev/null)
+      t_attempt=$(jq -r --arg f "$t_feature" '.queue.in_progress[$f].attempt // 1' "$QUEUE" 2>/dev/null)
+    else
+      t_phase="—"; t_attempt=""
+    fi
+
+    local icon color
+    case "$t_status" in
+      busy)   icon="▶"; color="$GREEN" ;;
+      idle)   icon="○"; color="$DIM" ;;
+      *)      icon="?"; color="$RESET" ;;
+    esac
+
+    local phase_short=""
+    case "$t_phase" in
+      gen)  phase_short="${CYAN}Gen${RESET}" ;;
+      gate) phase_short="${YELLOW}Gate${RESET}" ;;
+      eval) phase_short="${MAGENTA}Eval${RESET}" ;;
+      *)    phase_short="${DIM}-${RESET}" ;;
+    esac
+
+    printf "  %b%b T%d %-7s %b" "$color" "$icon" "$i" "$t_feature" "$phase_short"
+    if [ -n "$t_attempt" ] && [ "$t_attempt" != "—" ]; then
+      printf " #%s/5" "$t_attempt"
+    fi
+    echo ""
+  done
+}
+
+render_team_features() {
+  if [ ! -f "$QUEUE" ] || [ ! -f "$FEATURES" ]; then return; fi
+
+  echo ""
+  echo -e "${BOLD}Features${RESET}"
+
+  jq -r --slurpfile q "$QUEUE" '
+    ($q[0].queue.passed // []) as $passed |
+    ($q[0].queue.failed // []) as $failed |
+    ($q[0].queue.ready // []) as $ready |
+    ($q[0].queue.in_progress // {}) as $prog |
+    .features[] |
+    .id as $fid |
+    (.name // .description // "?" | if length > 18 then .[0:16] + ".." else . end) as $fname |
+    (if ($fid | IN($passed[])) then "P"
+     elif $prog[$fid] then "I|\($prog[$fid].team)|\($prog[$fid].phase)"
+     elif ($fid | IN($failed[])) then "F"
+     elif ($fid | IN($ready[])) then "R"
+     else "B" end) as $st |
+    "\($st)\t\($fid)\t\($fname)"
+  ' "$FEATURES" 2>/dev/null | while IFS=$'\t' read -r st fid fname; do
+    case "$st" in
+      P)    printf "  ${GREEN}●${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      F)    printf "  ${RED}✗${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      R)    printf "  ${YELLOW}○${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      B)    printf "  ${DIM}◌${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      I\|*) team=$(echo "$st" | cut -d'|' -f2)
+            phase=$(echo "$st" | cut -d'|' -f3)
+            printf "  ${CYAN}◐${RESET} %-6s %-14s T%s:%s\n" "$fid" "$fname" "$team" "$phase" ;;
+      *)    printf "  ? %-6s %s\n" "$fid" "$fname" ;;
+    esac
+  done
+}
+
+render_team_bottleneck() {
+  if [ ! -f "$QUEUE" ] || [ ! -f "$FEATURES" ]; then return; fi
+
+  local failed_list
+  failed_list=$(jq -r '.queue.failed[]' "$QUEUE" 2>/dev/null)
+  if [ -z "$failed_list" ]; then return; fi
+
+  local team_count idle_teams=0 blocked_count in_prog
+  team_count=$(jq '.teams | length' "$QUEUE" 2>/dev/null || echo 0)
+  blocked_count=$(jq '.queue.blocked | length' "$QUEUE" 2>/dev/null || echo 0)
+  in_prog=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null || echo 0)
+
+  for i in $(seq 1 "$team_count"); do
+    local ts
+    ts=$(jq -r ".teams[\"$i\"].status // \"idle\"" "$QUEUE" 2>/dev/null)
+    if [ "$ts" = "idle" ]; then idle_teams=$((idle_teams + 1)); fi
+  done
+
+  while IFS= read -r fid; do
+    [ -z "$fid" ] && continue
+    local deps_on_this
+    deps_on_this=$(jq --arg fid "$fid" '[.queue.blocked | to_entries[] | select(.value | index($fid))] | length' "$QUEUE" 2>/dev/null || echo 0)
+
+    if [ "$deps_on_this" -gt 0 ]; then
+      echo ""
+      echo -e "  ${RED}${BOLD}⚠ BOTTLENECK${RESET} ${RED}${fid}${RESET} failed → ${YELLOW}${deps_on_this} features blocked${RESET}"
+      if [ "$idle_teams" -gt 0 ]; then
+        echo -e "  ${BOLD}→ requeue:${RESET} bash scripts/harness-queue-manager.sh requeue ${fid} ."
+      fi
+    fi
+  done <<< "$failed_list"
+
+  if [ "$idle_teams" -eq "$team_count" ] && [ "$in_prog" -eq 0 ] && [ "$blocked_count" -gt 0 ]; then
+    echo ""
+    echo -e "  ${RED}${BOLD}!! STALLED${RESET} — All teams idle, ${blocked_count} features blocked"
+  fi
+}
+
+# ══════════════════════════════════════════
+# Render dispatch
+# ══════════════════════════════════════════
+render_dashboard() {
+  local mode
+  mode=$(get_mode)
+
+  render_header
+
+  case "$mode" in
+    team|paused)
+      render_team_queue_summary
+      render_team_status
+      render_team_features
+      render_team_bottleneck
+      ;;
+    *)
+      render_solo_sprint_overview
+      render_solo_failure_info
+
+      if [ -f "$FEATURES" ]; then
+        render_progress "$PROJECT_ROOT" 2>/dev/null
+      fi
+
+      render_solo_agent_info
+      echo ""
+      render_solo_prompt_history
+      ;;
+  esac
+}
+
+# ══════════════════════════════════════════
+# Main — Auto-refresh loop
 # ══════════════════════════════════════════
 tput civis 2>/dev/null
 trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
@@ -294,6 +356,9 @@ trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
 clear
 
 while true; do
-  render_dashboard
+  buf=$(render_dashboard 2>&1)
+  tput cup 0 0 2>/dev/null
+  echo "$buf"
+  tput ed 2>/dev/null
   sleep 3
 done
