@@ -524,15 +524,38 @@ function installAgentTeamsEnv() {
     try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (e) {}
   }
 
-  if (!settings.env) settings.env = {};
+  let changed = false;
 
+  // Enable Agent Teams env var
+  if (!settings.env) settings.env = {};
   if (settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] !== '1') {
     settings.env['CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS'] = '1';
-    ensureDir(path.dirname(settingsPath));
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    changed = true;
     log('Agent Teams enabled (CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)');
   } else {
     log('Agent Teams already enabled');
+  }
+
+  // Add git worktree permission for Team Mode isolation
+  if (!settings.permissions) settings.permissions = {};
+  if (!settings.permissions.allow) settings.permissions.allow = [];
+  const worktreePerms = [
+    'Bash(git worktree *)',
+    'Bash(git checkout *)',
+    'Bash(git merge *)',
+    'Bash(git branch *)'
+  ];
+  for (const perm of worktreePerms) {
+    if (!settings.permissions.allow.includes(perm)) {
+      settings.permissions.allow.push(perm);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    ensureDir(path.dirname(settingsPath));
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    log('Git worktree permissions added for Team Mode isolation');
   }
 }
 
