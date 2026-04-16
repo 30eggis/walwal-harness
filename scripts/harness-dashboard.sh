@@ -40,7 +40,7 @@ strip_ansi() {
 }
 
 get_term_width() {
-  tput cols 2>/dev/null || echo 80
+  echo "${_COLS:-$(tput cols 2>/dev/null || echo 80)}"
 }
 
 get_mode() {
@@ -150,14 +150,28 @@ render_solo_prompt_history() {
       local short_ts icon color
       short_ts=$(echo "$ts" | sed 's/^[0-9]*-//')
 
-      case "$agent" in
-        dispatcher*)  icon="▸" ; color="$MAGENTA" ;;
-        planner*)     icon="□" ; color="$YELLOW" ;;
-        generator*)   icon="▶" ; color="$GREEN" ;;
-        eval*)        icon="✦" ; color="$RED" ;;
-        team-*)       icon="◆" ; color="$CYAN" ;;
-        user*)        icon="★" ; color="$BOLD" ;;
-        *)            icon="·" ; color="$DIM" ;;
+      # action 기반으로 먼저 분류 (team 모드에서 agent=team-N이므로)
+      case "$action" in
+        eval-start|eval-check|eval-done|eval)
+          icon="✦" ; color="$MAGENTA" ;;
+        gen-start|gen-read|gen-write|gen-test|gen-done|gen)
+          icon="▶" ; color="$GREEN" ;;
+        result|pass)
+          icon="✓" ; color="$GREEN" ;;
+        fail)
+          icon="✗" ; color="$RED" ;;
+        *)
+          # fallback: agent 기반
+          case "$agent" in
+            dispatcher*)  icon="▸" ; color="$MAGENTA" ;;
+            planner*)     icon="□" ; color="$YELLOW" ;;
+            generator*)   icon="▶" ; color="$GREEN" ;;
+            eval*)        icon="✦" ; color="$MAGENTA" ;;
+            team-*)       icon="◆" ; color="$CYAN" ;;
+            user*)        icon="★" ; color="$BOLD" ;;
+            *)            icon="·" ; color="$DIM" ;;
+          esac
+          ;;
       esac
 
       if [ ${#detail} -gt 40 ]; then detail="${detail:0:38}.."; fi
@@ -331,9 +345,10 @@ render_archive_prompts() {
   total_prompts=$(echo "$all_prompts" | wc -l | tr -d ' ')
 
   # 마지막 프롬프트를 제외한 모든 프롬프트 = archived (처리 완료)
+  # newest first (tac), 전체 출력 (제한 없음)
   local archived
   if [ "$total_prompts" -le 1 ]; then return; fi
-  archived=$(echo "$all_prompts" | head -n $((total_prompts - 1)) | tail -8)
+  archived=$(echo "$all_prompts" | head -n $((total_prompts - 1)) | tac)
 
   echo ""
   echo -e "${BOLD}Archive Prompt${RESET}  ${DIM}(처리 완료)${RESET}"
@@ -350,10 +365,6 @@ render_archive_prompts() {
 
     echo -e "  ${GREEN}✓${RESET} ${DIM}${short_ts}${RESET}  ${detail}"
   done
-
-  if [ "$total_prompts" -gt 9 ]; then
-    echo -e "  ${DIM}… +$((total_prompts - 9)) more${RESET}"
-  fi
 }
 
 # ══════════════════════════════════════════
@@ -396,6 +407,9 @@ trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
 clear
 
 while true; do
+  _ROWS=$(tput lines 2>/dev/null || echo 30)
+  _COLS=$(tput cols 2>/dev/null || echo 80)
+  export _ROWS _COLS
   buf=$(render_dashboard 2>&1)
   tput cup 0 0 2>/dev/null
   echo "$buf"

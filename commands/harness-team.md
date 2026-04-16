@@ -210,6 +210,22 @@ Agent({
   prompt: "당신은 독립 Evaluator입니다. Generator가 작성한 코드를 AC 기준으로 냉정하게 평가합니다.
 Generator의 의도나 추론 과정은 알 수 없습니다. 오직 코드와 결과만 봅니다.
 
+## 실시간 로깅 (필수)
+
+평가 진행 상황을 실시간으로 기록합니다. **각 AC 검증마다 반드시 logev를 호출**하세요.
+
+```bash
+HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')
+LOG=\"$HARNESS_ROOT/.harness/progress.log\"
+logev() { echo \"$(date +'%Y-%m-%d %H:%M') | team-{N} | $1 | $2\" >> \"$LOG\"; }
+```
+
+**로깅 시점:**
+1. 평가 시작 즉시: `logev eval-start \"{FEATURE_ID} evaluating — {AC수} ACs\"`
+2. 각 AC 검증 후: `logev eval-check \"{FEATURE_ID} AC-{N}: [PASS/FAIL] {근거 요약}\"`
+3. tsc/eslint 검증 후: `logev eval-check \"{FEATURE_ID} gate: tsc {OK/FAIL}, eslint {OK/FAIL}\"`
+4. 최종 판정: `logev eval-done \"{FEATURE_ID} VERDICT={PASS/FAIL} SCORE={X.XX}/3.00\"`
+
 ## 평가 대상
 - Feature ID: {FEATURE_ID}
 - AC: jq '.features[] | select(.id == \"{FEATURE_ID}\").acceptance_criteria' .harness/actions/feature-list.json

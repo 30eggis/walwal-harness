@@ -96,34 +96,30 @@ render_processing_status() {
   echo ""
 }
 
-# 사용자 프롬프트만 필터하여 표시
+# 사용자 프롬프트만 필터하여 표시 (newest first, 전체 출력)
 render_user_prompts() {
   if [ ! -f "$PROGRESS_LOG" ]; then
     echo -e "  ${DIM}(프롬프트 기록 없음)${RESET}"
     return
   fi
 
-  local term_height
-  term_height=$(tput lines 2>/dev/null || echo 30)
-  local max_lines=$((term_height - 10))
-  if [ "$max_lines" -lt 5 ]; then max_lines=5; fi
-
-  # user-prompt 행만 필터
+  # user-prompt 행만 필터 → tac으로 newest first
   local prompts
-  prompts=$(grep '| user-prompt |' "$PROGRESS_LOG" 2>/dev/null | tail -"$max_lines")
+  prompts=$(grep '| user-prompt |' "$PROGRESS_LOG" 2>/dev/null | tac)
 
   if [ -z "$prompts" ]; then
     echo -e "  ${DIM}(사용자 프롬프트 없음)${RESET}"
     return
   fi
 
-  local line_num=0
   local total_prompts
-  total_prompts=$(grep -c '| user-prompt |' "$PROGRESS_LOG" 2>/dev/null || echo 0)
+  total_prompts=$(echo "$prompts" | wc -l | tr -d ' ')
+
+  # 터미널 폭: main loop에서 측정한 _COLS 사용 (subshell 내 tput 불가 대비)
+  local max_width=$(( ${_COLS:-80} - 12 ))
+  if [ "$max_width" -lt 20 ]; then max_width=20; fi
 
   echo "$prompts" | while IFS= read -r line; do
-    line_num=$((line_num + 1))
-
     local ts detail
     ts=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$1); print $1}')
     detail=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$4); print $4}')
@@ -131,20 +127,10 @@ render_user_prompts() {
     local short_ts
     short_ts=$(echo "$ts" | grep -oE '[0-9]{2}:[0-9]{2}' | tail -1 || echo "$ts")
 
-    # 프롬프트 내용 truncate
-    local max_width
-    max_width=$(( $(tput cols 2>/dev/null || echo 40) - 12 ))
-    if [ "$max_width" -lt 20 ]; then max_width=20; fi
     if [ ${#detail} -gt "$max_width" ]; then
       detail="${detail:0:$((max_width - 2))}.."
     fi
 
-    # 처리 상태 찾기: 이 프롬프트 이후의 첫 번째 에이전트 액션
-    local processed_by=""
-    local prompt_ts_epoch
-    prompt_ts_epoch=$(echo "$ts" | sed 's/[^0-9:]//g')
-
-    # 간단히: 마지막 프롬프트인지 확인 → 현재 처리 중 표시
     echo -e "  ${DIM}${short_ts}${RESET}  ${WHITE}${detail}${RESET}"
   done
 
@@ -164,6 +150,10 @@ trap 'tput cnorm 2>/dev/null; exit 0' EXIT INT TERM
 clear
 
 while true; do
+  # subshell 내 tput 불가 → 미리 터미널 크기 측정
+  _ROWS=$(tput lines 2>/dev/null || echo 30)
+  _COLS=$(tput cols 2>/dev/null || echo 80)
+  export _ROWS _COLS
   buf=$(render_all 2>&1)
   tput cup 0 0 2>/dev/null
   echo "$buf"

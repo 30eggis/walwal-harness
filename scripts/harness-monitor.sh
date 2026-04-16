@@ -159,8 +159,14 @@ render_team_section() {
         case "$action" in
           gen|gen-start|gen-read|gen-write|gen-test|gen-done)
             a_icon="▶"; a_color="$GREEN"; a_label="Gen" ;;
-          eval|eval-start|eval-check|eval-done)
-            a_icon="✦"; a_color="$BLUE"; a_label="Eval" ;;
+          eval-start)
+            a_icon="✦"; a_color="$MAGENTA"; a_label="Eval" ;;
+          eval-check)
+            a_icon="·"; a_color="$MAGENTA"; a_label="Eval" ;;
+          eval-done)
+            a_icon="✦"; a_color="${BOLD}${MAGENTA}"; a_label="Eval" ;;
+          eval)
+            a_icon="✦"; a_color="$MAGENTA"; a_label="Eval" ;;
           result|pass)
             a_icon="✓"; a_color="$GREEN"; a_label="Result" ;;
           fail)

@@ -75,9 +75,57 @@ disable-model-invocation: true
 ## Constraints
 
 - 기술 구현 세부사항은 Generator에 위임
-- Sprint당 기능 3-5개 권장
 - 각 기능에 `layer`, `service`, `depends_on` 명시
 - API 계약의 스키마는 Pydantic/class-validator로 직접 변환 가능한 수준
+
+## Team 병렬 스케줄링 규칙 (필수)
+
+Team Mode는 **최대 3팀이 동시 작업**한다. Planner는 feature-list.json 설계 시 다음 규칙을 반드시 준수한다.
+
+### 핵심 원칙: Sprint 시작 시 ready ≥ 3
+
+Sprint 시작 시점에 `depends_on`이 모두 충족된(또는 비어 있는) feature가 **최소 3개** 있어야 3팀이 즉시 가동된다. ready가 1~2개이면 나머지 팀은 유휴 상태가 된다.
+
+### 의존성 그래프 형태
+
+**금지 — 직렬 체인:**
+```
+F-001 → F-002 → F-003 → F-004  (ready=1, 1팀만 작업)
+```
+
+**권장 — 넓은 DAG (fan-out):**
+```
+           ┌→ F-002 (no deps)
+Foundation → F-003 (no deps)      (ready=3, 3팀 동시)
+           └→ F-004 (no deps)
+                    ↓
+                  F-005 (depends_on: [F-002, F-003])
+```
+
+### Sprint 설계 체크리스트
+
+1. **Sprint당 feature 수**: `팀수 × 2` 이상 (3팀 = 최소 6개)
+   - 3개는 즉시 시작, 나머지는 앞선 feature 완료 시 투입
+   - 팀이 PASS 후 대기하지 않고 바로 다음 feature를 가져감
+2. **동시 ready 보장**: Sprint 내 feature 중 `depends_on: []`인 것이 ≥ 3개
+3. **의존성 깊이(critical path) 최소화**: 같은 Sprint 내 체인 깊이 ≤ 2단계
+4. **layer 분산**: 같은 Sprint에 backend-only, frontend-only, fullstack을 혼합하여 서로 독립적으로 작업 가능
+5. **Feature 분할**: 하나의 큰 feature 대신 독립 AC 그룹으로 분할
+   - 예: "대시보드 전체" (1개) → "통계 카드" + "차트 영역" + "최근 활동" (3개, 동시 작업 가능)
+
+### 검증: ready count 시뮬레이션
+
+feature-list.json 완성 후, Sprint별 ready count를 머릿속으로 시뮬레이션한다:
+
+```
+Sprint N 시작 → ready 목록 계산
+  ready ≥ 3  → OK (3팀 동시 가동)
+  ready = 2  → WARNING (1팀 유휴)
+  ready = 1  → FAIL → feature 분할 또는 의존성 제거 필요
+  ready = 0  → CRITICAL → 이전 Sprint 의존성 재설계 필요
+```
+
+ready가 3 미만인 Sprint가 있으면 **feature를 더 작게 분할하거나 의존성을 제거**하여 수정한다.
 
 ## After Completion
 
