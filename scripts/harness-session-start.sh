@@ -3,7 +3,7 @@
 # 새 세션 시작 시 자동으로:
 #   1) 이전 에이전트가 completed이면 harness-next.sh 실행 (게이트 + handoff)
 #   2) Planner/Dispatcher 사이클이면 audit 리셋
-#   3) 다음 에이전트 안내 출력
+#   3) 모드별 안내 출력
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB="$SCRIPT_DIR/lib/harness-render-progress.sh"
@@ -25,22 +25,33 @@ sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
 current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
 next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
+mode=$(jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null)
 
 # ─────────────────────────────────────────
-# v4 Parallel Mode — feature-queue.json이 존재하면 v4 안내
+# Team Mode — 팀이 자율 실행 중이면 오케스트레이터 안내
 # ─────────────────────────────────────────
-FEATURE_QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
-if [ -f "$FEATURE_QUEUE" ]; then
-  passed=$(jq '.queue.passed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
-  total=$(jq '[.queue.ready, (.queue.blocked | keys), (.queue.in_progress | keys), .queue.passed, .queue.failed] | flatten | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
-  in_prog=$(jq '.queue.in_progress | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
-  failed=$(jq '.queue.failed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+if [ "$mode" = "team" ]; then
+  FEATURE_QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
+  passed=0; total=0; in_prog=0; failed=0
+  if [ -f "$FEATURE_QUEUE" ]; then
+    passed=$(jq '.queue.passed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+    total=$(jq '[.queue.ready, (.queue.blocked | keys), (.queue.in_progress | keys), .queue.passed, .queue.failed] | flatten | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+    in_prog=$(jq '.queue.in_progress | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+    failed=$(jq '.queue.failed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
+  fi
 
-  echo "# Harness v4 — Parallel Agent Teams active"
+  echo "# Harness Team Mode active"
   echo "# Queue: ${passed}/${total} passed, ${in_prog} in progress, ${failed} failed"
-  echo "# Teams are running autonomously. You are the orchestrator."
-  echo "# Role: Monitor dashboard, resolve failures, manual interventions only."
-  echo "# Do NOT run /harness-generator-* or /harness-evaluator-* — Teams handle Gen+Eval."
+  echo "# Teams run autonomously (Gen-Eval loop, max 5 retries)."
+  echo "# Stop: /harness-stop | Switch to solo: /harness-solo"
+  exit 0
+fi
+
+# ─────────────────────────────────────────
+# Paused Mode — 중단 상태 안내
+# ─────────────────────────────────────────
+if [ "$mode" = "paused" ]; then
+  echo "# Harness paused — resume with /harness-team or /harness-solo"
   exit 0
 fi
 

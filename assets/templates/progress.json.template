@@ -1,5 +1,6 @@
 {
-  "version": 1,
+  "version": 2,
+  "mode": "solo",
   "project_name": "",
   "pipeline": null,
   "sprint": {
@@ -22,6 +23,11 @@
     "feature-list.json": { "status": "pending", "updated_by": null, "updated_at": null },
     "api-contract.json": { "status": "pending", "updated_by": null, "updated_at": null },
     "sprint-contract.md": { "status": "pending", "updated_by": null, "updated_at": null }
+  },
+  "team_state": {
+    "active_teams": 0,
+    "paused_at": null,
+    "resume_from": null
   },
   "updated_at": "{{DATE}}",
   "history": []

@@ -1,8 +1,8 @@
 #!/bin/bash
-# harness-monitor.sh — Agent Lifecycle Monitor
+# harness-monitor.sh — Agent Lifecycle Monitor (v5 unified)
 #
-# v3 모드: 단일 이벤트 스트림 (progress.json 변경 감지 + audit.log)
-# v4 모드: 팀별 섹션 분리 (feature-queue.json + progress.log 기반)
+# Solo 모드: 단일 이벤트 스트림 (progress.json 변경 감지 + audit.log)
+# Team 모드: 팀별 섹션 분리 (feature-queue.json + progress.log 기반)
 #
 # Usage: bash scripts/harness-monitor.sh [project-root]
 
@@ -62,7 +62,7 @@ team_color() {
 }
 
 # ══════════════════════════════════════════
-# v4 모드: 팀별 섹션 렌더링
+# Team 모드: 팀별 섹션 렌더링
 # ══════════════════════════════════════════
 
 render_v4_header() {
@@ -224,7 +224,7 @@ render_v4() {
 }
 
 # ══════════════════════════════════════════
-# v3 모드: 단일 스트림 (기존 동작)
+# Solo 모드: 단일 스트림 (기존 동작)
 # ══════════════════════════════════════════
 
 LAST_AGENT=""
@@ -333,26 +333,31 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# 매 루프마다 v4/v3 동적 감지 — 시작 후에도 모드 전환 가능
+# 매 루프마다 mode 동적 감지 — 시작 후에도 모드 전환 가능
 tput civis 2>/dev/null
 clear
 
 CURRENT_MODE=""
 
 while true; do
-  # 동적 모드 감지 (--team 지정 시 항상 v4)
+  # 동적 모드 감지 (--team 지정 시 항상 team, 그 외 progress.json.mode 참조)
   if [ -n "$TEAM_FILTER" ] || [ -f "$QUEUE" ]; then
-    NEW_MODE="v4"
+    NEW_MODE="team"
   else
-    NEW_MODE="v3"
+    if [ -f "$PROGRESS" ] && command -v jq &>/dev/null; then
+      NEW_MODE=$(jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null)
+      [ "$NEW_MODE" = "team" ] || NEW_MODE="solo"
+    else
+      NEW_MODE="solo"
+    fi
   fi
 
   # 모드 전환 시 화면 초기화
   if [ "$NEW_MODE" != "$CURRENT_MODE" ]; then
     clear
     CURRENT_MODE="$NEW_MODE"
-    if [ "$CURRENT_MODE" = "v3" ]; then
-      # v3 초기화
+    if [ "$CURRENT_MODE" = "solo" ]; then
+      # solo 초기화
       if [ -f "$PROGRESS" ]; then
         LAST_AGENT=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
         LAST_STATUS=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
@@ -362,7 +367,7 @@ while true; do
     fi
   fi
 
-  if [ "$CURRENT_MODE" = "v4" ]; then
+  if [ "$CURRENT_MODE" = "team" ]; then
     buf=$(render_v4 2>&1)
     tput cup 0 0 2>/dev/null
     echo "$buf"

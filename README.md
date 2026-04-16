@@ -13,8 +13,10 @@
 
 | 모드 | 설명 | 실행 방법 |
 |------|------|----------|
-| **Classic (v3)** | 순차 실행 — Planner → Generator → Evaluator 1세션씩 | `하네스 엔지니어링 시작` |
-| **Agent Teams (v4)** | 병렬 실행 — 3 Team이 Feature 단위 Gen→Eval 루프 동시 실행 | `/harness-team` 또는 `npx walwal-harness v4` |
+| **Solo** | 순차 실행 — 프롬프트 기반으로 Planner → Generator → Evaluator 순서대로 진행 | `/harness-solo` 또는 프롬프트로 진행 |
+| **Team** | 병렬 실행 — 3 Team이 Feature 단위 Gen→Eval 루프를 자동 핸즈오프로 동시 실행 | `/harness-team` 또는 `npx walwal-harness team` |
+
+두 모드는 언제든 전환 가능합니다. Team 모드 중단 후 Solo로 이어가거나, Solo에서 Team으로 전환해도 진행 상태가 보존됩니다.
 
 ---
 
@@ -29,372 +31,194 @@ npm install @walwal-harness/cli
 
 `postinstall`이 자동으로:
 1. `.harness/` 디렉토리 스캐폴딩
-2. `.claude/skills/` 에 에이전트 스킬 설치 (8개)
-3. `scripts/` 에 오케스트레이션 스크립트 설치
-4. SessionStart / UserPromptSubmit 훅 등록
-5. `AGENTS.md` + `CLAUDE.md` 심볼릭 링크 생성
+2. `.claude/skills/` 에 에이전트 스킬 설치 (7개)
+3. `.claude/commands/` 에 모드 제어 커맨드 설치 (3개)
+4. `scripts/` 에 오케스트레이션 스크립트 설치
+5. SessionStart / UserPromptSubmit 훅 등록
+6. `AGENTS.md` + `CLAUDE.md` 심볼릭 링크 생성
 
-> **중요:** 설치 후 Claude Code 세션을 **재시작**해야 skills가 인식됩니다.
+> **중요:** 설치 후 Claude Code 세션을 **재시작**해야 skills/commands가 인식됩니다.
 
-### 기존 설치자 업데이트
+### 업데이트
 
 ```bash
-# latest (v3 안정판)
 npm update @walwal-harness/cli
-
-# v4 alpha (Agent Teams)
-npm install @walwal-harness/cli@next
-
-# 스크립트 동기화 (코어 스크립트 자동 덮어쓰기)
-npx walwal-harness
 ```
+
+npm update 시 모든 시스템 파일(scripts, skills, commands)이 **자동으로 교체**됩니다.
+사용자 데이터(progress.json, progress.log, gotchas 커스텀 항목, archive)는 보존됩니다.
 
 ### CLI 명령어
 
 ```bash
-npx walwal-harness            # 초기화 / 스크립트 업데이트
-npx walwal-harness --force    # 강제 재초기화
-npx walwal-harness studio     # Harness Studio v3 (tmux 5-pane)
-npx walwal-harness v4         # Harness Studio v4 (Agent Teams, tmux 6-pane)
-npx walwal-harness --help     # 도움말
+npx walwal-harness              # 초기화 / 스크립트 업데이트
+npx walwal-harness --force      # 강제 재초기화
+npx walwal-harness team         # Team Mode tmux 레이아웃 실행
+npx walwal-harness team --kill  # Team Mode tmux 세션 종료
+npx walwal-harness --help       # 도움말
 ```
 
 ---
 
-## Quick Start — Classic Mode (v3)
-
-### 1. 설치 + 재시작
+## Quick Start — Solo Mode
 
 ```bash
-cd your-project
+# 1. 설치
 npm install @walwal-harness/cli
-# Claude Code 재시작 (/exit → 재진입)
+
+# 2. Claude Code 재시작
+claude   # (또는 codex)
+
+# 3. 하네스 시작
+> 하네스 엔지니어링 시작
+
+# 4. Dispatcher → Planner 순서로 자동 진행
+# 5. Generator, Evaluator를 프롬프트로 순차 호출
 ```
 
-### 2. 하네스 시작
+### Solo 파이프라인
 
 ```
-❯ 하네스 엔지니어링 시작
+사용자 요청 → Dispatcher → (Brainstormer) → Planner
+→ Generator-Backend → Generator-Frontend
+→ Evaluator-Functional → Evaluator-Visual
+→ PASS: 다음 Sprint | FAIL: Generator로 재시도 (최대 5회)
 ```
-
-또는 Claude Code에서 아무 요청 → UserPromptSubmit 훅이 자동으로 Dispatcher를 호출합니다.
-
-### 3. 파이프라인 자동 선택
-
-Dispatcher가 요청을 분석하여 파이프라인을 결정합니다:
-
-```
-FULLSTACK  : Planner → Gen-BE → Gen-FE → Eval-Func → Eval-Visual
-FE-ONLY    : Planner(light) → Gen-FE → Eval-Func → Eval-Visual
-BE-ONLY    : Planner → Gen-BE → Eval-Func(API-only)
-```
-
-### 4. 순차 실행
-
-각 에이전트가 독립 Claude Code 세션에서 실행됩니다:
-
-```
-❯ /harness-planner           # Plan 작성
-❯ /harness-generator-frontend  # 코드 생성
-❯ /harness-evaluator-functional  # E2E 테스트
-```
-
-에이전트가 완료되면 **새 세션**을 시작하면 자동으로 다음 에이전트를 안내합니다.
-
-### 5. Eval FAIL → 자동 재작업
-
-Evaluator FAIL 시 → 실패 원인 + 피드백과 함께 Generator로 자동 리라우팅 (최대 10회).
 
 ---
 
-## Quick Start — Agent Teams (v4)
-
-Claude Code의 **네이티브 Agent Teams 기능**을 사용하여 3개 Teammate가 Feature 단위로 Gen→Eval을 병렬 실행합니다.
-
-```
-기존 (v3): Planner → Gen(F-001~028 전부) → Eval(전부)
-v4:        Planner → 3 Teammates 병렬, 각 Feature 단위 Gen→Eval
-```
-
-### 1. Agent Teams 활성화
+## Quick Start — Team Mode
 
 ```bash
-npm install @walwal-harness/cli@next
-npx walwal-harness v4    # settings.json에 env var 설정 + queue 초기화
+# Planner 완료 후:
+> /harness-team
+
+# 자동으로:
+# 1. feature-queue.json 초기화 (의존성 topological sort)
+# 2. tmux Studio 레이아웃 구축
+# 3. 3개 팀이 병렬로 Gen→Eval 루프 자동 실행
+# 4. 팀 완료 시 자동으로 다음 feature dequeue
+# 5. 5회 초과 실패 시 사용자 개입 요청
 ```
 
-또는 수동으로:
-
-```json
-// .claude/settings.json
-{
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  }
-}
-```
-
-### 2. Claude Code 시작
-
-```bash
-claude                           # 기본 모드
-claude --teammate-mode tmux      # tmux split pane 모드 (권장)
-```
-
-### 3. Planner 실행
-
-```
-❯ 하네스 엔지니어링 시작
-# Dispatcher → Planner → feature-list.json 생성
-```
-
-### 4. Teams 가동
-
-```
-❯ /harness-team-action
-```
-
-이 명령은:
-1. `feature-list.json` → `feature-queue.json` 초기화 (dependency-aware topological sort)
-2. 3개 Teammate 생성 (Claude의 네이티브 Agent Teams)
-3. 각 Teammate가 Queue에서 Feature를 가져와 Gen→Eval 자율 실행
-
-### 5. 모니터링 & 제어
-
-| 명령 | 동작 |
-|------|------|
-| `/harness-team-action` | Queue 초기화 + 3 Teammates 생성 |
-| `/harness-team-stop` | 모든 Teammates 해산 |
-| `bash scripts/harness-queue-manager.sh status .` | Queue 상태 확인 |
-| `bash scripts/harness-queue-manager.sh requeue F-XXX .` | 실패 Feature 재큐 |
-
-**tmux 모드에서 Teammate 간 전환:**
-- `Shift+Down` — Teammate 순회
-- `Ctrl+T` — 태스크 리스트 보기
-
-### 6. 작동 원리
-
-```
-Feature Queue (dependency-aware topological sort)
-  Ready:   [F-002, F-003, F-007]  ← depends_on 충족된 것만
-  Blocked: [F-004, F-005, ...]    ← 선행 Feature 미완료
-
-Teammate 1: F-002 → 코드 생성 → tsc/eslint 검증 → AC 평가
-  PASS → queue에서 pass 처리 → dependents unblock → 다음 Feature
-  FAIL → 최대 3회 재시도 → 실패 시 fail 처리
-
-Teammate 2: F-003 → (동일 루프)
-Teammate 3: F-007 → (동일 루프)
-```
-
-- 각 Teammate는 Claude Code의 **독립 컨텍스트** (1M token)
-- `SendMessage`로 Teammate 간 직접 소통 (API 변경, 실패 알림 등)
-- Lead(사용자 세션)는 오케스트레이터 — 개입, 리뷰, gotcha 등록
-
-### 7. Lead에서 할 수 있는 것
-
-| 할 수 있는 것 | 예시 |
-|--------------|------|
-| Teams 가동/중지 | `/harness-team-action`, `/harness-team-stop` |
-| Queue 상태 확인 | `bash scripts/harness-queue-manager.sh status .` |
-| 실패 Feature 분석 | "F-003이 왜 실패했는지 분석해줘" |
-| Feature 재큐 | `bash scripts/harness-queue-manager.sh requeue F-003 .` |
-| 코드 리뷰 | "F-002의 Sidebar 컴포넌트 리뷰해줘" |
-| Gotcha 등록 | "API 응답에 created_at은 ISO 8601이어야 해" |
-| Teammate에 메시지 | "team-1에게 API 스키마 변경 알려줘" |
-
-**하지 말 것:** `/harness-generator-*`, `/harness-evaluator-*` 직접 호출 — Teammate가 처리합니다.
-
----
-
-## 에이전트
-
-| 에이전트 | 역할 | 모델 |
-|----------|------|------|
-| **Dispatcher** | 파이프라인 선택 + Gotcha 관리 | opus |
-| **Brainstormer** | 러프한 요구사항 대화형 구체화 | opus |
-| **Planner** | 제품 사양 + API 계약 + Feature 설계 | opus/ultraplan |
-| **Generator-Backend** | NestJS MSA 구현 | sonnet |
-| **Generator-Frontend** | React/Next.js UI 구현 | sonnet |
-| **Evaluator-Functional** | Playwright E2E 기능 검증 | opus/ultrathink |
-| **Evaluator-Visual** | 디자인, 반응형, 접근성 검증 | opus/ultrathink |
-
-### Brainstormer (조건부)
-
-[obra/superpowers](https://github.com/obra/superpowers) (MIT License) 기반. 바이브코딩 수준의 러프한 요구사항을 대화형 Q&A로 구체화합니다.
-
----
-
-## 핵심 메커니즘
-
-### Auto-Routing
-
-모든 사용자 프롬프트가 Dispatcher를 자동 경유합니다.
-
-```
-# per-message opt-out
-❯ harness skip 그냥 답해줘
-
-# 전역 비활성
-.harness/config.json → behavior.auto_route_dispatcher = false
-```
-
-### API Contract — 진실의 원천
-
-`api-contract.json`이 FE ↔ Gateway ↔ Services 간 유일한 계약서입니다.
-
-### Gotcha 시스템
-
-사용자가 실수를 지적하면 Dispatcher가 자동 기록 → 이후 세션에서 반복 방지.
-
-### Pre-Eval Gate
-
-Generator → Evaluator 전환 전 결정론적 검증 (tsc, eslint, test). 실패 시 Evaluator 세션을 열지 않고 Generator로 자동 리라우팅.
-
-```json
-// .harness/config.json
-"pre_eval_gate": {
-  "frontend_checks": ["npx tsc --noEmit", "npx eslint src/", "npx vitest run --bail 1"],
-  "frontend_cwd": "path/to/frontend"  // 프로젝트 루트와 다른 경우
-}
-```
-
-### Evaluation System
-
-| 설정 | 값 |
-|------|------|
-| PASS 기준 | 2.80 / 3.00 이상 |
-| FAIL 기준 | 2.79 이하 (예외 없음) |
-| Evidence 없는 Score | 0점 강제 |
-| Regression 실패 | 1건이라도 → 전체 FAIL |
-
----
-
-## Harness Studio (tmux)
-
-### Studio v3 (Classic)
-
-```bash
-npx walwal-harness studio
-```
-
-```
-┌──────────────┬──────────────┐
-│  Dashboard    │ Monitor      │
-│  (Progress)   ├──────────────┤
-├──────────────┤ Agent Session │
-│  Control      ├──────────────┤
-│  (harness>)   │ Eval Review  │
-└──────────────┴──────────────┘
-```
-
-### Studio v4 (Agent Teams)
-
-```bash
-npx walwal-harness v4
-```
+### Team 모드 레이아웃
 
 ```
 ┌──────────────┬──────────────┬──────────────┐
-│              │  Progress    │  Team 1      │
-│  Main        ├──────────────┤  Team 2      │
-│  (Claude)    │  Prompts     │  Team 3      │
+│  Prompt      │  Dashboard   │   TEAM 1     │
+│  History     │  (queue +    │  Gen | Eval   │
+│              │   status)    ├──────────────┤
+├──────────────┤              │   TEAM 2     │
+│  Controller  │              │  Gen | Eval   │
+│  (Claude /   │              ├──────────────┤
+│   Codex)     │              │   TEAM 3     │
 └──────────────┴──────────────┴──────────────┘
 ```
 
 ---
 
-## 프로젝트 구조
+## 모드 전환
+
+| 명령 | 설명 |
+|------|------|
+| `/harness-team` | Team 모드 시작/재개 |
+| `/harness-solo` | Solo 모드로 전환 (진행 상태 보존) |
+| `/harness-stop` | Team 모드 중단 (queue 보존, 나중에 재개 가능) |
+
+```
+Team 실행 중 → /harness-stop → /harness-solo → 프롬프트로 계속
+                                    ↓
+                              /harness-team → 나머지 feature 팀 재개
+```
+
+---
+
+## 에이전트 구성
+
+| 에이전트 | 역할 | 모델 |
+|----------|------|------|
+| **Dispatcher** | 요청 분석 → 파이프라인 결정 | opus |
+| **Brainstormer** | 러프한 요구사항 → 구조화된 spec | opus |
+| **Planner** | 제품 사양 + API 계약서 + 서비스 분할 | opus |
+| **Generator-Backend** | NestJS MSA 서비스 구현 | sonnet |
+| **Generator-Frontend** | React/Next.js UI 구현 | sonnet |
+| **Evaluator-Functional** | Playwright E2E 기능 검증 | opus |
+| **Evaluator-Visual** | 디자인/접근성/AI슬롭 검증 | opus |
+
+### Evaluation 기준
+- PASS: Weighted Score ≥ 2.80/3.00
+- AC 100% 충족 필수 (부분 통과 = FAIL)
+- Regression 실패 1건+ = FAIL
+- Evidence 없는 Score = 0점
+- Team Mode: 최대 5회 재시도 후 사용자 개입 요청
+
+---
+
+## 디렉토리 구조
 
 ```
 your-project/
-├── AGENTS.md                           # 에이전트 공통 컨텍스트
-├── CLAUDE.md → AGENTS.md               # 심볼릭 링크
-├── scripts/
-│   ├── harness-next.sh                 # 세션 오케스트레이터
-│   ├── harness-session-start.sh        # SessionStart 훅
-│   ├── harness-user-prompt-submit.sh   # UserPromptSubmit 훅
-│   ├── harness-queue-manager.sh        # v4: Feature Queue 관리
-│   ├── harness-team-worker.sh          # v4: Team Worker (Gen→Eval 루프)
-│   ├── harness-studio-v4.sh            # v4: tmux 레이아웃
-│   ├── harness-dashboard-v4.sh         # v4: Progress 패널
-│   ├── harness-prompts-v4.sh           # v4: Prompts 패널
-│   └── lib/
 ├── .harness/
-│   ├── config.json                     # 하네스 설정
-│   ├── HARNESS.md                      # 상세 가이드
-│   ├── progress.json                   # 세션 간 상태
-│   ├── progress.log                    # append-only 히스토리
-│   ├── gotchas/                        # 에이전트별 실수 기록
-│   ├── actions/
-│   │   ├── feature-list.json           # 기능 목록 + AC
-│   │   ├── feature-queue.json          # v4: Feature Queue 상태
-│   │   ├── api-contract.json           # API 계약서
-│   │   └── plan.md                     # 제품 사양
-│   └── archive/                        # 완료 스프린트 보관
-└── .claude/
-    ├── settings.json                   # 훅 등록
-    └── skills/                         # Claude Code 스킬 (8개)
+│   ├── config.json                    # 하네스 설정
+│   ├── progress.json                  # 런타임 상태 (mode, sprint, agent)
+│   ├── progress.log                   # 실시간 이벤트 로그
+│   ├── HARNESS.md                     # 하네스 상세 가이드
+│   ├── actions/                       # 활성 스프린트 문서
+│   │   ├── feature-list.json          # Feature 목록 + AC
+│   │   ├── api-contract.json          # API 계약서
+│   │   ├── feature-queue.json         # Feature Queue 상태 (Team Mode)
+│   │   └── ...
+│   ├── archive/                       # 완료 스프린트 보관 (불변)
+│   └── gotchas/                       # 에이전트 실수 기록
+├── .claude/
+│   ├── skills/harness-*/              # 에이전트 스킬 (7개)
+│   ├── commands/harness-*.md          # 모드 제어 커맨드 (3개)
+│   └── settings.json                  # 훅, statusline
+├── scripts/
+│   ├── harness-tmux.sh                # 통합 tmux 레이아웃 (Solo/Team)
+│   ├── harness-dashboard.sh           # 통합 대시보드
+│   ├── harness-monitor.sh             # 에이전트 모니터
+│   ├── harness-queue-manager.sh       # Feature Queue 관리
+│   ├── harness-next.sh                # 에이전트 전환 라우터
+│   ├── harness-session-start.sh       # SessionStart 훅
+│   ├── harness-user-prompt-submit.sh  # UserPromptSubmit 훅
+│   ├── harness-statusline.sh          # 상태바
+│   ├── harness-prompt-history.sh      # 프롬프트 히스토리
+│   └── lib/                           # 공유 라이브러리
+├── AGENTS.md                          # 프로젝트 컨텍스트 (IA-MAP)
+└── CLAUDE.md → AGENTS.md             # 심볼릭 링크
 ```
 
 ---
 
-## Playwright MCP 설정
+## Troubleshooting
 
-Evaluator가 브라우저 테스트를 수행하려면 Playwright MCP가 필요합니다:
+### Skills/Commands가 인식되지 않음
+```bash
+# Claude Code 세션 재시작
+/exit
+claude
+```
 
-```json
-// ~/.mcp.json
-{
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest", "--headless", "--caps", "vision"]
-    }
-  }
-}
+### Team 모드에서 "No features ready"
+```bash
+# Queue 상태 확인
+bash scripts/harness-queue-manager.sh status .
+
+# 실패한 feature requeue
+bash scripts/harness-queue-manager.sh requeue F-001 .
+```
+
+### 모드 전환 후 상태 꼬임
+```bash
+# progress.json 직접 확인
+cat .harness/progress.json | jq '{mode, sprint, current_agent, next_agent}'
+
+# 강제 Solo 복귀
+jq '.mode = "solo"' .harness/progress.json > /tmp/p.json && mv /tmp/p.json .harness/progress.json
 ```
 
 ---
-
-## 트러블슈팅
-
-### Skills가 로드되지 않아요
-
-```bash
-/exit  # Claude Code 세션 종료
-# 프로젝트 디렉토리에서 재진입
-```
-
-### 스크립트가 구버전이에요
-
-```bash
-npx walwal-harness  # 코어 스크립트 자동 덮어쓰기
-```
-
-### v4 Team이 "No features ready" 반복
-
-```bash
-# Studio를 재시작하면 자동으로 stale in_progress 복구
-npx walwal-harness v4
-```
-
-### Auto-routing 끄기
-
-```
-❯ harness skip 답만 해줘
-```
-
-또는 `.harness/config.json`에서 `behavior.auto_route_dispatcher = false`
-
----
-
-## 참고
-
-- [Anthropic: Effective Harnesses for Long-Running Agents](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)
-- [Anthropic: Harness Design for Long-Running Application Development](https://www.anthropic.com/engineering/harness-design-long-running-apps)
-- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills)
-- [obra/superpowers](https://github.com/obra/superpowers) — Brainstorming skill (MIT License)
 
 ## License
 

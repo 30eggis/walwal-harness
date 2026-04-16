@@ -1,23 +1,26 @@
 #!/bin/bash
-# harness-tmux.sh — Harness Studio tmux 5-pane 레이아웃
+# harness-tmux.sh — Unified Harness Studio layout
 #
-# ┌─────────────────────────┬────────────────────────┐
-# │  Dashboard (auto-refresh)│ Monitor (compact)      │
-# │                          ├────────────────────────┤
-# │                          │ Agent Session (claude)  │
-# ├─────────────────────────┤                         │
-# │  Control (harness> _)    ├────────────────────────┤
-# │                          │ Eval Review             │
-# └─────────────────────────┴────────────────────────┘
+# Team Mode (--team):
+# ┌──────────────┬──────────────┬──────────────┐
+# │              │              │   TEAM 1     │
+# │  Prompt      │  Dashboard   │  Gen | Eval   │
+# │  History     │  (queue +    ├──────────────┤
+# │              │   status +   │   TEAM 2     │
+# │              │   archive)   │  Gen | Eval   │
+# │              │              ├──────────────┤
+# │              │              │   TEAM 3     │
+# └──────────────┴──────────────┴──────────────┘
+#
+# Rendering strategy:
+#   1. iTerm2 detected → native split panes (no tmux needed)
+#   2. tmux available  → tmux session
+#   3. Fallback        → open new terminal windows
 #
 # Usage:
-#   bash scripts/harness-tmux.sh [project-root]
-#   bash scripts/harness-tmux.sh /path/to/project --ai
-#
-# Options:
-#   --ai        Eval Review에서 claude -p AI 요약
-#   --detach    세션 생성 후 attach 하지 않음
-#   --kill      기존 harness-studio 세션 종료
+#   bash scripts/harness-tmux.sh [project-root] --team
+#   bash scripts/harness-tmux.sh [project-root] --solo
+#   bash scripts/harness-tmux.sh --kill
 
 set -euo pipefail
 
@@ -25,15 +28,31 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SESSION_NAME="harness-studio"
 
 PROJECT_ROOT=""
-USE_AI=""
+MODE=""
 DETACH=false
 
 for arg in "$@"; do
   case "$arg" in
-    --ai)     USE_AI="--ai" ;;
+    --team)   MODE="team" ;;
+    --solo)   MODE="solo" ;;
     --detach) DETACH=true ;;
     --kill)
-      tmux kill-session -t "$SESSION_NAME" 2>/dev/null && echo "Killed." || echo "No session."
+      tmux kill-session -t "$SESSION_NAME" 2>/dev/null && echo "tmux session killed." || true
+      # Also try to close iTerm2 studio tab if exists
+      if [ "${TERM_PROGRAM:-}" = "iTerm.app" ]; then
+        osascript -e '
+          tell application "iTerm2"
+            repeat with w in windows
+              repeat with t in tabs of w
+                if name of current session of t contains "harness-studio" then
+                  close t
+                end if
+              end repeat
+            end repeat
+          end tell
+        ' 2>/dev/null || true
+      fi
+      echo "Killed."
       exit 0
       ;;
     *)
@@ -55,83 +74,215 @@ if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT/.harness" ]; then
   exit 1
 fi
 
+# Auto-detect mode from progress.json if not specified
+if [ -z "$MODE" ]; then
+  if command -v jq &>/dev/null && [ -f "$PROJECT_ROOT/.harness/progress.json" ]; then
+    MODE=$(jq -r '.mode // "solo"' "$PROJECT_ROOT/.harness/progress.json" 2>/dev/null)
+  fi
+  MODE="${MODE:-solo}"
+fi
+
 echo "Project: $PROJECT_ROOT"
-echo "Session: $SESSION_NAME"
+echo "Mode: $MODE"
 
-tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+# ══════════════════════════════════════════
+# Strategy 1: iTerm2 native split panes
+# ══════════════════════════════════════════
+launch_iterm2_team() {
+  osascript <<APPLESCRIPT
+    tell application "iTerm2"
+      activate
 
-# ── Resolve Claude command ──
-HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
-CLAUDE_CMD="claude --dangerously-skip-permissions"
-if [ -f "$HANDOFF" ]; then
-  _model=$(jq -r '.model // empty' "$HANDOFF" 2>/dev/null)
-  if [ -n "$_model" ] && [ "$_model" != "null" ]; then
-    CLAUDE_CMD="$CLAUDE_CMD --model $_model"
+      -- Create new window with first session (Prompt History)
+      set studioWindow to (create window with default profile)
+
+      tell studioWindow
+        tell current session of current tab
+          set name to "harness-studio"
+          write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
+
+          -- Split right → Dashboard
+          set dashPane to (split vertically with default profile)
+          tell dashPane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-dashboard.sh' '${PROJECT_ROOT}'"
+
+            -- Split right → Team 1
+            set t1Pane to (split vertically with default profile)
+            tell t1Pane
+              write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}' --team 1"
+
+              -- Split down → Team 2
+              set t2Pane to (split horizontally with default profile)
+              tell t2Pane
+                write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}' --team 2"
+
+                -- Split down → Team 3
+                set t3Pane to (split horizontally with default profile)
+                tell t3Pane
+                  write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}' --team 3"
+                end tell
+              end tell
+            end tell
+          end tell
+        end tell
+      end tell
+    end tell
+APPLESCRIPT
+}
+
+launch_iterm2_solo() {
+  osascript <<APPLESCRIPT
+    tell application "iTerm2"
+      activate
+
+      set studioWindow to (create window with default profile)
+
+      tell studioWindow
+        tell current session of current tab
+          set name to "harness-studio"
+          write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-dashboard.sh' '${PROJECT_ROOT}'"
+
+          -- Split right → Monitor
+          set monPane to (split vertically with default profile)
+          tell monPane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}'"
+
+            -- Split right → Agent Session
+            set agentPane to (split vertically with default profile)
+            tell agentPane
+              write text "cd '${PROJECT_ROOT}' && clear"
+            end tell
+          end tell
+
+          -- Split down → Prompt History (bottom-left)
+          set histPane to (split horizontally with default profile)
+          tell histPane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
+          end tell
+        end tell
+      end tell
+    end tell
+APPLESCRIPT
+}
+
+# ══════════════════════════════════════════
+# Strategy 2: tmux
+# ══════════════════════════════════════════
+launch_tmux_team() {
+  tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+
+  PANE_LEFT=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 220 -y 55 -P -F '#{pane_id}')
+  PANE_MID=$(tmux split-window -h -p 70 -t "$PANE_LEFT" -c "$PROJECT_ROOT" -P -F '#{pane_id}')
+  PANE_T1=$(tmux split-window -h -p 60 -t "$PANE_MID" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 1'")
+  PANE_T2=$(tmux split-window -v -p 66 -t "$PANE_T1" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 2'")
+  PANE_T3=$(tmux split-window -v -p 50 -t "$PANE_T2" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 3'")
+
+  tmux send-keys -t "$PANE_LEFT" "bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"" Enter
+  tmux send-keys -t "$PANE_MID" "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
+
+  tmux select-pane -t "$PANE_LEFT"  -T "Prompt History"
+  tmux select-pane -t "$PANE_MID"   -T "Dashboard"
+  tmux select-pane -t "$PANE_T1"    -T "TEAM 1"
+  tmux select-pane -t "$PANE_T2"    -T "TEAM 2"
+  tmux select-pane -t "$PANE_T3"    -T "TEAM 3"
+  tmux select-pane -t "$PANE_LEFT"
+
+  tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
+  tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
+}
+
+launch_tmux_solo() {
+  tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+
+  PANE_DASHBOARD=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50 -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"'")
+  PANE_MONITOR=$(tmux split-window -h -p 60 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'")
+  PANE_HISTORY=$(tmux split-window -v -p 30 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"'")
+  PANE_AGENT=$(tmux split-window -v -p 85 -t "$PANE_MONITOR" -c "$PROJECT_ROOT" -P -F '#{pane_id}')
+
+  tmux send-keys -t "$PANE_AGENT" "clear" Enter
+
+  tmux select-pane -t "$PANE_DASHBOARD" -T "Dashboard"
+  tmux select-pane -t "$PANE_MONITOR"   -T "Monitor"
+  tmux select-pane -t "$PANE_HISTORY"   -T "Prompt History"
+  tmux select-pane -t "$PANE_AGENT"     -T "Agent Session"
+  tmux select-pane -t "$PANE_AGENT"
+
+  tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
+  tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
+}
+
+# ══════════════════════════════════════════
+# Dispatch: pick best strategy
+# ══════════════════════════════════════════
+
+# Detect iTerm2 — works even from Claude Code's non-TTY Bash
+IS_ITERM=false
+if [ "${TERM_PROGRAM:-}" = "iTerm.app" ]; then
+  IS_ITERM=true
+elif [ "$(uname)" = "Darwin" ]; then
+  # Check if iTerm2 is running (for non-TTY environments like Claude Code)
+  if pgrep -q "iTerm2" 2>/dev/null; then
+    IS_ITERM=true
   fi
 fi
 
-# ══════════════════════════════════════════
-# Build layout using explicit pane IDs
-# ══════════════════════════════════════════
+HAS_TMUX=false
+if command -v tmux &>/dev/null; then
+  HAS_TMUX=true
+fi
 
-# 1. Create session → capture Dashboard pane ID
-PANE_DASHBOARD=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50 \
-  -P -F '#{pane_id}' \
-  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"'")
-
-# 2. Split Dashboard horizontally (55% left / 45% right) → Monitor pane
-PANE_MONITOR=$(tmux split-window -h -p 45 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" \
-  -P -F '#{pane_id}' \
-  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'")
-
-# 3. Split Dashboard vertically (75% top / 25% bottom) → Control pane
-PANE_CONTROL=$(tmux split-window -v -p 25 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" \
-  -P -F '#{pane_id}' \
-  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-control.sh\" \"${PROJECT_ROOT}\"'")
-
-# 4. Split Monitor vertically (15% top / 85% bottom) → Agent Session pane
-PANE_AGENT=$(tmux split-window -v -p 85 -t "$PANE_MONITOR" -c "$PROJECT_ROOT" \
-  -P -F '#{pane_id}')
-
-# 5. Split Agent Session vertically (55% top / 45% bottom) → Eval Review pane
-PANE_EVAL=$(tmux split-window -v -p 45 -t "$PANE_AGENT" -c "$PROJECT_ROOT" \
-  -P -F '#{pane_id}' \
-  "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-eval-watcher.sh\" \"${PROJECT_ROOT}\" ${USE_AI}'")
-
-# 6. Agent Session — leave as empty shell, ready for Control to launch claude
-#    Pre-unset nvm conflict variable
-tmux send-keys -t "$PANE_AGENT" "unset npm_config_prefix 2>/dev/null" Enter
-tmux send-keys -t "$PANE_AGENT" "clear" Enter
-
-# ── Pane titles ──
-tmux select-pane -t "$PANE_DASHBOARD" -T "Dashboard"
-tmux select-pane -t "$PANE_MONITOR"   -T "Monitor"
-tmux select-pane -t "$PANE_CONTROL"   -T "Control"
-tmux select-pane -t "$PANE_AGENT"     -T "Agent Session"
-tmux select-pane -t "$PANE_EVAL"      -T "Eval Review"
-
-tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
-tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
-
-# ── Focus on Control pane (where user types) ──
-tmux select-pane -t "$PANE_CONTROL"
-
-# ── Attach ──
-if [ "$DETACH" = true ]; then
-  echo ""
-  echo "Session created. Attach: tmux attach -t $SESSION_NAME"
-else
-  if [ -n "${TMUX:-}" ]; then
-    tmux switch-client -t "$SESSION_NAME"
+if [ "$IS_ITERM" = true ]; then
+  echo "Strategy: iTerm2 native split panes"
+  if [ "$MODE" = "team" ]; then
+    launch_iterm2_team
   else
-    echo ""
-    echo "Launching harness-studio..."
-    echo "  Dashboard (left↑)   : Auto-refresh progress"
-    echo "  Control (left↓)     : Manual commands (next/retry/stop/log)"
-    echo "  Monitor (right↑)    : Agent lifecycle (compact)"
-    echo "  Agent Session (right↔): claude --dangerously-skip-permissions"
-    echo "  Eval Review (right↓): Evaluation summaries"
-    echo ""
-    tmux attach -t "$SESSION_NAME"
+    launch_iterm2_solo
   fi
+  echo "Layout ready"
+
+elif [ "$HAS_TMUX" = true ]; then
+  echo "Strategy: tmux"
+  if [ "$MODE" = "team" ]; then
+    launch_tmux_team
+  else
+    launch_tmux_solo
+  fi
+
+  # Attach to tmux
+  if [ "$DETACH" = true ]; then
+    echo "Session created. Attach: tmux attach -t $SESSION_NAME"
+    echo "Layout ready"
+  elif ! tty -s 2>/dev/null; then
+    # Non-TTY (e.g., Claude Code Bash tool) — open in new terminal
+    if [ "$(uname)" = "Darwin" ]; then
+      osascript -e "
+        tell application \"Terminal\"
+          do script \"tmux attach -t $SESSION_NAME\"
+          activate
+        end tell
+      " 2>/dev/null && echo "OPENED_TERMINAL=true" || echo "Layout ready"
+    else
+      echo "Session created. Attach: tmux attach -t $SESSION_NAME"
+      echo "Layout ready"
+    fi
+  else
+    if [ -n "${TMUX:-}" ]; then
+      tmux switch-client -t "$SESSION_NAME"
+    else
+      echo "Launching Harness Studio ($MODE mode)..."
+      tmux attach -t "$SESSION_NAME"
+    fi
+  fi
+
+else
+  echo "ERROR: Neither iTerm2 nor tmux found."
+  echo "Install tmux: brew install tmux"
+  echo "Or use iTerm2: https://iterm2.com"
+  exit 1
 fi
