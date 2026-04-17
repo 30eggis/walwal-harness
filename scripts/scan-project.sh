@@ -39,6 +39,7 @@ TECH_FRONTEND="unknown"
 TECH_DB="unknown"
 TECH_MONOREPO="none"
 TECH_LANG="unknown"
+IS_NATIVE_APP=false
 
 # Backend
 if [ -f "${PROJECT_ROOT}/nest-cli.json" ]; then
@@ -127,6 +128,42 @@ if [ "$FE_STACK" = "flutter" ] && [ -n "$FLUTTER_ROOT" ]; then
     FE_TARGET="desktop"
   else
     FE_TARGET="unknown"
+  fi
+fi
+
+# Swift (macOS / iOS 네이티브 앱) 감지 — Flutter 감지 이후
+if [ "$TECH_FRONTEND" = "unknown" ]; then
+  SWIFT_DETECTED=false
+  if [ -f "${PROJECT_ROOT}/Package.swift" ]; then
+    SWIFT_DETECTED=true
+  fi
+  if ! $SWIFT_DETECTED; then
+    for f in "${PROJECT_ROOT}"/*.xcodeproj "${PROJECT_ROOT}"/*.xcworkspace; do
+      if [ -e "$f" ]; then
+        SWIFT_DETECTED=true
+        break
+      fi
+    done
+  fi
+  if ! $SWIFT_DETECTED && [ -f "${PROJECT_ROOT}/Podfile" ]; then
+    SWIFT_DETECTED=true
+  fi
+
+  if $SWIFT_DETECTED; then
+    TECH_LANG="swift"
+    IS_NATIVE_APP=true
+    FE_STACK="swift"       # FE_STACK 기본값(react) 을 Swift 로 치환
+    FE_TARGET="native"     # web/mobile/desktop 대신 native
+    # 서브타입 판별 — NSStatusBar 가 가장 특화적이므로 우선
+    if grep -rq "NSStatusBar.system" "${PROJECT_ROOT}" --include="*.swift" 2>/dev/null; then
+      TECH_FRONTEND="swift-macos-statusbar"
+    elif grep -rq "import SwiftUI" "${PROJECT_ROOT}" --include="*.swift" 2>/dev/null; then
+      TECH_FRONTEND="swift-swiftui"
+    elif grep -rq "import UIKit" "${PROJECT_ROOT}" --include="*.swift" 2>/dev/null; then
+      TECH_FRONTEND="swift-uikit"
+    else
+      TECH_FRONTEND="swift"
+    fi
   fi
 fi
 
@@ -257,8 +294,17 @@ cat > "$OUTPUT" << JSONEOF
     "fe_target": "${FE_TARGET}",
     "database": "${TECH_DB}",
     "monorepo": "${TECH_MONOREPO}",
-    "language": "${TECH_LANG}"
+    "language": "${TECH_LANG}",
+    "is_native_app": ${IS_NATIVE_APP}
   },
+
+  "tech_stack_confidence": "$(
+    if [ "$TECH_BACKEND" = "unknown" ] && [ "$TECH_FRONTEND" = "unknown" ]; then
+      echo "unknown"
+    else
+      echo "detected"
+    fi
+  )",
 
   "structure": {
     "directories": ${TREE_JSON},
@@ -312,7 +358,7 @@ echo "=== Scan Complete ==="
 echo "Output: ${OUTPUT}"
 echo ""
 echo "--- Summary ---"
-echo "Tech Stack: ${TECH_BACKEND} / ${TECH_FRONTEND} (fe_stack=${FE_STACK}, fe_target=${FE_TARGET}) / ${TECH_DB}"
+echo "Tech Stack: ${TECH_BACKEND} / ${TECH_FRONTEND} (fe_stack=${FE_STACK}, fe_target=${FE_TARGET}, native=${IS_NATIVE_APP}) / ${TECH_DB}"
 echo "Monorepo: ${TECH_MONOREPO}"
 echo "OpenAPI: ${OPENAPI}"
 echo "Git: ${GIT_INIT} (${GIT_COMMITS} commits, branch: ${GIT_BRANCH})"

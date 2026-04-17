@@ -5,6 +5,7 @@ set -e
 
 PROJECT_ROOT="${1:-.}"
 SCAN_RESULT="${PROJECT_ROOT}/.harness/actions/scan-result.json"
+export SCAN_RESULT PROJECT_ROOT
 AGENTS_FILE="${PROJECT_ROOT}/AGENTS.md"
 CLAUDE_FILE="${PROJECT_ROOT}/CLAUDE.md"
 BACKUP_DIR="${PROJECT_ROOT}/.harness/archive/pre-harness-backup"
@@ -128,6 +129,15 @@ tag_rules = {
     "tests": ("[TEST]", "Test Suite", "Evaluator"),
     "e2e": ("[TEST]", "E2E Tests", "Evaluator"),
     "__tests__": ("[TEST]", "Unit Tests", "Evaluator"),
+
+    # Native app patterns (Swift / Kotlin / Rust 등)
+    "Sources": ("[FE]", "Native Source Root", "Generator-Frontend"),
+    "Tests": ("[TEST]", "Native Test Suite", "Evaluator"),
+    "Resources": ("[FE]", "Native Resources", "Generator-Frontend"),
+    "android": ("[FE]", "Android Host", "Generator-Frontend"),
+    "ios": ("[FE]", "iOS Host", "Generator-Frontend"),
+    "macos": ("[FE]", "macOS Host", "Generator-Frontend"),
+    "Shared": ("[FE]", "Cross-platform Shared", "Generator-Frontend"),
 }
 
 # 디렉토리를 분석

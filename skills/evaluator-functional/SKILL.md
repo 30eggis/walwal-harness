@@ -86,6 +86,38 @@ FEEDBACK: one paragraph summary
 ---END-EVAL-RESULT---
 ```
 
+## Stack-Adaptive Validation (v5.2)
+
+Evaluator 는 스택마다 다른 검증 도구를 가진다. `scan-result.json.tech_stack` 에서 현재 스택을 확인한 뒤 `.harness/ref/<role>-<stack>.md` 의 `validation` 블록을 로드해 순차 실행한다.
+
+### Validation 블록 파싱
+
+```
+1. ref-docs YAML frontmatter 파싱 → validation 객체 추출
+2. validation.pre_eval_gate 의 모든 명령을 순차 실행
+   - 실패 시 → FAIL + generator 로 retry (Pre-Eval Gate)
+3. validation.functional_tests 의 모든 명령을 순차 실행
+   - 실패 시 → FAIL 항목 기록
+4. validation.anti_pattern_rules 순회:
+   - pattern_type == "grep":   `grep -rE "<pattern>" <paths>` 로 스캔
+   - pattern_type == "lint_tool": `<tool> <args>` 로 호출 + JSON 출력 파싱
+   - 위반 발견 시 → Auto Gotcha Registration (아래)
+5. validation.visual.enabled:
+   - true  → evaluator-visual 에 Playwright 검증 위임
+   - false → evaluation-functional.md 에 "MANUAL_REQUIRED: {manual_check}" 기록, Visual 은 __skip__
+```
+
+### Auto Gotcha Registration (안티패턴 자동 등록)
+
+`validation.anti_pattern_rules` 실행에서 위반 1건 이상 발견 시 — Dispatcher 경유로 자동 gotcha 등록:
+
+- 대상 파일: `.harness/gotchas/generator-<role>-<stack>.md` (없으면 생성)
+- 항목 포맷: `### [G-NNN] <rule_id>` / severity / occurrences / last_seen(file:line) / snippet / source feature
+- 중복 rule_id: Occurrences 카운터 +1 + last_seen 업데이트
+- 상세 계약: `api-contract.json.contracts["gotcha_register_interface"]`
+
+이 메커니즘이 작동하려면 Dispatcher 의 "Auto Gotcha Registration" 섹션을 참고하라.
+
 ## Evaluation Steps
 
 ### Step 0: IA Structure Compliance (GATE)

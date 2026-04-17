@@ -49,7 +49,25 @@ disable-model-invocation: true
 2. `.harness/gotchas/evaluator-visual.md` 읽기 — **과거 실수 반복 금지**
 3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
 4. `actions/evaluation-functional.md` — Verdict: PASS 확인
-5. Frontend `http://localhost:5173` 실행 확인
+5. **Stack-Adaptive Gate** (v5.2) — `scan-result.json.tech_stack` 으로 스택 확인 후 `.harness/ref/fe-<stack>.md` 의 `validation.visual` 파싱:
+   - `visual.enabled == false`: 즉시 **MANUAL_REQUIRED 모드** 로 전환 — 아래 "Visual Skip Flow" 수행 후 종료
+   - `visual.enabled == true` (또는 ref-docs 없이 웹 전통 스택): 계속 진행, ref 에 `visual.base_url` 이 있으면 그 URL 로, 없으면 `ref.runner.dev_command` 로 서버 기동 후 Playwright 접속
+
+## Visual Skip Flow (네이티브 앱 / 비-브라우저 스택)
+
+`validation.visual.enabled == false` (예: Swift macOS, Flutter mobile, CLI 앱) 인 경우:
+
+1. Playwright 스크린샷·axe-core·AI슬롭 감지 **전부 skip**
+2. `.harness/actions/evaluation-visual.md` 에 다음을 기록:
+   ```
+   VERDICT: MANUAL_REQUIRED
+   STACK: <stack>
+   REASON: {ref.validation.visual.reason}
+   MANUAL_CHECK: {ref.validation.visual.manual_check}
+   ```
+3. progress.json: `agent_status = "completed"`, `next_agent = "archive"` (PASS 경로와 동일 라우팅)
+4. `progress.log` 에 `"visual skipped (manual required)"` 이벤트 기록
+5. 사용자에게 `manual_check` 문자열 출력 + 확인 요청
 
 ## Evaluation Steps
 

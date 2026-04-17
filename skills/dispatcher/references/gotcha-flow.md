@@ -24,9 +24,36 @@
 | 설계, 아키텍처, 기획, 기능 목록, IA, 서비스 분할 | `planner` |
 | 불명확 | 사용자에게 질문 |
 
+## 스택별 파일 네이밍 규칙 (v5.2 — 적응형 하네스)
+
+에이전트별로 **공통 파일 + 스택별 파일** 2트랙:
+
+| 파일 | 용도 |
+|------|------|
+| `.harness/gotchas/<agent>.md` | 스택 무관 공통 실수 (예: "PASS 남발", "Evidence 없는 Score") |
+| `.harness/gotchas/<agent>-<stack>.md` | 특정 스택에서만 적용되는 실수 (예: `generator-frontend-swift.md` — force unwrap 금지) |
+
+### 라우팅 규칙
+
+교정 시그널을 기록할 때:
+1. `scan-result.json.tech_stack.fe_stack` / `be_stack` 조회
+2. 시그널 내용이 스택 특정 기술(import, API, 프레임워크 함수명 등)을 언급 → `<agent>-<stack>.md`
+3. 스택 무관 일반 규칙(문서화, 테스트 태도, 평가 기준) → `<agent>.md` (공통)
+4. 판단 애매 → **공통 파일 우선** (후속 발생 시 스택별로 이관)
+
+### 에이전트 On Start 로딩
+
+적응형 에이전트는 세션 시작 시 **두 파일을 모두 로드**:
+```
+.harness/gotchas/<agent>.md              # 공통
+.harness/gotchas/<agent>-<current_stack>.md   # 스택별 (없으면 skip)
+```
+
+---
+
 ## Gotcha 항목 형식
 
-`.harness/gotchas/[agent-name].md`에 추가:
+`.harness/gotchas/[agent-name].md` 또는 `<agent-name>-<stack>.md` 에 추가:
 
 ```markdown
 ### [G-NNN] 간결한 제목
