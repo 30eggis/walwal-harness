@@ -9,7 +9,9 @@
     "dispatcher": {
       "role": "사용자 요청 분석 → 파이프라인 결정 (FE-ONLY / BE-ONLY / FULLSTACK)",
       "skill": "harness-dispatcher",
-      "outputs": ["actions/pipeline.json"],
+      "outputs": [
+        "actions/pipeline.json"
+      ],
       "always_first": true,
       "model": "opus",
       "thinking_mode": null
@@ -17,8 +19,12 @@
     "brainstorming": {
       "role": "사용자의 러프한 요구사항을 대화형으로 구체화하여 Planner가 바로 쓸 수 있는 brainstorm-spec.md로 변환.",
       "skill": "harness-brainstorming",
-      "inputs": ["(user conversation)"],
-      "outputs": ["actions/brainstorm-spec.md"],
+      "inputs": [
+        "(user conversation)"
+      ],
+      "outputs": [
+        "actions/brainstorm-spec.md"
+      ],
       "conditional": true,
       "trigger_conditions": {
         "comment": "Dispatcher가 아래 조건 중 하나 이상 충족 시 사용자에게 브레인스토밍 제안",
@@ -43,7 +49,9 @@
     "planner": {
       "role": "제품 사양 + API 계약서 + 서비스 분할 설계",
       "skill": "harness-planner",
-      "inputs": ["actions/brainstorm-spec.md (optional)"],
+      "inputs": [
+        "actions/brainstorm-spec.md (optional)"
+      ],
       "outputs": [
         "actions/plan.md",
         "actions/feature-list.json",
@@ -56,8 +64,16 @@
     "generator-backend": {
       "role": "NestJS MSA 서비스 구현, API 엔드포인트, DB 스키마",
       "skill": "harness-generator-backend",
-      "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
-      "outputs": ["code:backend", "actions/sprint-contract.md"],
+      "inputs": [
+        "actions/plan.md",
+        "actions/feature-list.json",
+        "actions/api-contract.json",
+        "actions/sprint-contract.md"
+      ],
+      "outputs": [
+        "code:backend",
+        "actions/sprint-contract.md"
+      ],
       "order": 1,
       "model": "sonnet",
       "thinking_mode": null,
@@ -66,8 +82,16 @@
     "generator-frontend": {
       "role": "React/Next.js UI 컴포넌트, 상태관리, API 연동",
       "skill": "harness-generator-frontend",
-      "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
-      "outputs": ["code:frontend", "actions/sprint-contract.md"],
+      "inputs": [
+        "actions/plan.md",
+        "actions/feature-list.json",
+        "actions/api-contract.json",
+        "actions/sprint-contract.md"
+      ],
+      "outputs": [
+        "code:frontend",
+        "actions/sprint-contract.md"
+      ],
       "order": 2,
       "model": "sonnet",
       "thinking_mode": null,
@@ -76,9 +100,17 @@
     "evaluator-functional": {
       "role": "Playwright로 E2E 기능 검증, API 응답/DB 상태 확인",
       "skill": "harness-evaluator-functional",
-      "tools": ["playwright:browser_*"],
-      "inputs": ["actions/sprint-contract.md", "actions/feature-list.json", "actions/api-contract.json"],
-      "outputs": ["actions/evaluation-functional.md"],
+      "tools": [
+        "playwright:browser_*"
+      ],
+      "inputs": [
+        "actions/sprint-contract.md",
+        "actions/feature-list.json",
+        "actions/api-contract.json"
+      ],
+      "outputs": [
+        "actions/evaluation-functional.md"
+      ],
       "model": "opus",
       "thinking_mode": "ultrathink",
       "thinking_mode_description": "최고 수준의 사고 모드. 적대적 검증에 깊은 추론이 필요. 각 항목을 비판적으로 분석.",
@@ -106,9 +138,19 @@
     "evaluator-visual": {
       "role": "디자인 일관성, 반응형, 접근성, AI슬롭 감지",
       "skill": "harness-evaluator-visual",
-      "tools": ["playwright:browser_take_screenshot", "playwright:browser_resize", "playwright:browser_snapshot"],
-      "inputs": ["actions/sprint-contract.md", "actions/evaluation-functional.md", "actions/feature-list.json"],
-      "outputs": ["actions/evaluation-visual.md"],
+      "tools": [
+        "playwright:browser_take_screenshot",
+        "playwright:browser_resize",
+        "playwright:browser_snapshot"
+      ],
+      "inputs": [
+        "actions/sprint-contract.md",
+        "actions/evaluation-functional.md",
+        "actions/feature-list.json"
+      ],
+      "outputs": [
+        "actions/evaluation-visual.md"
+      ],
       "model": "opus",
       "thinking_mode": "ultrathink",
       "thinking_mode_description": "최고 수준의 사고 모드. 시각적 결함, 접근성, AI슬롭을 비판적으로 탐지.",
@@ -132,63 +174,38 @@
           "스크린샷 없이 '확인했다'고 주장하는 행위"
         ]
       }
-    },
-    "generator-frontend-flutter": {
-      "role": "Flutter 앱 개발 — Riverpod, integrated_data_layer(Retrofit), i18n(ARB), build_runner",
-      "skill": "harness-generator-frontend-flutter",
-      "inputs": ["actions/plan.md", "actions/feature-list.json", "actions/api-contract.json", "actions/sprint-contract.md"],
-      "outputs": ["code:flutter", "actions/sprint-contract.md"],
-      "order": 2,
-      "fe_stack": "flutter",
-      "model": "sonnet",
-      "thinking_mode": null
-    },
-    "evaluator-functional-flutter": {
-      "role": "Flutter 앱 검증 — flutter analyze, flutter test, build_runner 일관성, 안티패턴 정적 검증",
-      "skill": "harness-evaluator-functional-flutter",
-      "tools": ["bash:flutter", "bash:dart"],
-      "inputs": ["actions/sprint-contract.md"],
-      "outputs": ["actions/evaluation-functional.md"],
-      "fe_stack": "flutter",
-      "model": "opus",
-      "thinking_mode": "ultrathink"
     }
   },
   "flow": {
-    "sequence": ["dispatcher", "planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
+    "sequence": [
+      "dispatcher",
+      "planner",
+      "generator-backend",
+      "generator-frontend",
+      "evaluator-functional",
+      "evaluator-visual"
+    ],
     "pipeline_selection": {
       "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. fe_stack 필드로 React/Flutter를 구분. harness-next.sh가 pipeline.json.fe_stack 을 읽어 generator-frontend/evaluator-functional 을 Flutter 변형으로 치환한다.",
       "pipelines": {
-        "FULLSTACK": ["planner", "generator-backend", "generator-frontend", "evaluator-functional", "evaluator-visual"],
-        "FE-ONLY": ["planner:light", "generator-frontend", "evaluator-functional", "evaluator-visual"],
-        "BE-ONLY": ["planner", "generator-backend", "evaluator-functional:api-only"]
-      },
-      "fe_stack_substitution": {
-        "comment": "pipeline.json.fe_stack + fe_target 에 따라 FE 에이전트 치환. Flutter Web 은 React 와 동일한 Playwright 기반 evaluator 를 사용한다.",
-        "flutter": {
-          "_doc": "fe_target = web | mobile | desktop. by_target 으로 분기.",
-          "by_target": {
-            "web": {
-              "_doc": "Flutter Web — 컴파일 결과가 HTML+JS+CSS 이므로 Playwright evaluator 사용 가능",
-              "generator-frontend": "generator-frontend-flutter",
-              "evaluator-functional": "evaluator-functional",
-              "evaluator-visual": "evaluator-visual"
-            },
-            "mobile": {
-              "_doc": "Flutter Mobile (Android/iOS) — 브라우저 없음, 정적 분석 evaluator 사용",
-              "generator-frontend": "generator-frontend-flutter",
-              "evaluator-functional": "evaluator-functional-flutter",
-              "evaluator-visual": "__skip__"
-            },
-            "desktop": {
-              "_doc": "Flutter Desktop (macOS/Windows/Linux) — 브라우저 없음, 정적 분석 evaluator 사용",
-              "generator-frontend": "generator-frontend-flutter",
-              "evaluator-functional": "evaluator-functional-flutter",
-              "evaluator-visual": "__skip__"
-            }
-          },
-          "_default_target": "mobile"
-        }
+        "FULLSTACK": [
+          "planner",
+          "generator-backend",
+          "generator-frontend",
+          "evaluator-functional",
+          "evaluator-visual"
+        ],
+        "FE-ONLY": [
+          "planner:light",
+          "generator-frontend",
+          "evaluator-functional",
+          "evaluator-visual"
+        ],
+        "BE-ONLY": [
+          "planner",
+          "generator-backend",
+          "evaluator-functional:api-only"
+        ]
       }
     },
     "sprint_execution": {
@@ -201,10 +218,11 @@
     "escalate_to_planner_after": 3,
     "archive_on_sprint_complete": true,
     "pre_eval_gate": {
-      "comment": "Generator → Evaluator 전환 전 결정론적 검증. 실패 시 Evaluator 세션을 열지 않고 Generator로 자동 리라우팅.",
+      "comment": "v5.2 — 스택별 명령은 .harness/ref/<role>-<stack>.md 의 validation.pre_eval_gate 에서 조회. Evaluator-Functional 이 On Start 시 파싱·실행.",
       "enabled": true,
-      "backend_checks": ["npx tsc --noEmit", "npx eslint . --max-warnings=0", "npx jest --bail --passWithNoTests"],
-      "frontend_checks": ["npx tsc --noEmit", "npx eslint . --max-warnings=0", "npx vitest run --bail 1"],
+      "source": "ref-docs",
+      "ref_path_template": ".harness/ref/<role>-<stack>.md",
+      "ref_field": "validation.pre_eval_gate",
       "timeout_seconds": 120,
       "on_fail": "reroute_to_generator"
     }
@@ -235,20 +253,50 @@
     },
     "acceptance_criteria_schema": {
       "comment": "Planner가 feature-list.json에 기능 정의 시 반드시 작성해야 하는 실행 가능한 검증 조건 스키마. Evaluator는 이 조건을 기계적으로 실행한다.",
-      "required_fields": ["id", "description", "type", "verify"],
+      "required_fields": [
+        "id",
+        "description",
+        "type",
+        "verify"
+      ],
       "types": {
         "api": {
-          "verify_fields": ["method", "path", "body", "expect"],
-          "expect_fields": ["status"],
-          "optional_expect": ["body_contains", "body_schema", "headers"]
+          "verify_fields": [
+            "method",
+            "path",
+            "body",
+            "expect"
+          ],
+          "expect_fields": [
+            "status"
+          ],
+          "optional_expect": [
+            "body_contains",
+            "body_schema",
+            "headers"
+          ]
         },
         "visual": {
-          "verify_fields": ["url", "elements"],
-          "optional_verify": ["viewport", "state", "screenshot_match"]
+          "verify_fields": [
+            "url",
+            "elements"
+          ],
+          "optional_verify": [
+            "viewport",
+            "state",
+            "screenshot_match"
+          ]
         },
         "e2e": {
-          "verify_fields": ["steps"],
-          "step_fields": ["action", "target", "value", "expect"]
+          "verify_fields": [
+            "steps"
+          ],
+          "step_fields": [
+            "action",
+            "target",
+            "value",
+            "expect"
+          ]
         }
       },
       "example": {
@@ -258,8 +306,17 @@
         "verify": {
           "method": "POST",
           "path": "/api/auth/register",
-          "body": { "email": "test-{{timestamp}}@test.com", "password": "Test1234!" },
-          "expect": { "status": 201, "body_contains": { "id": "string", "email": "string" } }
+          "body": {
+            "email": "test-{{timestamp}}@test.com",
+            "password": "Test1234!"
+          },
+          "expect": {
+            "status": 201,
+            "body_contains": {
+              "id": "string",
+              "email": "string"
+            }
+          }
         }
       },
       "negative_example": {
@@ -269,8 +326,13 @@
         "verify": {
           "method": "POST",
           "path": "/api/auth/register",
-          "body": { "email": "duplicate@test.com", "password": "Test1234!" },
-          "expect": { "status": 409 }
+          "body": {
+            "email": "duplicate@test.com",
+            "password": "Test1234!"
+          },
+          "expect": {
+            "status": 409
+          }
         },
         "is_negative": true
       },
@@ -280,15 +342,28 @@
         "type": "visual",
         "verify": {
           "url": "/register",
-          "elements": ["input[name=email]", "input[name=password]", "button[type=submit]"],
-          "viewport": [375, 768, 1280]
+          "elements": [
+            "input[name=email]",
+            "input[name=password]",
+            "button[type=submit]"
+          ],
+          "viewport": [
+            375,
+            768,
+            1280
+          ]
         }
       }
     }
   },
   "artifacts": {
     "comment": "아티팩트 상태 머신. 각 에이전트 실행 전 선행 아티팩트가 required_status 이상인지 검증.",
-    "states": ["pending", "draft", "reviewed", "approved"],
+    "states": [
+      "pending",
+      "draft",
+      "reviewed",
+      "approved"
+    ],
     "prerequisites": {
       "generator-backend": {
         "plan.md": "draft",
@@ -341,7 +416,10 @@
     "comment": "Audit log — 1 sprint cycle 단위의 실행 추적. Planner/Dispatcher 시작 시 리셋.",
     "file": ".harness/actions/audit.log",
     "lifecycle": "planner_to_eval_pass",
-    "reset_on": ["planner", "dispatcher"],
+    "reset_on": [
+      "planner",
+      "dispatcher"
+    ],
     "archive_previous": true,
     "format": "TIMESTAMP | AGENT | ACTION | STATUS | TARGET | DETAIL",
     "actions": {
@@ -352,7 +430,14 @@
       "gate": "자동 게이트 체크 (system)",
       "escalate": "에스컬레이션 (system)"
     },
-    "statuses": ["start", "complete", "fail", "pass", "skip", "warn"]
+    "statuses": [
+      "start",
+      "complete",
+      "fail",
+      "pass",
+      "skip",
+      "warn"
+    ]
   },
   "conventions": {
     "comment": "CONVENTIONS.md — 사용자가 자유 형식으로 작성하는 프로젝트 컨벤션. 모든 에이전트가 세션 시작 시 직접 읽음. Gotcha/AGENTS.md에 복사하지 않음.",
@@ -365,25 +450,36 @@
     "comment": "Claude Code에 설치하면 하네스 품질이 향상되는 외부 스킬 목록",
     "vercel": {
       "description": "Vercel/Next.js 배포, 성능 최적화, AI SDK 가이드",
-      "used_by": ["generator-frontend"],
+      "used_by": [
+        "generator-frontend"
+      ],
       "install": "claude skill install vercel",
       "check_path": ".claude/skills/vercel"
     },
     "web-design-guidelines": {
       "description": "UI/UX 접근성, 디자인 리뷰, Web Interface Guidelines",
-      "used_by": ["evaluator-visual", "generator-frontend"],
+      "used_by": [
+        "evaluator-visual",
+        "generator-frontend"
+      ],
       "install": "claude skill install web-design-guidelines",
       "check_path": ".claude/skills/web-design-guidelines"
     },
     "taste-skill": {
       "description": "AI 생성 UI의 디자인 품질 검증, AI슬롭 패턴 감지",
-      "used_by": ["evaluator-visual", "generator-frontend"],
+      "used_by": [
+        "evaluator-visual",
+        "generator-frontend"
+      ],
       "install": "npx claude-skill install leonxlnx/taste-skill",
       "check_path": ".claude/skills/taste-skill"
     },
     "supanova-design-skill": {
       "description": "디자인 시스템 규칙, 컴포넌트 패턴, 시각적 일관성",
-      "used_by": ["evaluator-visual", "generator-frontend"],
+      "used_by": [
+        "evaluator-visual",
+        "generator-frontend"
+      ],
       "install": "npx claude-skill install uxjoseph/supanova-design-skill",
       "check_path": ".claude/skills/supanova-design-skill"
     }

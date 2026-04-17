@@ -12,11 +12,13 @@
 
 ## Tech Stack
 
-- Backend: NestJS (TypeScript) — MSA, 모노레포
-- Frontend: React 또는 Next.js (TypeScript)
-- Database: PostgreSQL / SQLite (dev)
-- Testing: Playwright MCP (E2E), Jest (BE), Vitest (FE)
-- Styling: Tailwind CSS
+> v5.2 이후 이 섹션의 값은 **scan-project.sh 가 감지한 결과**로 `init-agents-md.sh` 가 동적으로 채운다. 하드코딩된 스택 선언은 제거되었다.
+
+- Backend: (scan-project.sh 가 감지 · `.harness/actions/scan-result.json.tech_stack.backend`)
+- Frontend: (scan-project.sh 가 감지 · `.harness/actions/scan-result.json.tech_stack.frontend`)
+- Database: (scan-project.sh 가 감지)
+- Adaptive Ref-Docs: `.harness/ref/<role>-<stack>.md` (감지된 스택별 best practice 및 validation 프로토콜)
+- Gotchas: `.harness/gotchas/<agent>.md` (공통) + `<agent>-<stack>.md` (스택별)
 
 ## IA-MAP (Information Architecture)
 
