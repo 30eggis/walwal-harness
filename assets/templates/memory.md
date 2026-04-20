@@ -1,3 +1,17 @@
+---
+docmeta:
+  id: memory
+  title: Harness Memory — 공유 학습 기록
+  type: input
+  createdAt: 2026-04-20T00:00:00Z
+  updatedAt: 2026-04-20T00:00:00Z
+  source:
+    producer: user
+    skillId: harness
+  inputs: []
+  tags: [harness, memory, template]
+---
+
 # Harness Memory — 공유 학습 기록
 
 > Dispatcher가 관리. **모든 에이전트**는 세션 시작 시 이 파일을 읽고 학습된 규칙을 따릅니다.
@@ -24,3 +38,17 @@
 - 항목이 15개 초과 시 가장 오래된 unverified 항목부터 정리
 
 <!-- 항목이 추가되면 아래에 기록됩니다 -->
+
+### [M-001] progress.log 가독성 — 상세 로그 필수
+- **Date**: 2026-04-20
+- **Status**: verified
+- **TTL**: 영구
+- **Lesson**: Team Worker와 Evaluator가 progress.log에 남기는 로그는 대시보드만 보고도 "무슨 일을 시작했는가 / 무엇을 만들었는가 / 무엇을 어떻게 검증하는가"를 알 수 있어야 한다. 다음 원칙을 반드시 따른다:
+  1. `gen-start`에 Feature **제목과 목표**를 함께 기록 ("F-001 \"사용자 회원가입 API\" start — goal=POST /users, 6 AC"). ID만 기록 금지.
+  2. `gen-write`는 **변경 파일마다 1건씩** 기록 (경로 + LOC + create/edit/delete). "2 files" 같은 개수 요약 금지.
+  3. `gen-done`은 **변경 파일 전체 목록**을 나열. "7 files"처럼 개수만 기록 금지.
+  4. `eval-ac`로 **AC 원문**을 먼저 선언 ("AC-3: \"POST /users returns 201 with created user id\""), 그 후 `eval-check`로 증거·판정 기록. "AC-1 count=0" 같은 수치 단독 금지.
+  5. `result PASS`는 **SCORE ≥ 2.80**인 경우에만 기록. score=1.00을 PASS로 기록 금지.
+  6. 각 단계마다 **어떤 도구/방법으로 검증했는지**(tsc/eslint/curl/playwright 등) 명시.
+- **Context**: 사용자가 대시보드 로그만 보고 진행 상황을 파악해야 하는데, 기존 축약 로그로는 4대 질문에 답이 안 보인다는 피드백.
+- **Applies to**: Team Worker(Generator + Evaluator), Solo Mode Generator/Evaluator, 모든 `logev` 호출 지점.
