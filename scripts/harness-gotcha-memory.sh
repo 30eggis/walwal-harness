@@ -30,6 +30,23 @@ BG_YELLOW="\033[43m"
 REFRESH_SEC="${HARNESS_REFRESH:-5}"
 RECENT_N="${HARNESS_GOTCHA_RECENT:-3}"
 
+# 렌더 캐시 — 내용이 바뀌지 않으면 redraw 스킵
+LAST_SIG=""
+
+# 입력 시그니처: gotchas + memory + 활성 에이전트의 mtime/size 해시
+compute_signature() {
+  {
+    [ -f "$PROGRESS" ] && stat -f '%m %z' "$PROGRESS" 2>/dev/null
+    [ -f "$MEMORY_FILE" ] && stat -f '%m %z' "$MEMORY_FILE" 2>/dev/null
+    if [ -d "$GOTCHAS_DIR" ]; then
+      for f in "$GOTCHAS_DIR"/*.md; do
+        [ -e "$f" ] || continue
+        stat -f '%N %m %z' "$f" 2>/dev/null
+      done
+    fi
+  } | md5 -q 2>/dev/null || echo "$RANDOM"
+}
+
 # 활성 에이전트 결정: current_agent > next_agent
 get_active_agent() {
   [ -f "$PROGRESS" ] || { echo ""; return; }
@@ -116,7 +133,8 @@ render_memory_summary() {
 }
 
 render() {
-  clear
+  # clear 대신 커서 홈 + 화면 끝까지 지우기 — 깜빡임 최소화
+  printf '\033[H\033[2J\033[3J'
   local cols hr
   cols=$(tput cols 2>/dev/null || echo 80)
   hr=$(printf '─%.0s' $(seq 1 "$cols"))
@@ -160,6 +178,10 @@ render() {
 trap 'exit 0' INT TERM
 
 while true; do
-  render
+  sig=$(compute_signature)
+  if [ "$sig" != "$LAST_SIG" ]; then
+    render
+    LAST_SIG="$sig"
+  fi
   sleep "$REFRESH_SEC"
 done
