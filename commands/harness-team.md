@@ -1,3 +1,17 @@
+---
+docmeta:
+  id: harness-team
+  title: /harness-team — Team Mode 시작/재개
+  type: input
+  createdAt: 2026-04-20T00:00:00Z
+  updatedAt: 2026-04-20T00:00:00Z
+  source:
+    producer: user
+    skillId: harness
+  inputs: []
+  tags: [harness, team-mode, tmux, command]
+---
+
 # /harness-team — Team Mode 시작/재개
 
 Planner가 완료한 feature-list.json의 피처들을 최대 3개 팀이 병렬로 Gen→Eval 사이클을 수행합니다.
@@ -40,8 +54,10 @@ bash scripts/harness-queue-manager.sh status .
 ### Step 2: tmux Studio 레이아웃 구축
 
 ```bash
-bash scripts/harness-tmux.sh --team
+bash scripts/harness-tmux.sh --team --force-tmux
 ```
+
+**`--force-tmux` 필수**: iTerm2 감지 경로는 백그라운드에 iTerm2가 떠 있기만 해도 활성화되어 AppleScript 실패 시 팀 레이아웃이 조용히 사라짐. Team Mode는 항상 tmux로 강제하여 재현 가능한 레이아웃을 보장.
 
 ### Step 3: 초기 Worker 생성
 
@@ -162,18 +178,28 @@ LOG="$HARNESS_ROOT/.harness/progress.log"
 logev() { echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | $1 | $2" >> "$LOG"; }
 ```
 
-| ACTION | 사용 시점 | DETAIL 예시 |
-|--------|-----------|-------------|
-| `gen-start`  | Gen Phase 시작 | `F-001 start — 6 AC` |
-| `gen-read`   | 소스/계약 읽기 | `read api-contract.json (POST /users)` |
-| `gen-write`  | 파일 생성/수정 | `write apps/service-user/src/user.controller.ts` |
-| `gen-test`   | 자체 게이트 | `tsc OK · eslint 0 · jest 12/12` |
-| `gen-done`   | Gen Phase 종료 | `F-001 done — 5 files, 142 LOC` |
-| `eval-start` | Evaluator 시작 | `F-001 spawning evaluator` |
-| `eval-check` | AC 검증 | `AC-3 — verify POST /users returns 201` |
-| `eval-done`  | Eval 결과 | `verdict=PASS score=2.95` |
-| `result`     | PASS 확정 | `F-001 PASS` |
-| `fail`       | FAIL 확정 | `FAIL #1 — AC-2 missing` |
+| ACTION | 사용 시점 | DETAIL 예시 (필수 포함 정보) |
+|--------|-----------|------------------------------|
+| `gen-start`  | Gen Phase 시작 (1회) | `F-001 "사용자 회원가입 API" start — goal=POST /users, 6 AC` — **Feature 제목+목표** 포함 필수 |
+| `gen-plan`   | 작업 계획 공표 (1회) | `plan: create controller+service+dto, wire module, add 3 unit tests` |
+| `gen-read`   | 소스/계약 읽기 (매 파일) | `read api-contract.json#/paths/~1users` |
+| `gen-write`  | 파일 생성/수정 (**매 파일**) | `write apps/service-user/src/user.controller.ts (+82 LOC, create)` — **경로+LOC+action(create/edit/delete)** 필수 |
+| `gen-test`   | 자체 게이트 | `tsc OK · eslint 0 warn · jest 12/12 pass` |
+| `gen-done`   | Gen Phase 종료 | `F-001 done — 5 files: controller.ts, service.ts, dto.ts, module.ts, spec.ts (total +142 LOC)` — **변경 파일 전체 나열** 필수 |
+| `eval-start` | Evaluator 시작 | `F-001 evaluating — 6 ACs + regression + security` — **AC 개수+검증 축** 필수 |
+| `eval-ac`    | AC 본문 선언 (**매 AC 시작 시 1회**) | `AC-3: "POST /users returns 201 with created user id"` — **AC 원문** 필수 |
+| `eval-check` | AC 검증 수행/증거 | `AC-3 [PASS] — curl POST /users → 201, body.id matches` — **판정+증거** 필수 |
+| `eval-gate`  | 자동 게이트 | `gate: tsc OK, eslint OK, security scan 0 high` |
+| `eval-done`  | Eval 결과 | `F-001 VERDICT=PASS SCORE=2.95/3.00 (AC 6/6, gates OK)` |
+| `result`     | PASS 확정 (**SCORE ≥ 2.80**) | `F-001 PASS score=2.95` |
+| `fail`       | FAIL 확정 | `F-001 FAIL #1 — AC-2 "email uniqueness" missing DB constraint` |
+
+**중요: 로깅 가독성 규칙 (필수)**
+1. `gen-start`에는 반드시 Feature **제목과 목표**를 함께 기록 (무슨 일을 시작하는가 명확히).
+2. `gen-write`는 **변경되는 파일마다 1건씩** 기록. 묶어서 요약 금지 ("2 files edit" 같은 표기 금지).
+3. `gen-done`은 **변경 파일 전체 목록**을 나열. "(2 files)" 같은 개수만 기록 금지.
+4. `eval-ac`로 **AC 원문을 먼저 선언**한 뒤 `eval-check`로 증거/판정 기록. "AC-1 count=0" 같은 수치 단독 기록 금지.
+5. `result` PASS는 **SCORE ≥ 2.80** 인 경우에만 기록. score=1.00인데 PASS로 기록하는 실수 금지.
 
 **queue phase 업데이트:**
 ```bash

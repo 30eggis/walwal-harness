@@ -4,10 +4,10 @@
 # Team Mode (--team):
 # ┌──────────────┬──────────────┬──────────────┐
 # │              │              │   TEAM 1     │
-# │  Prompt      │  Dashboard   │  Gen | Eval   │
-# │  History     │  (queue +    ├──────────────┤
-# │              │   status +   │   TEAM 2     │
-# │              │   archive)   │  Gen | Eval   │
+# │  Dashboard   │  Gotcha &    │              │
+# │  (queue +    │  Memory      ├──────────────┤
+# │   status +   │              │   TEAM 2     │
+# │   archive)   │              │              │
 # │              │              ├──────────────┤
 # │              │              │   TEAM 3     │
 # └──────────────┴──────────────┴──────────────┘
@@ -20,6 +20,7 @@
 # Usage:
 #   bash scripts/harness-tmux.sh [project-root] --team
 #   bash scripts/harness-tmux.sh [project-root] --solo
+#   bash scripts/harness-tmux.sh [project-root] --team --force-tmux  # skip iTerm2, use tmux
 #   bash scripts/harness-tmux.sh --kill
 
 set -euo pipefail
@@ -30,12 +31,14 @@ SESSION_NAME="harness-studio"
 PROJECT_ROOT=""
 MODE=""
 DETACH=false
+FORCE_TMUX=false
 
 for arg in "$@"; do
   case "$arg" in
     --team)   MODE="team" ;;
     --solo)   MODE="solo" ;;
     --detach) DETACH=true ;;
+    --force-tmux) FORCE_TMUX=true ;;
     --kill)
       tmux kill-session -t "$SESSION_NAME" 2>/dev/null && echo "tmux session killed." || true
       # Also try to close iTerm2 studio tab if exists
@@ -99,12 +102,12 @@ launch_iterm2_team() {
       tell studioWindow
         tell current session of current tab
           set name to "harness-studio"
-          write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
+          write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-dashboard.sh' '${PROJECT_ROOT}'"
 
-          -- Split right → Dashboard
+          -- Split right → Gotcha & Memory
           set dashPane to (split vertically with default profile)
           tell dashPane
-            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-dashboard.sh' '${PROJECT_ROOT}'"
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}'"
 
             -- Split right → Team 1
             set t1Pane to (split vertically with default profile)
@@ -171,24 +174,24 @@ APPLESCRIPT
 launch_tmux_team() {
   tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 
-  PANE_LEFT=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 220 -y 55 -P -F '#{pane_id}')
-  PANE_MID=$(tmux split-window -h -p 70 -t "$PANE_LEFT" -c "$PROJECT_ROOT" -P -F '#{pane_id}')
-  PANE_T1=$(tmux split-window -h -p 60 -t "$PANE_MID" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+  PANE_DASH=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 220 -y 55 -P -F '#{pane_id}')
+  PANE_GOTCHA=$(tmux split-window -h -p 70 -t "$PANE_DASH" -c "$PROJECT_ROOT" -P -F '#{pane_id}')
+  PANE_T1=$(tmux split-window -h -p 60 -t "$PANE_GOTCHA" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 1'")
   PANE_T2=$(tmux split-window -v -p 66 -t "$PANE_T1" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 2'")
   PANE_T3=$(tmux split-window -v -p 50 -t "$PANE_T2" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 3'")
 
-  tmux send-keys -t "$PANE_LEFT" "bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"" Enter
-  tmux send-keys -t "$PANE_MID" "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
+  tmux send-keys -t "$PANE_DASH"   "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
+  tmux send-keys -t "$PANE_GOTCHA" "bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\"" Enter
 
-  tmux select-pane -t "$PANE_LEFT"  -T "Prompt History"
-  tmux select-pane -t "$PANE_MID"   -T "Dashboard"
-  tmux select-pane -t "$PANE_T1"    -T "TEAM 1"
-  tmux select-pane -t "$PANE_T2"    -T "TEAM 2"
-  tmux select-pane -t "$PANE_T3"    -T "TEAM 3"
-  tmux select-pane -t "$PANE_LEFT"
+  tmux select-pane -t "$PANE_DASH"   -T "Dashboard"
+  tmux select-pane -t "$PANE_GOTCHA" -T "Gotcha & Memory"
+  tmux select-pane -t "$PANE_T1"     -T "TEAM 1"
+  tmux select-pane -t "$PANE_T2"     -T "TEAM 2"
+  tmux select-pane -t "$PANE_T3"     -T "TEAM 3"
+  tmux select-pane -t "$PANE_DASH"
 
   tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
   tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
@@ -235,6 +238,15 @@ fi
 HAS_TMUX=false
 if command -v tmux &>/dev/null; then
   HAS_TMUX=true
+fi
+
+# --force-tmux overrides iTerm2 detection
+if [ "$FORCE_TMUX" = true ]; then
+  if [ "$HAS_TMUX" != true ]; then
+    echo "ERROR: --force-tmux specified but tmux not installed. Run: brew install tmux"
+    exit 1
+  fi
+  IS_ITERM=false
 fi
 
 if [ "$IS_ITERM" = true ]; then
