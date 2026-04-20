@@ -50,6 +50,16 @@ disable-model-invocation: true
 - 코드 읽기는 평가가 아님 — **반드시 앱을 조작**.
 - 기준 미달 = FAIL. 예외 없음.
 
+## FE Playwright Mandatory Rule (v5.4)
+
+**프론트엔드 Feature(FE-ONLY 또는 FULLSTACK의 FE 부분)는 반드시 Playwright MCP 도구 호출로 검증**한다. 예외 없음.
+
+- 필수 호출 도구 (최소 1회 이상): `mcp__playwright__browser_navigate`, `mcp__playwright__browser_snapshot` 또는 `mcp__playwright__browser_take_screenshot`, 그리고 AC 검증을 위한 interaction (`browser_click`, `browser_type`, `browser_fill_form`, `browser_evaluate` 등).
+- **금지**: 소스 코드 열람, grep, 정적 분석만으로 FE Feature를 PASS 처리하는 것.
+- **금지**: "dev 서버 기동 실패"로 Playwright 단계를 스킵하는 것. 서버 기동까지 Evaluator의 책임.
+- `evaluation-functional.md`에 호출한 **playwright 도구 이름 + 결과 요약**을 AC별로 기술. 도구 호출 증거 없으면 해당 AC는 자동 0점(Evidence 없는 Score = 0점 강제 규칙).
+- BE-ONLY Feature는 이 규칙 대상 아님 (CLI 기반 API 테스트 유지).
+
 ## Startup
 
 1. `AGENTS.md` 읽기 — IA-MAP

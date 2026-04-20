@@ -52,3 +52,14 @@ docmeta:
   6. 각 단계마다 **어떤 도구/방법으로 검증했는지**(tsc/eslint/curl/playwright 등) 명시.
 - **Context**: 사용자가 대시보드 로그만 보고 진행 상황을 파악해야 하는데, 기존 축약 로그로는 4대 질문에 답이 안 보인다는 피드백.
 - **Applies to**: Team Worker(Generator + Evaluator), Solo Mode Generator/Evaluator, 모든 `logev` 호출 지점.
+
+### [M-002] FE Evaluation은 Playwright 필수
+- **Date**: 2026-04-20
+- **Status**: verified
+- **TTL**: 영구
+- **Lesson**: 웹 렌더링 가능한 FE Feature(React, Next, Flutter Web, RN Web 등)는 **Evaluator-Functional과 Evaluator-Visual이 반드시 Playwright MCP 도구(`mcp__playwright__browser_*`)를 호출하여 실제 브라우저 조작으로 검증**한다. 코드 열람/grep/정적 분석만으로 PASS 판정 금지. 각 AC에 대해 사용한 playwright 도구 이름과 결과를 `evaluation-*.md`에 증거로 남겨야 하며, 증거 없는 AC는 0점 강제.
+- **Context**: FE 피처가 실제 UX를 검증하지 않고 코드 존재 여부만으로 PASS되는 문제.
+- **Applies to**:
+  - Planner: FE Feature AC에 `type: visual|e2e|a11y` + `verify.tool: "playwright"` + `verify.steps` 명시 필수.
+  - Evaluator-Functional / Evaluator-Visual: FE Feature 평가 시 Playwright 도구 호출 없이 진행 금지.
+  - 네이티브 모바일/데스크톱 스택은 `validation.visual.enabled == false`일 때만 MANUAL_REQUIRED로 우회 허용.

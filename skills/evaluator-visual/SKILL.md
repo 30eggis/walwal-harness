@@ -43,6 +43,16 @@ disable-model-invocation: true
 5. **STOP.**
 6. 출력: `"✖ Evaluator-Visual FAIL. bash scripts/harness-next.sh 실행하여 재작업 대상 확인."`
 
+## FE Playwright Mandatory Rule (v5.4)
+
+**웹 렌더링 가능한 FE Feature에 대해서는 Playwright MCP 사용이 강제**된다 (`validation.visual.enabled == true` 또는 전통 웹 스택).
+
+- 필수 호출: `mcp__playwright__browser_navigate` + `mcp__playwright__browser_take_screenshot` (AC당 최소 1장) + 레이아웃/반응형 검증을 위한 `browser_resize`.
+- 접근성: `browser_snapshot`으로 accessibility tree 확보 후 axe-core 평가 연결.
+- **금지**: 스크린샷/스냅샷 없이 "코드만 봐서 OK" 처리.
+- `evaluation-visual.md`에 사용한 playwright 도구 이름과 뷰포트/URL을 명시. 도구 호출 증거 없으면 해당 기준 자동 0점.
+- `validation.visual.enabled == false`인 네이티브 스택은 Visual Skip Flow 적용 (예외).
+
 ## Startup
 
 1. `AGENTS.md` 읽기

@@ -78,6 +78,35 @@ disable-model-invocation: true
 - 각 기능에 `layer`, `service`, `depends_on` 명시
 - API 계약의 스키마는 Pydantic/class-validator로 직접 변환 가능한 수준
 
+## FE Feature AC 작성 규칙 (v5.4) — Playwright 강제
+
+`layer`가 `"fe"` 또는 `"frontend"`인 Feature(또는 FULLSTACK의 FE 부분)에 대해서는 `acceptance_criteria`의 Executable AC가 **반드시 Playwright MCP로 검증 가능한 형태**로 작성되어야 한다.
+
+각 AC 항목에 다음 필드를 명시:
+
+```json
+{
+  "id": "AC-3",
+  "description": "로그인 성공 시 /dashboard로 리다이렉트",
+  "type": "e2e",
+  "verify": {
+    "tool": "playwright",
+    "steps": [
+      "browser_navigate: http://localhost:3000/login",
+      "browser_fill_form: email/password",
+      "browser_click: submit",
+      "browser_snapshot: 현재 URL=/dashboard 확인"
+    ]
+  }
+}
+```
+
+- `type`: `"visual" | "e2e" | "a11y"` (웹 렌더링 없는 네이티브는 `"manual"` 가능, 다만 pipeline.json의 visual.enabled=false일 때만).
+- `verify.tool`: 웹/Flutter Web/React Native Web은 반드시 `"playwright"`. 네이티브 모바일/데스크톱은 예외 허용.
+- `verify.steps`: Evaluator가 호출할 playwright MCP 도구(`browser_navigate`, `browser_click`, `browser_type`, `browser_snapshot`, `browser_take_screenshot` 등) 이름 + 인자 요약을 순서대로 기술.
+
+**금지**: FE AC를 "컴포넌트가 존재한다", "코드가 작성되어 있다" 같이 코드 검증만으로 충족되는 표현으로 쓰는 것. AC는 **사용자 경험을 실제 브라우저에서 조작**해야 검증 가능해야 한다.
+
 ## Team 병렬 스케줄링 규칙 (필수)
 
 Team Mode는 **최대 3팀이 동시 작업**한다. Planner는 feature-list.json 설계 시 다음 규칙을 반드시 준수한다.
