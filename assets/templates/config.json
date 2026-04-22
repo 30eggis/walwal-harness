@@ -1,8 +1,8 @@
 {
   "harness": {
     "name": "7-Agent Production Harness",
-    "version": "5.5.0",
-    "description": "Solo/Team 통합 하네스 — Dispatcher + 3-Evaluator Chain (Code-Quality → Functional → Visual) + NestJS MSA + React/Next.js + Playwright",
+    "version": "5.6.0",
+    "description": "Solo/Team 통합 하네스 — Dispatcher + 3-Evaluator Chain (Code-Quality → Functional → Visual) + Hierarchical Conventions/Gotchas + NestJS MSA + React/Next.js + Playwright",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
   "agents": {
@@ -368,11 +368,17 @@
     "statuses": ["start", "complete", "fail", "pass", "skip", "warn"]
   },
   "conventions": {
-    "comment": "CONVENTIONS.md — 사용자가 자유 형식으로 작성하는 프로젝트 컨벤션. 모든 에이전트가 세션 시작 시 직접 읽음. Gotcha/AGENTS.md에 복사하지 않음.",
-    "file": "CONVENTIONS.md",
+    "comment": "House-style registry. 루트 CONVENTIONS.md(사용자 자유 기술) + .harness/conventions/<scope>.md(Dispatcher 자동 누적). 모든 에이전트가 세션 시작 시 읽고 적용한다. Gotcha 의 긍정 대칭판.",
+    "root_file": "CONVENTIONS.md",
+    "scoped_dir": ".harness/conventions/",
+    "scopes": ["shared", "planner", "generator-backend", "generator-frontend", "evaluator-code-quality", "evaluator-functional", "evaluator-visual"],
+    "entry_id_prefix": "C",
     "read_by": "all_agents",
-    "write_by": "user_only",
-    "read_timing": "session_start"
+    "read_order": ["CONVENTIONS.md", ".harness/conventions/shared.md", ".harness/conventions/<self>.md", ".harness/gotchas/<self>.md", ".harness/memory.md"],
+    "conflict_priority": "self > shared > root",
+    "write_by": "dispatcher (auto-append C-NNN) or user_only (manual edit)",
+    "read_timing": "session_start",
+    "preserve_on_postinstall": true
   },
   "recommended_skills": {
     "comment": "Claude Code에 설치하면 하네스 품질이 향상되는 외부 스킬 목록",

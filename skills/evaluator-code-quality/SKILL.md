@@ -63,13 +63,14 @@ disable-model-invocation: true
 ## Startup
 
 1. `AGENTS.md` 읽기 — IA-MAP (레이어 경계)
-2. `CONVENTIONS.md` 읽기 — 프로젝트 컨벤션 (있을 때만)
-3. `.harness/gotchas/evaluator-code-quality.md` 읽기 — **과거 실수 반복 금지**
-4. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
-5. `actions/sprint-contract.md` — 이번 스프린트 변경 범위
-6. `actions/feature-list.json` — 기능 정의
-7. `actions/api-contract.json` — DTO 형태 (계약 vs 구현 일치 확인용)
-8. `.harness/progress.json`
+2. `CONVENTIONS.md` (루트) 읽기 — 프로젝트 최상위 원칙 (있을 때만)
+3. `.harness/conventions/shared.md` + `.harness/conventions/evaluator-code-quality.md` — **긍정 하우스 스타일 (C-NNN) — PASS 판정의 기준이 된다**
+4. `.harness/gotchas/evaluator-code-quality.md` 읽기 — **과거 실수 반복 금지**
+5. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+6. `actions/sprint-contract.md` — 이번 스프린트 변경 범위
+7. `actions/feature-list.json` — 기능 정의
+8. `actions/api-contract.json` — DTO 형태 (계약 vs 구현 일치 확인용)
+9. `.harness/progress.json`
 
 ## Evaluation Steps
 

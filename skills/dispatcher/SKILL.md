@@ -46,19 +46,25 @@ Claude 는 기본적으로 Dispatcher 경유로 분류/라우팅해야 한다.
 
 사용자 입력을 먼저 분류합니다:
 
-- **실수 지적** ("아니", "잘못", "그렇게 하면 안 돼", "X로 해야지") → **Gotcha Flow**
+- **실수 지적 (부정)** ("아니", "잘못", "그렇게 하면 안 돼", "~하지 마") → **Gotcha Flow**
+- **긍정 규범** ("~해야 해", "~이렇게 해줘", "항상 ~", "우리는 ~ 방식") → **Convention Flow**
 - **기능 요청** ("만들어", "추가", "시작", PRD, OpenAPI) → **Pipeline Flow**
-- **혼합** → Gotcha 먼저 기록 → Pipeline 이어서
+- **혼합** → Gotcha/Convention 먼저 기록 → Pipeline 이어서
 - **메타/인사/Claude 자체 질문** → Dispatcher skip, 짧은 일반 응답 허용
 
-## 2. Gotcha Flow vs Memory Flow
+**부정 vs 긍정 구분법**: "X 하지 마 / X 가 틀렸어 / 그렇게 하면 안 돼" 는 **Gotcha**. "X 를 해야 해 / X 로 해줘 / 항상 X" 는 **Convention**. 동일 주제도 시그널에 따라 저장 위치가 달라집니다.
 
-사용자의 교정/피드백을 받으면 **먼저 분류**:
+## 2. Feedback Taxonomy — Gotcha / Convention / Memory
 
-| 유형 | 저장 위치 | 예시 |
-|------|----------|------|
-| **에이전트별 실수** (일회성 교정) | `.harness/gotchas/[agent].md` | "API 응답에 created_at은 ISO 8601로" |
-| **프로젝트 공유 규칙** (구조적/반복적) | `.harness/memory.md` | "Playwright 스크린샷은 단계 완료 후 항상 삭제" |
+사용자의 교정/가이드를 받으면 **먼저 분류**:
+
+| 유형 | 성격 | 저장 위치 | ID | 예시 |
+|------|------|----------|-----|------|
+| **Gotcha** | 특정 에이전트의 **일회성 실수(사고)** 기록 (negative) | `.harness/gotchas/<agent>.md` | `[G-NNN]` | "Generator-BE 가 MockServer 무시하고 실 DB 붙지 마" |
+| **Convention** | 에이전트/스코프의 **하우스 스타일(norm)** (positive) | `.harness/conventions/<scope>.md` | `[C-NNN]` | "API 응답 필드는 snake_case" |
+| **Memory** | **모든 에이전트** 공통 구조적 교훈 | `.harness/memory.md` | `[M-NNN]` | "Playwright 스크린샷은 단계 완료 후 항상 삭제" |
+
+Scope 가 특정 에이전트를 넘어서면 Memory. 특정 에이전트에 해당하면 Gotcha(부정) 혹은 Convention(긍정).
 
 ### Gotcha Flow (에이전트별 실수)
 
@@ -67,7 +73,17 @@ Claude 는 기본적으로 Dispatcher 경유로 분류/라우팅해야 한다.
 핵심:
 1. 교정 시그널 감지 (HIGH/MEDIUM만 기록)
 2. 도메인 분석 → 대상 에이전트 판별
-3. `.harness/gotchas/[agent].md`에 항목 추가 (중복 시 Occurrences 증가)
+3. `.harness/gotchas/[agent].md`에 `[G-NNN]` 추가 (중복 시 Occurrences 증가)
+4. 사용자에게 기록 확인
+
+### Convention Flow (에이전트별 하우스 스타일)
+
+긍정 가이드 감지 시 → [Convention 상세 가이드](references/convention-flow.md)
+
+핵심:
+1. 긍정 시그널 감지 ("해야 해", "이렇게 해줘", "항상" 등)
+2. 스코프 판별: 특정 에이전트(`generator-backend` 등) / `shared` / 프로젝트 전체(루트 `CONVENTIONS.md`)
+3. `.harness/conventions/<scope>.md` 에 `[C-NNN]` 추가
 4. 사용자에게 기록 확인
 
 ### Memory Flow (프로젝트 공유 규칙)

@@ -56,10 +56,12 @@ disable-model-invocation: true
 ## Startup
 
 1. `AGENTS.md` 읽기
-2. `.harness/gotchas/evaluator-visual.md` 읽기 — **과거 실수 반복 금지**
-3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
-4. `actions/evaluation-functional.md` — Verdict: PASS 확인
-5. **Stack-Adaptive Gate** (v5.2) — `scan-result.json.tech_stack` 으로 스택 확인 후 `.harness/ref/fe-<stack>.md` 의 `validation.visual` 파싱:
+2. `CONVENTIONS.md` (루트) 읽기 — 프로젝트 최상위 원칙 (있을 때만)
+3. `.harness/conventions/shared.md` + `.harness/conventions/evaluator-visual.md` — **긍정 하우스 스타일 적용**
+4. `.harness/gotchas/evaluator-visual.md` 읽기 — **과거 실수 반복 금지**
+5. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+6. `actions/evaluation-functional.md` — Verdict: PASS 확인
+7. **Stack-Adaptive Gate** (v5.2) — `scan-result.json.tech_stack` 으로 스택 확인 후 `.harness/ref/fe-<stack>.md` 의 `validation.visual` 파싱:
    - `visual.enabled == false`: 즉시 **MANUAL_REQUIRED 모드** 로 전환 — 아래 "Visual Skip Flow" 수행 후 종료
    - `visual.enabled == true` (또는 ref-docs 없이 웹 전통 스택): 계속 진행, ref 에 `visual.base_url` 이 있으면 그 URL 로, 없으면 `ref.runner.dev_command` 로 서버 기동 후 Playwright 접속
 

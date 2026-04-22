@@ -24,18 +24,20 @@ disable-model-invocation: true
 ## Startup
 
 1. `AGENTS.md` 읽기
-2. `.harness/gotchas/planner.md` 읽기 — **과거 실수 반복 금지**
-3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
-4. `.harness/progress.json` 읽기
-5. `.harness/actions/pipeline.json` 읽기 — `planner_mode`, `fe_stack` 확인
-6. `.harness/actions/scan-result.json` 읽기 — `tech_stack.fe_stack` 확인 (없으면 `react` 기본)
-7. **Brainstorm Spec 우선 로드** — `.harness/actions/brainstorm-spec.md` 가 존재하면
+2. `CONVENTIONS.md` (루트) 읽기 — 프로젝트 최상위 원칙 (있을 때만)
+3. `.harness/conventions/shared.md` + `.harness/conventions/planner.md` — **긍정 하우스 스타일 적용 (feature 분할/AC 작성 시)**
+4. `.harness/gotchas/planner.md` 읽기 — **과거 실수 반복 금지**
+5. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+6. `.harness/progress.json` 읽기
+7. `.harness/actions/pipeline.json` 읽기 — `planner_mode`, `fe_stack` 확인
+8. `.harness/actions/scan-result.json` 읽기 — `tech_stack.fe_stack` 확인 (없으면 `react` 기본)
+9. **Brainstorm Spec 우선 로드** — `.harness/actions/brainstorm-spec.md` 가 존재하면
    **이 파일이 PRD 대체 입력**. Brainstormer 가 이미 사용자와 대화하여 확정한
    결과이므로 **승인된 결정을 뒤엎지 않는다**. 없으면 사용자의 원본 요청 텍스트를 입력으로 사용.
    - brainstorm-spec.md 에 `## Open Questions` 섹션이 있으면 Planner 가 해소 (API 계약으로 확정)
    - brainstorm-spec.md 의 `## 7. 주요 컴포넌트 / 엔티티` → `feature-list.json` 초기 feature 목록 시드
    - brainstorm-spec.md 의 `## 5. 선택된 접근법` / `## 6. 아키텍처 스케치` → MSA 서비스 분할 베이스
-8. **FE Stack 확정** → [FE Stack 결정 가이드](references/fe-stack-detection.md)
+10. **FE Stack 확정** → [FE Stack 결정 가이드](references/fe-stack-detection.md)
    - `pubspec.yaml` + `flutter:` 키 → `fe_stack = "flutter"`
    - 혼재/불명확 → 사용자에게 단 한 번 질문
    - 확정 후 `pipeline.json.fe_stack` 갱신 (없으면 생성)

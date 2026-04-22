@@ -92,7 +92,17 @@ npx walwal-harness team
 - 단축키: `tmux prefix + 방향키` 로 패널 이동, `prefix + z` 로 확대/축소.
 - 종료: `npx walwal-harness team --kill`.
 
-### Step 5. Gotcha 등록 — 같은 실수 반복 막기
+### Step 5. Feedback 등록 — 학습 누적
+
+대화 중 사용자 피드백은 **성격에 따라 3개 저장소** 중 하나로 자동 분류됩니다.
+
+| 유형 | 성격 | 시그널 | 저장 위치 | ID |
+|------|------|--------|----------|-----|
+| **Gotcha** | 에이전트 실수(부정) | "~하지 마", "잘못됐어" | `.harness/gotchas/<agent>.md` | `G-NNN` |
+| **Convention** | 하우스 스타일(긍정) | "~해야 해", "이렇게 해줘" | `.harness/conventions/<scope>.md` | `C-NNN` |
+| **Memory** | 전체 공통 교훈 | "모든 에이전트가~" | `.harness/memory.md` | `M-NNN` |
+
+#### 5a. Gotcha — "이러면 안 돼"
 
 사용자가 에이전트의 실수를 지적하면 Dispatcher 가 해당 에이전트의 `.harness/gotchas/<agent>.md` 에 자동 append. 다음 세션부터 그 에이전트는 세션 시작 시 자기 gotcha 파일을 읽고 같은 실수를 피합니다.
 
@@ -122,7 +132,60 @@ Dispatcher 는 자동으로 분류:
 - **Applies to**: generator-backend
 ```
 
-#### 공유 메모리 (프로젝트 전체 규칙)
+#### 5b. Convention — "이렇게 해줘"
+
+긍정 가이드는 하우스 스타일로 등록됩니다:
+
+```
+API 응답 필드는 전부 snake_case 로 해야 해. FE TS 모델이
+snake_case 로 정의돼 있어서 변환 레이어를 두기 싫어.
+```
+
+Dispatcher 자동 분류:
+- **스코프**: `generator-backend` (API 응답 → BE 스코프)
+- **저장 위치**: `.harness/conventions/generator-backend.md`
+- **ID 할당**: `[C-001]` (해당 파일의 기존 최댓값 + 1)
+
+기록 포맷 (자동 작성):
+
+```markdown
+### [C-001] API 응답 필드는 snake_case
+- **Date**: 2026-04-22
+- **Scope**: generator-backend
+- **Rule**: 모든 API 응답 JSON 필드는 snake_case (created_at, user_id 등).
+- **Rationale**: FE TS 모델이 snake_case 로 정의돼 있어 변환 레이어 불필요.
+- **Applies to**: generator-backend, libs/shared-dto
+- **Added from**: user prompt (2026-04-22 16:12)
+```
+
+#### 스코프 판별 (Convention)
+
+| 키워드 | 스코프 (파일) |
+|--------|-------------|
+| backend, API, controller, service, DTO, NestJS | `generator-backend.md` |
+| frontend, React, Next.js, UI, component, hook | `generator-frontend.md` |
+| plan, sprint, feature-list | `planner.md` |
+| Playwright, E2E, browser | `evaluator-functional.md` |
+| layout, screenshot, a11y, responsive | `evaluator-visual.md` |
+| code quality, lint, architecture | `evaluator-code-quality.md` |
+| 매칭 실패 + 에이전트 국한 | `shared.md` |
+| 프로젝트 철학 (예: "우리는 TDD") | 루트 `CONVENTIONS.md` 권고 |
+
+#### 에이전트 와이어링
+
+각 에이전트는 세션 시작 시 다음 순서로 읽고 적용:
+
+```
+1. CONVENTIONS.md              (루트, 최상위 원칙)
+2. .harness/conventions/shared.md      (공통)
+3. .harness/conventions/<self>.md      (자기 스코프)
+4. .harness/gotchas/<self>.md          (과거 실수)
+5. .harness/memory.md                  (공유 교훈)
+```
+
+충돌 시 우선순위: `<self>` > `shared` > 루트.
+
+#### 5c. Memory — 프로젝트 전체 규칙
 
 한 에이전트 실수가 아니라 **모든 에이전트에 적용할 구조적 교훈** 이면 `.harness/memory.md` 로 승격:
 
@@ -136,7 +199,18 @@ Dispatcher 는 자동으로 분류:
 
 #### 주의 — 데이터 보존
 
-v5.5.2 부터 `npm install` postinstall 이 `### [G-NNN]` 엔트리가 있는 gotcha 파일을 **절대 덮어쓰지 않습니다**. 그 이전 버전에서는 업데이트 시 누적 기록이 템플릿으로 초기화되는 버그가 있었습니다 — 반드시 `5.5.2+` 를 사용하세요.
+`npm install` postinstall 은 **누적 엔트리(`[G-NNN]` 또는 `[C-NNN]`)가 있는 파일을 절대 덮어쓰지 않습니다**. 스캐폴드 템플릿인 경우에만 갱신됩니다. v5.5.2 이전 버전은 gotchas 에 이 버그가 있었으므로 `5.6.0+` 사용을 권장합니다.
+
+#### 기존 프로젝트 마이그레이션 (첫 설치 시 자동)
+
+기존 `CLAUDE.md` / `AGENTS.md` 에 Convention/Gotcha 성격의 섹션(`Conventions`, `Coding Standards`, `Best Practices`, `Gotchas`, `Don't`, `주의사항`, `금지사항` 등)이 있다면 첫 설치 시 자동으로 추출되어:
+
+- **Convention 성격** → `.harness/conventions/<scope>.md` 에 `[C-NNN]` 으로 이관
+- **Gotcha 성격** → `.harness/gotchas/<agent>.md` 에 `[G-NNN]` 으로 이관
+- **원본** → `.harness/archive/pre-harness-*.md.bak` 에 백업
+- **리포트** → `.harness/MIGRATION_REPORT.md` 에 이관 내역 + 수동 확인 요청 사항 기록
+
+마이그레이션은 heuristic(키워드 기반)이므로 리포트를 확인해 스코프 재배정이 필요한지 검토하세요. 이미 하네스 서명(`[BE]`/`[FE]`/`[HARNESS]`)이 있는 문서는 skip 됩니다.
 
 ---
 
@@ -298,14 +372,23 @@ your-project/
 │   │   ├── evaluation-code-quality.md
 │   │   ├── evaluation-functional.md
 │   │   └── evaluation-visual.md
-│   ├── archive/                       # 완료 스프린트 보관 (불변)
-│   └── gotchas/                       # 에이전트 실수 기록 (누적 보존)
-│       ├── planner.md
-│       ├── generator-backend.md
-│       ├── generator-frontend.md
-│       ├── evaluator-code-quality.md
-│       ├── evaluator-functional.md
-│       └── evaluator-visual.md
+│   ├── archive/                       # 완료 스프린트 보관 (불변, 마이그레이션 백업도 여기)
+│   ├── gotchas/                       # 에이전트 실수 기록 [G-NNN] (누적 보존)
+│   │   ├── planner.md
+│   │   ├── generator-backend.md
+│   │   ├── generator-frontend.md
+│   │   ├── evaluator-code-quality.md
+│   │   ├── evaluator-functional.md
+│   │   └── evaluator-visual.md
+│   ├── conventions/                   # 하우스 스타일 [C-NNN] (v5.6+, 누적 보존)
+│   │   ├── shared.md
+│   │   ├── planner.md
+│   │   ├── generator-backend.md
+│   │   ├── generator-frontend.md
+│   │   ├── evaluator-code-quality.md
+│   │   ├── evaluator-functional.md
+│   │   └── evaluator-visual.md
+│   └── MIGRATION_REPORT.md            # 첫 설치 시 기존 문서 이관 내역 (있을 때만)
 ├── .claude/
 │   ├── skills/harness-*/              # 에이전트 스킬 (8개)
 │   ├── commands/harness-*.md          # 모드 제어 커맨드 (3개)
@@ -323,7 +406,8 @@ your-project/
 │   ├── harness-prompt-history.sh      # 프롬프트 히스토리
 │   └── lib/                           # 공유 라이브러리
 ├── AGENTS.md                          # 프로젝트 컨텍스트 (IA-MAP)
-└── CLAUDE.md → AGENTS.md              # 심볼릭 링크
+├── CLAUDE.md → AGENTS.md              # 심볼릭 링크
+└── CONVENTIONS.md                     # 최상위 원칙 (사용자 자유 기술, 하위는 .harness/conventions/)
 ```
 
 ---

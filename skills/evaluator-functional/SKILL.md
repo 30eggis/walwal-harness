@@ -63,12 +63,14 @@ disable-model-invocation: true
 ## Startup
 
 1. `AGENTS.md` 읽기 — IA-MAP
-2. `.harness/gotchas/evaluator-functional.md` 읽기 — **과거 실수 반복 금지**
-3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
-4. `actions/sprint-contract.md` — BE + FE 성공 기준 전체
-4. `actions/feature-list.json` — 이번 스프린트 범위
-5. `actions/api-contract.json` — 기대 API 동작
-6. `.harness/progress.json`
+2. `CONVENTIONS.md` (루트) 읽기 — 프로젝트 최상위 원칙 (있을 때만)
+3. `.harness/conventions/shared.md` + `.harness/conventions/evaluator-functional.md` — **긍정 하우스 스타일 적용**
+4. `.harness/gotchas/evaluator-functional.md` 읽기 — **과거 실수 반복 금지**
+5. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+6. `actions/sprint-contract.md` — BE + FE 성공 기준 전체
+7. `actions/feature-list.json` — 이번 스프린트 범위
+8. `actions/api-contract.json` — 기대 API 동작
+9. `.harness/progress.json`
 
 ## Feature-Level Mode (Team Mode)
 

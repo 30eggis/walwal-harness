@@ -27,18 +27,23 @@ disable-model-invocation: true
 ## Startup (Adaptive Loading)
 
 1. `AGENTS.md` 읽기 — IA-MAP, 권한 확인
-2. `.harness/actions/scan-result.json` 읽기 → `tech_stack.backend` 또는 `tech_stack.language` 로 현재 스택 확정 (이하 `<stack>`)
-3. **Ref-docs 로드** — `.harness/ref/be-<stack>.md`
+2. `CONVENTIONS.md` (루트) 읽기 — 프로젝트 최상위 원칙 (있을 때만)
+3. **Conventions 로드** — 세 파일 모두 (있는 것만):
+   - `.harness/conventions/shared.md` (모든 에이전트 공통)
+   - `.harness/conventions/generator-backend.md` (BE 스코프)
+   - `.harness/conventions/generator-backend-<stack>.md` (스택별, 선택)
+4. `.harness/actions/scan-result.json` 읽기 → `tech_stack.backend` 또는 `tech_stack.language` 로 현재 스택 확정 (이하 `<stack>`)
+5. **Ref-docs 로드** — `.harness/ref/be-<stack>.md`
    - 파일 없음 → STOP + 안내: `"ref-docs 가 없습니다. bash init.sh init 실행 또는 bash scripts/init-ref-docs.sh --claude-prompt --stack <stack> --role be . 실행하세요."`
    - frontmatter 파싱 실패 → 경고 출력 + 기본값으로 degrade
-4. **Gotchas 로드** — 두 파일 모두 (있는 것만):
+6. **Gotchas 로드** — 두 파일 모두 (있는 것만):
    - `.harness/gotchas/generator-backend.md` (공통)
    - `.harness/gotchas/generator-backend-<stack>.md` (스택별)
-5. `.harness/memory.md` 읽기 — 프로젝트 공유 학습 규칙
-6. `pwd` + `.harness/progress.json` + `git log --oneline -20`
-7. `.harness/actions/api-contract.json` 읽기 — **이 계약이 유일한 BE 외부 인터페이스**
-8. `.harness/actions/feature-list.json` — 지정된 `FEATURE_ID` 또는 `layer: "backend"` 필터
-9. **DB / 외부 의존성 부트스트랩**:
+7. `.harness/memory.md` 읽기 — 프로젝트 공유 학습 규칙
+8. `pwd` + `.harness/progress.json` + `git log --oneline -20`
+9. `.harness/actions/api-contract.json` 읽기 — **이 계약이 유일한 BE 외부 인터페이스**
+10. `.harness/actions/feature-list.json` — 지정된 `FEATURE_ID` 또는 `layer: "backend"` 필터
+11. **DB / 외부 의존성 부트스트랩**:
    - `ref.runner.install_command` 가 있으면 1회 실행
    - `ref.runner.dev_command` 를 백그라운드 실행 (있는 경우)
 

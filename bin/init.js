@@ -91,15 +91,161 @@ function log(msg) {
 }
 
 // ─────────────────────────────────────────
+// First-install migration — extract Convention/Gotcha-shaped sections from
+// existing CLAUDE.md / AGENTS.md into .harness/conventions and .harness/gotchas.
+// Conservative: only triggers when these docs are NOT already harness-scaffolded
+// (detected by IA-MAP tags like "[BE]" or "[HARNESS]").
+// ─────────────────────────────────────────
+function migrateExistingDocs() {
+  // Match heading titles. Use (?=\s|$) instead of \b — Korean chars are
+  // not "word" in JS regex, so \b produces inconsistent matches.
+  const CONVENTION_HEADINGS = /^#{1,4}\s+(Conventions?|Coding Standards?|Style Guide|Rules|Guidelines|Best Practices|Do's and Don'ts|규칙|하우스 스타일|명명 규칙|코딩 규칙|코드 스타일)(?=[\s:]|$)/im;
+  const GOTCHA_HEADINGS = /^#{1,4}\s+(Gotchas?|Anti[- ]?patterns?|Don'?ts?|Avoid|Pitfalls?|주의사항|금지사항|실수|함정|안티[- ]?패턴)(?=[\s:]|$)/im;
+  const HARNESS_SIGNATURE = /\[(BE|FE|HARNESS|META|INFRA|ROOT)\]|walwal-harness|harness-dispatcher/;
+
+  const candidates = [
+    path.join(PROJECT_ROOT, 'CLAUDE.md'),
+    path.join(PROJECT_ROOT, 'AGENTS.md')
+  ];
+
+  const report = [];
+  const extractedConv = { counter: 0, byScope: {} };
+  const extractedGotcha = { counter: 0, byAgent: {} };
+
+  const scopeFor = (body) => {
+    const b = body.toLowerCase();
+    if (/\b(backend|api|nestjs|controller|dto|service|msa|repository)\b/.test(b)) return 'generator-backend';
+    if (/\b(frontend|react|next\.?js|ui|component|tsx|tailwind|hook)\b/.test(b)) return 'generator-frontend';
+    if (/\b(planner|plan\.md|sprint|feature-list|api-contract)\b/.test(b)) return 'planner';
+    if (/\b(playwright|e2e|functional test)\b/.test(b)) return 'evaluator-functional';
+    if (/\b(visual|layout|screenshot|a11y|accessibility|responsive)\b/.test(b)) return 'evaluator-visual';
+    if (/\b(code quality|lint|tsc|architecture|typescript strict)\b/.test(b)) return 'evaluator-code-quality';
+    return 'shared';
+  };
+
+  const appendEntry = (filePath, id, kind, title, body, source) => {
+    const existing = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+    const entry = [
+      ``,
+      `### [${id}] ${title}`,
+      `- **Date**: ${new Date().toISOString().split('T')[0]}`,
+      `- **Source**: ${source} (migrated)`,
+      ``,
+      body.trim(),
+      ``
+    ].join('\n');
+    fs.writeFileSync(filePath, existing.replace(/\s*$/, '') + '\n' + entry + '\n');
+  };
+
+  for (const docPath of candidates) {
+    if (!fileExists(docPath)) continue;
+    const content = fs.readFileSync(docPath, 'utf8');
+    if (HARNESS_SIGNATURE.test(content)) {
+      // Already a harness-managed doc — skip
+      continue;
+    }
+
+    // Backup
+    const backupPath = path.join(HARNESS_DIR, 'archive', `pre-harness-${path.basename(docPath)}.bak`);
+    fs.writeFileSync(backupPath, content);
+    report.push(`Backed up: ${docPath} → ${backupPath}`);
+
+    // Split by top-level and H2 headings to get sections
+    // Simple approach: find heading lines, slice until next heading of same-or-higher level
+    const lines = content.split('\n');
+    const sections = [];
+    let current = null;
+    lines.forEach((line, idx) => {
+      const m = /^(#{1,4})\s+(.+?)\s*$/.exec(line);
+      if (m) {
+        if (current) sections.push(current);
+        current = { level: m[1].length, title: m[2], startLine: idx + 1, endLine: idx + 1, body: [] };
+      } else if (current) {
+        current.body.push(line);
+        current.endLine = idx + 1;
+      }
+    });
+    if (current) sections.push(current);
+
+    for (const sec of sections) {
+      const header = `${'#'.repeat(sec.level)} ${sec.title}`;
+      const isConv = CONVENTION_HEADINGS.test(header);
+      const isGotcha = GOTCHA_HEADINGS.test(header);
+      if (!isConv && !isGotcha) continue;
+      const body = sec.body.join('\n').trim();
+      if (!body) continue;
+
+      const sourceRef = `${path.basename(docPath)}:${sec.startLine}-${sec.endLine}`;
+
+      if (isConv) {
+        const scope = scopeFor(sec.title + '\n' + body);
+        extractedConv.counter += 1;
+        const id = `C-${String(extractedConv.counter).padStart(3, '0')}`;
+        const target = path.join(HARNESS_DIR, 'conventions', `${scope}.md`);
+        appendEntry(target, id, 'convention', sec.title, body, sourceRef);
+        extractedConv.byScope[scope] = (extractedConv.byScope[scope] || 0) + 1;
+        report.push(`[${id}] "${sec.title}" → conventions/${scope}.md  (from ${sourceRef})`);
+      } else {
+        const scope = scopeFor(sec.title + '\n' + body);
+        const agent = scope === 'shared' ? 'planner' : scope;  // default shared-gotchas to planner
+        extractedGotcha.counter += 1;
+        const id = `G-${String(extractedGotcha.counter).padStart(3, '0')}`;
+        const target = path.join(HARNESS_DIR, 'gotchas', `${agent}.md`);
+        appendEntry(target, id, 'gotcha', sec.title, body, sourceRef);
+        extractedGotcha.byAgent[agent] = (extractedGotcha.byAgent[agent] || 0) + 1;
+        report.push(`[${id}] "${sec.title}" → gotchas/${agent}.md  (from ${sourceRef})`);
+      }
+    }
+  }
+
+  if (report.length === 0) return;
+
+  const reportPath = path.join(HARNESS_DIR, 'MIGRATION_REPORT.md');
+  const reportContent = [
+    `# Walwal-Harness Migration Report`,
+    ``,
+    `Generated on first install at ${new Date().toISOString()}.`,
+    ``,
+    `## Summary`,
+    ``,
+    `- Conventions extracted: ${extractedConv.counter}`,
+    `- Gotchas extracted: ${extractedGotcha.counter}`,
+    ``,
+    `## Manual Review Required`,
+    ``,
+    `Migration is heuristic (keyword-based). Please review each extracted entry:`,
+    `- Verify scope assignment is correct`,
+    `- Split entries into smaller atomic rules if appropriate`,
+    `- Adjust wording to positive-rule form for conventions, negative/anti-pattern form for gotchas`,
+    ``,
+    `## Entries`,
+    ``,
+    ...report.map(r => `- ${r}`),
+    ``,
+    `## Backups`,
+    ``,
+    `Original documents were preserved in \`.harness/archive/pre-harness-*.md.bak\`.`,
+    ``
+  ].join('\n');
+  fs.writeFileSync(reportPath, reportContent);
+  log(`Migration: ${extractedConv.counter} convention(s), ${extractedGotcha.counter} gotcha(s) extracted.`);
+  log(`Migration report: ${reportPath}`);
+}
+
+// ─────────────────────────────────────────
 // 1. .harness/ scaffolding
 // ─────────────────────────────────────────
 function scaffoldHarness() {
   log('Scaffolding .harness/ directory...');
 
+  // Detect first install BEFORE ensureDir creates the root
+  const isFirstInstall = !fs.existsSync(HARNESS_DIR);
+
   // Core directories
   ensureDir(path.join(HARNESS_DIR, 'actions'));
   ensureDir(path.join(HARNESS_DIR, 'archive'));
   ensureDir(path.join(HARNESS_DIR, 'gotchas'));
+  ensureDir(path.join(HARNESS_DIR, 'conventions'));
 
   // Copy gotchas — preserve any existing file that has accumulated entries.
   // Dispatcher appends `### [G-NNN] ...` entries directly; we must NEVER overwrite
@@ -133,6 +279,39 @@ function scaffoldHarness() {
 
       // File exists but is just the scaffold template — safe to refresh
       copyFile(srcPath, destPath);
+    }
+  }
+
+  // Copy conventions — mirror gotchas preservation: never overwrite files with
+  // accumulated `### [C-NNN]` entries.
+  const conventionsSrc = path.join(PKG_ROOT, 'conventions');
+  if (fs.existsSync(conventionsSrc)) {
+    const CONV_ENTRY = /^### \[C-\d+\]/m;
+    const files = fs.readdirSync(conventionsSrc);
+    for (const file of files) {
+      const destPath = path.join(HARNESS_DIR, 'conventions', file);
+      const srcPath = path.join(conventionsSrc, file);
+      if (!fileExists(destPath)) {
+        copyFile(srcPath, destPath);
+        continue;
+      }
+      if (!file.endsWith('.md')) continue;
+      const existing = fs.readFileSync(destPath, 'utf8');
+      if (CONV_ENTRY.test(existing)) {
+        if (file === 'README.md') copyFile(srcPath, destPath);
+        continue;
+      }
+      copyFile(srcPath, destPath);
+    }
+  }
+
+  // First-install migration: extract Convention/Gotcha-shaped sections from
+  // existing CLAUDE.md / AGENTS.md and copy into the hierarchical stores.
+  if (isFirstInstall) {
+    try {
+      migrateExistingDocs();
+    } catch (e) {
+      log('WARNING: migration failed — ' + e.message);
     }
   }
 
@@ -232,12 +411,12 @@ function scaffoldHarness() {
     copyFile(memorySrc, memoryDest);
   }
 
-  // Copy CONVENTIONS.md to project root
-  const conventionsSrc = path.join(PKG_ROOT, 'assets', 'templates', 'CONVENTIONS.md');
-  const conventionsDest = path.join(PROJECT_ROOT, 'CONVENTIONS.md');
-  if (fs.existsSync(conventionsSrc) && (!fileExists(conventionsDest) || isForce)) {
-    copyFile(conventionsSrc, conventionsDest);
-    log('CONVENTIONS.md created — edit to define your project conventions');
+  // Copy CONVENTIONS.md to project root (legacy — root still supported)
+  const rootConvSrc = path.join(PKG_ROOT, 'assets', 'templates', 'CONVENTIONS.md');
+  const rootConvDest = path.join(PROJECT_ROOT, 'CONVENTIONS.md');
+  if (fs.existsSync(rootConvSrc) && (!fileExists(rootConvDest) || isForce)) {
+    copyFile(rootConvSrc, rootConvDest);
+    log('CONVENTIONS.md created — edit to define top-level project conventions');
   }
 
   // Create progress.log
