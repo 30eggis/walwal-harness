@@ -101,27 +101,38 @@ function scaffoldHarness() {
   ensureDir(path.join(HARNESS_DIR, 'archive'));
   ensureDir(path.join(HARNESS_DIR, 'gotchas'));
 
-  // Copy gotchas — ALWAYS overwrite system templates, preserve user custom entries
+  // Copy gotchas — preserve any existing file that has accumulated entries.
+  // Dispatcher appends `### [G-NNN] ...` entries directly; we must NEVER overwrite
+  // a file that has such entries, or user learning history is lost.
   const gotchasSrc = path.join(PKG_ROOT, 'gotchas');
   if (fs.existsSync(gotchasSrc)) {
-    const CUSTOM_MARKER = '## Custom Gotchas';
+    const ENTRY_PATTERN = /^### \[G-\d+\]/m;  // Gotcha entry heading
+    const CUSTOM_MARKER = '## Custom Gotchas'; // Legacy marker still supported
     const files = fs.readdirSync(gotchasSrc);
     for (const file of files) {
       const destPath = path.join(HARNESS_DIR, 'gotchas', file);
       const srcPath = path.join(gotchasSrc, file);
-      if (fileExists(destPath) && file.endsWith('.md')) {
-        // Preserve user-added custom section
-        const existing = fs.readFileSync(destPath, 'utf8');
-        const customIdx = existing.indexOf(CUSTOM_MARKER);
-        const userCustom = customIdx !== -1 ? existing.substring(customIdx) : '';
-        let newContent = fs.readFileSync(srcPath, 'utf8');
-        if (userCustom) {
-          newContent = newContent.trimEnd() + '\n\n' + userCustom;
-        }
-        fs.writeFileSync(destPath, newContent);
-      } else {
+      if (!fileExists(destPath)) {
         copyFile(srcPath, destPath);
+        continue;
       }
+      if (!file.endsWith('.md')) continue;
+
+      const existing = fs.readFileSync(destPath, 'utf8');
+      const hasEntries = ENTRY_PATTERN.test(existing);
+      const hasCustomSection = existing.indexOf(CUSTOM_MARKER) !== -1;
+
+      if (hasEntries || hasCustomSection) {
+        // User has accumulated data — DO NOT overwrite. Skip silently.
+        // README.md is the only exception (system doc, regenerated below).
+        if (file === 'README.md') {
+          copyFile(srcPath, destPath);
+        }
+        continue;
+      }
+
+      // File exists but is just the scaffold template — safe to refresh
+      copyFile(srcPath, destPath);
     }
   }
 
