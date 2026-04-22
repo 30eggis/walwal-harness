@@ -4,13 +4,15 @@
 # Team Mode (--team):
 # ┌──────────────┬──────────────┬──────────────┐
 # │              │              │   TEAM 1     │
-# │  Dashboard   │  Gotcha &    │              │
-# │  (queue +    │  Memory      ├──────────────┤
-# │   status +   │              │   TEAM 2     │
-# │   archive)   │              │              │
-# │              │              ├──────────────┤
-# │              │              │   TEAM 3     │
+# │  Dashboard   │              │              │
+# │  (queue +    │  Gotcha &    ├──────────────┤
+# │   status +   │  Memory      │   TEAM 2     │
+# │   features)  │              │              │
+# ├──────────────┤              ├──────────────┤
+# │ Archive      │              │   TEAM 3     │
+# │ Prompt       │              │              │
 # └──────────────┴──────────────┴──────────────┘
+# (Archive Prompt는 별도 패널 — Dashboard 모니터링 영역 보호)
 #
 # Rendering strategy:
 #   1. iTerm2 detected → native split panes (no tmux needed)
@@ -104,6 +106,12 @@ launch_iterm2_team() {
           set name to "harness-studio"
           write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-dashboard.sh' '${PROJECT_ROOT}'"
 
+          -- Split down (bottom of Dashboard column) → Archive Prompt
+          set archivePane to (split horizontally with default profile)
+          tell archivePane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
+          end tell
+
           -- Split right → Gotcha & Memory
           set dashPane to (split vertically with default profile)
           tell dashPane
@@ -182,15 +190,19 @@ launch_tmux_team() {
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 2'")
   PANE_T3=$(tmux split-window -v -p 50 -t "$PANE_T2" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\" --team 3'")
+  # Dashboard 열을 상(Dashboard)/하(Archive Prompt)로 분할 — archive가 길어져도 모니터링 유지
+  PANE_ARCHIVE=$(tmux split-window -v -p 35 -t "$PANE_DASH" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"'")
 
   tmux send-keys -t "$PANE_DASH"   "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
   tmux send-keys -t "$PANE_GOTCHA" "bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\"" Enter
 
-  tmux select-pane -t "$PANE_DASH"   -T "Dashboard"
-  tmux select-pane -t "$PANE_GOTCHA" -T "Gotcha & Memory"
-  tmux select-pane -t "$PANE_T1"     -T "TEAM 1"
-  tmux select-pane -t "$PANE_T2"     -T "TEAM 2"
-  tmux select-pane -t "$PANE_T3"     -T "TEAM 3"
+  tmux select-pane -t "$PANE_DASH"    -T "Dashboard"
+  tmux select-pane -t "$PANE_ARCHIVE" -T "Archive Prompt"
+  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotcha & Memory"
+  tmux select-pane -t "$PANE_T1"      -T "TEAM 1"
+  tmux select-pane -t "$PANE_T2"      -T "TEAM 2"
+  tmux select-pane -t "$PANE_T3"      -T "TEAM 3"
   tmux select-pane -t "$PANE_DASH"
 
   tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true

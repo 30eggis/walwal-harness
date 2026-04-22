@@ -382,7 +382,7 @@ render_dashboard() {
       render_team_status
       render_team_features
       render_team_bottleneck
-      render_archive_prompts
+      # Archive Prompt는 별도 패널(harness-prompt-history.sh)에서 렌더링 — Dashboard 모니터링 영역 보호
       ;;
     *)
       render_solo_sprint_overview
@@ -393,7 +393,7 @@ render_dashboard() {
       fi
 
       render_solo_agent_info
-      render_archive_prompts
+      # Archive Prompt는 별도 패널(harness-prompt-history.sh)에서 렌더링
       ;;
   esac
 }
