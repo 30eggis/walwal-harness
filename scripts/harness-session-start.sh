@@ -28,6 +28,29 @@ agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 mode=$(jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null)
 
 # ─────────────────────────────────────────
+# Auto-heal mode drift — Team 상태 유실 복구
+#   feature-queue.json 에 활성 작업(in_progress)이 있는데 mode 가 solo/paused 면
+#   누군가 progress.json 을 통째로 덮어써서 team_state 를 날린 것. mode=team 으로
+#   자동 복원하고 경고 로그 남김.
+# ─────────────────────────────────────────
+FEATURE_QUEUE_HEAL="$PROJECT_ROOT/.harness/actions/feature-queue.json"
+if [ -f "$FEATURE_QUEUE_HEAL" ] && [ "$mode" != "team" ]; then
+  active_count=$(jq -r '(.queue.in_progress | length) // 0' "$FEATURE_QUEUE_HEAL" 2>/dev/null || echo 0)
+  if [ "${active_count:-0}" -gt 0 ]; then
+    heal_teams=$active_count
+    [ "$heal_teams" -gt 3 ] && heal_teams=3
+    bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
+      ".mode = \"team\" | .team_state.active_teams = ${heal_teams} | .team_state.paused_at = null" \
+      2>/dev/null
+    mode="team"
+    echo "# Harness: mode auto-healed to 'team' (feature-queue has ${active_count} active, but mode was drifted)" >&2
+    if [ -f "$PROJECT_ROOT/.harness/progress.log" ]; then
+      echo "$(date +'%Y-%m-%d %H:%M') | system | heal | mode | reset solo→team (queue had ${active_count} in_progress)" >> "$PROJECT_ROOT/.harness/progress.log"
+    fi
+  fi
+fi
+
+# ─────────────────────────────────────────
 # Team Mode — 팀이 자율 실행 중이면 오케스트레이터 안내
 # ─────────────────────────────────────────
 if [ "$mode" = "team" ]; then

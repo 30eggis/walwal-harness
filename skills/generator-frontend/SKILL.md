@@ -6,6 +6,24 @@ disable-model-invocation: true
 
 # Generator-Frontend — Adaptive (Stack-Agnostic)
 
+## progress.json 업데이트 규칙 (v5.6.3+)
+
+⚠️ **절대로 progress.json 을 통째로 재작성하지 마라**. `Write` 도구로 전체 파일을
+덮어쓰면 `mode` / `team_state` / 기타 top-level 필드가 누락되어 Team Mode 가 Solo 로
+되돌아가는 등 런타임 오류가 발생한다.
+
+**올바른 방법** — 반드시 partial update 로 갱신:
+
+```bash
+# 헬퍼 스크립트 (권장)
+bash scripts/harness-progress-set.sh . '.current_agent = "planner" | .agent_status = "running"'
+
+# 또는 직접 jq 로 partial update
+jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/progress.json > .harness/progress.json.tmp &&   mv .harness/progress.json.tmp .harness/progress.json
+```
+
+위 두 방식은 파일의 나머지 필드를 보존한다. Read → 수정 → Write 패턴은 사용 금지.
+
 ## Session Boundary Protocol
 
 ### On Start
