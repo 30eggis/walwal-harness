@@ -1,6 +1,6 @@
 {
   "name": "@walwal-harness/cli",
-  "version": "5.6.0",
+  "version": "5.6.1",
   "description": "Production harness for AI agent engineering — Solo/Team mode, Planner, Generator(BE/FE), Evaluator chain (Code-Quality → Functional → Visual), optional Brainstormer. Supports React, Next.js, and Flutter FE stacks.",
   "bin": {
     "walwal-harness": "bin/init.js"
@@ -31,6 +31,14 @@
   ],
   "author": "",
   "license": "MIT",
+  "homepage": "https://github.com/30eggis/walwal-harness#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/30eggis/walwal-harness.git"
+  },
+  "bugs": {
+    "url": "https://github.com/30eggis/walwal-harness/issues"
+  },
   "files": [
     "bin/",
     "skills/",
