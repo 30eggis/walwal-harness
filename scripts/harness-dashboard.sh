@@ -412,7 +412,9 @@ while true; do
   export _ROWS _COLS
   buf=$(render_dashboard 2>&1)
   tput cup 0 0 2>/dev/null
-  echo "$buf"
+  # Append ESC[K after every line so each row clears its right-side residue
+  # from any previous frame (fixes wrapped shell-prompt bleed-through).
+  printf '%s\n' "$buf" | awk '{printf "%s\033[K\n", $0}'
   tput ed 2>/dev/null
   sleep 3
 done
