@@ -9,6 +9,141 @@
 
 ---
 
+## Run Book — 0 → 첫 스프린트 완주
+
+> 프로젝트 루트에서 `npm i @walwal-harness/cli` 를 마치고 Claude Code 를 재시작한 뒤 아래 순서 그대로 진행합니다.
+
+### Step 1. Dispatcher — 들어오자마자
+
+Claude Code 세션을 연 뒤 첫 메시지로:
+
+```
+하네스 엔지니어링 시작
+```
+
+Dispatcher 가:
+- 요청을 분류 (기능 요청 / 실수 지적 / 메타 질문)
+- `FULLSTACK` / `FE-ONLY` / `BE-ONLY` 파이프라인 결정 → `actions/pipeline.json`
+- 신규/재플래닝이면 "Brainstormer 를 거칠지" 한 번 묻고 `next_agent` 설정 후 STOP
+
+완료되면 **새 세션을 열기만 하면** SessionStart 훅이 다음 에이전트(`planner` 또는 `brainstorming`)를 안내합니다.
+
+### Step 2. Planner
+
+새 세션에서:
+
+```
+/harness-planner
+```
+
+Planner 가 `plan.md` + `feature-list.json` + `api-contract.json` 을 생성합니다. AC(Acceptance Criteria)는 반드시 **Executable** 포맷으로 기술됩니다.
+
+### Step 3. Solo / Team 모드 선택
+
+Planner 완료 후 두 갈래 중 하나.
+
+| 선택 | 명령 | 언제 |
+|------|------|------|
+| **Solo** | 프롬프트로 `/harness-generator-backend` → `/harness-generator-frontend` → `/harness-evaluator-*` 순차 호출 | 학습 목적 · feature 3개 이하 · 레이아웃이 좁음 |
+| **Team** | `/harness-team` | feature 4개 이상 · 병렬로 확 밀고 싶을 때 |
+
+### Step 4. Team 모드 — Dashboard 띄우기
+
+Team 모드는 tmux 통합 Studio 레이아웃을 제공합니다:
+
+```bash
+# Claude Code 내에서
+> /harness-team
+
+# 또는 외부 터미널에서
+npx walwal-harness team
+```
+
+첫 실행 시 자동으로:
+1. `feature-queue.json` 초기화 (의존성 topological sort)
+2. tmux (또는 iTerm2 native split) 레이아웃 구축
+3. 3개 팀 worker 가 Gen → Eval 루프를 병렬 실행
+4. 팀이 feature 완료 시 자동 dequeue
+5. 5회 초과 실패하면 사용자 개입 요청
+
+#### 대시보드 구성
+
+```
+┌────────────────────┬──────────────────────────┬───────────┐
+│ Dashboard          │ Gotcha & Memory          │ TEAM 1    │
+│  - pipeline/sprint │  - 활성 에이전트 gotcha   │  Gen|Eval │
+│  - feature 진행도  │  - 나머지 에이전트 요약    ├───────────┤
+│  - queue 상태      │  - SHARED MEMORY          │ TEAM 2    │
+│                    │   (memory.md 최근 N)      │  Gen|Eval │
+├────────────────────┤                          ├───────────┤
+│ Archive Prompt     │                          │ TEAM 3    │
+│  (완료 feature 요약)│                          │  Gen|Eval │
+└────────────────────┴──────────────────────────┴───────────┘
+```
+
+| 패널 | 내용 | 소스 |
+|------|------|------|
+| **Dashboard** | Pipeline · Sprint · Feature passes (●/◐/○/◌/✗) · Queue R:B:P · Retry | `harness-dashboard.sh` |
+| **Gotcha & Memory** | 활성 에이전트의 누적 실수 + 나머지 요약 + 공유 메모리 | `harness-gotcha-memory.sh` |
+| **TEAM 1–3** | 각 워커의 현재 feature · phase(Gen/Eval) · 실시간 stdout | `harness-queue-manager.sh` worker loop |
+| **Archive Prompt** | 직전 완료 feature 요약 (다음 팀 컨텍스트 주입용) | archive 디렉토리 |
+
+- 새로고침 주기: `HARNESS_REFRESH=5` (초). 환경변수로 조정.
+- 단축키: `tmux prefix + 방향키` 로 패널 이동, `prefix + z` 로 확대/축소.
+- 종료: `npx walwal-harness team --kill`.
+
+### Step 5. Gotcha 등록 — 같은 실수 반복 막기
+
+사용자가 에이전트의 실수를 지적하면 Dispatcher 가 해당 에이전트의 `.harness/gotchas/<agent>.md` 에 자동 append. 다음 세션부터 그 에이전트는 세션 시작 시 자기 gotcha 파일을 읽고 같은 실수를 피합니다.
+
+#### 예제 — 실수 지적
+
+```
+아니 그렇게 하면 안 되지. Generator-Backend 가 MockServer 를 무시하고
+실제 DB 에 붙으려고 하는데, npm run dev 에서 MockServer 가 concurrent 로
+기동되어 있으니 그걸 먼저 확인하고 써.
+```
+
+Dispatcher 는 자동으로 분류:
+- **대상 에이전트**: `generator-backend`
+- **저장 위치**: `.harness/gotchas/generator-backend.md`
+- **ID 할당**: `[G-002]` (기존 항목 다음 번호)
+
+#### 기록 포맷 (Dispatcher 가 자동 작성)
+
+```markdown
+### [G-002] MockServer + npm run dev 자동 기동 + OpenAPI 동기화
+- **Date**: 2026-04-22
+- **Severity**: HIGH
+- **Occurrences**: 1
+- **Symptom**: 실제 DB 연결 시도 → 연결 실패로 스프린트 중단
+- **Rule**: `npm run dev` 는 MockServer 를 concurrent 로 기동한다.
+  API 호출 전 `http://localhost:3001/health` 를 확인할 것.
+- **Applies to**: generator-backend
+```
+
+#### 공유 메모리 (프로젝트 전체 규칙)
+
+한 에이전트 실수가 아니라 **모든 에이전트에 적용할 구조적 교훈** 이면 `.harness/memory.md` 로 승격:
+
+```
+이건 특정 Generator 실수가 아니라 이 프로젝트 공통 규칙이야 —
+모든 테스트는 MockServer seed data 기반이어야 한다는 걸
+메모리에 올려줘.
+```
+
+→ Dispatcher 가 `memory.md` 에 `### [M-NNN] ...` 로 기록. Planner 리뷰 후 `unverified → verified` 로 승격.
+
+#### 주의 — 데이터 보존
+
+v5.5.2 부터 `npm install` postinstall 이 `### [G-NNN]` 엔트리가 있는 gotcha 파일을 **절대 덮어쓰지 않습니다**. 그 이전 버전에서는 업데이트 시 누적 기록이 템플릿으로 초기화되는 버그가 있었습니다 — 반드시 `5.5.2+` 를 사용하세요.
+
+---
+
+## Detail Architecture
+
+여기부터는 어떻게 구성되어 있는지, 왜 그렇게 설계했는지에 대한 상세 문서입니다.
+
 ## 두 가지 모드
 
 | 모드 | 설명 | 실행 방법 |
@@ -31,7 +166,7 @@ npm install @walwal-harness/cli
 
 `postinstall`이 자동으로:
 1. `.harness/` 디렉토리 스캐폴딩
-2. `.claude/skills/` 에 에이전트 스킬 설치 (7개)
+2. `.claude/skills/` 에 에이전트 스킬 설치 (8개)
 3. `.claude/commands/` 에 모드 제어 커맨드 설치 (3개)
 4. `scripts/` 에 오케스트레이션 스크립트 설치
 5. SessionStart / UserPromptSubmit 훅 등록
@@ -45,8 +180,7 @@ npm install @walwal-harness/cli
 npm update @walwal-harness/cli
 ```
 
-npm update 시 모든 시스템 파일(scripts, skills, commands)이 **자동으로 교체**됩니다.
-사용자 데이터(progress.json, progress.log, gotchas 커스텀 항목, archive)는 보존됩니다.
+npm update 시 모든 시스템 파일(scripts, skills, commands, config 템플릿)이 **자동으로 교체**됩니다. 사용자 데이터(progress.json, progress.log, **gotchas 누적 엔트리**, memory.md, archive)는 보존됩니다.
 
 ### CLI 명령어
 
@@ -60,40 +194,67 @@ npx walwal-harness --help       # 도움말
 
 ---
 
-## Quick Start — Solo Mode
+## 에이전트 구성
 
-```bash
-# 1. 설치
-npm install @walwal-harness/cli
+| 에이전트 | 역할 | 모델 |
+|----------|------|------|
+| **Dispatcher** | 요청 분석 → 파이프라인 결정 · gotcha 관리 | opus |
+| **Brainstormer** | 러프한 요구사항 → 구조화된 spec | opus |
+| **Planner** | 제품 사양 + API 계약서 + 서비스 분할 | opus |
+| **Generator-Backend** | NestJS MSA 서비스 구현 | sonnet |
+| **Generator-Frontend** | React/Next.js UI 구현 | sonnet |
+| **Evaluator-Code-Quality** | 코드 유지보수성/아키텍처/Best Practice (BE/FE/libs 공통, 브라우저 없음) | opus |
+| **Evaluator-Functional** | Playwright E2E 기능 검증 · API 계약 준수 | opus |
+| **Evaluator-Visual** | 레이아웃/접근성/AI슬롭 검증 | opus |
 
-# 2. Claude Code 재시작
-claude   # (또는 codex)
+### Evaluator Chain (v5.5+)
 
-# 3. 하네스 시작
-> 하네스 엔지니어링 시작
+Generator 이후는 **3-Evaluator 직렬 체인 + 조기 종료** 로 동작:
 
-# 4. Dispatcher → Planner 순서로 자동 진행
-# 5. Generator, Evaluator를 프롬프트로 순차 호출
+```
+Generator
+  → Evaluator-Code-Quality  (정적 · 저비용 · 브라우저 없음)
+  → Evaluator-Functional    (동작 · 중비용 · Playwright/curl)
+  → Evaluator-Visual        (렌더 · 고비용 · 스크린샷)
+  → Archive
 ```
 
-### Solo 파이프라인
+앞단 FAIL 시 뒤 평가자는 실행하지 않고 바로 Generator 재작업으로 리라우팅. BE-ONLY 파이프라인에서는 Visual 이 체인에서 제외됩니다.
+
+| 단계 | 채점 축 | Weight | 도구 |
+|------|---------|--------|------|
+| Code-Quality | C1 Layer · C2 Readability · C3 DRY · C4 Type/Error · C5 Test | 25/15/20/25/15 | Read/Grep + tsc/eslint |
+| Functional   | R1 Contract · R2 AC · R3 Negative · R4 E2E · R5 Error | 25/25/20/15/15 | Playwright 또는 curl |
+| Visual       | V1 Layout · V2 Responsive · V3 A11y · V4 Consistency · V5 Interaction | 20×5 | Playwright 스크린샷 |
+
+### Evaluation 기준
+- PASS: Weighted Score ≥ 2.80 / 3.00
+- AC 100% 충족 필수 (부분 통과 = FAIL)
+- Regression 실패 1건+ = FAIL (이전 Sprint PASS 기능 재검증)
+- Evidence 없는 Score = 0점 강제 재계산
+- Cross-Validation 불일치 1건+ = CONDITIONAL FAIL
+- Team Mode: 최대 5회 재시도 후 사용자 개입 요청
+
+---
+
+## 솔로 파이프라인 상세
 
 ```
 사용자 요청 → Dispatcher → (Brainstormer) → Planner
 → Generator-Backend → Generator-Frontend
-→ Evaluator-Functional → Evaluator-Visual
+→ Evaluator-Code-Quality → Evaluator-Functional → Evaluator-Visual
 → PASS: 다음 Sprint | FAIL: Generator로 재시도 (최대 5회)
 ```
 
----
+각 에이전트는 **독립 Claude Code 세션** 에서 실행됩니다. Session Boundary Protocol 이 On Start / On Complete / On Fail 훅으로 progress.json 을 갱신하고 STOP. 다음 세션을 열면 SessionStart 훅이 자동으로 다음 에이전트를 안내합니다.
 
-## Quick Start — Team Mode
+## 팀 파이프라인 상세
 
 ```bash
-# Planner 완료 후:
+# Planner 완료 후
 > /harness-team
 
-# 자동으로:
+# 자동 실행 흐름:
 # 1. feature-queue.json 초기화 (의존성 topological sort)
 # 2. tmux Studio 레이아웃 구축
 # 3. 3개 팀이 병렬로 Gen→Eval 루프 자동 실행
@@ -101,23 +262,7 @@ claude   # (또는 codex)
 # 5. 5회 초과 실패 시 사용자 개입 요청
 ```
 
-### Team 모드 레이아웃
-
-```
-┌──────────────┬──────────────┬──────────────┐
-│  Prompt      │  Dashboard   │   TEAM 1     │
-│  History     │  (queue +    │  Gen | Eval   │
-│              │   status)    ├──────────────┤
-├──────────────┤              │   TEAM 2     │
-│  Controller  │              │  Gen | Eval   │
-│  (Claude /   │              ├──────────────┤
-│   Codex)     │              │   TEAM 3     │
-└──────────────┴──────────────┴──────────────┘
-```
-
----
-
-## 모드 전환
+### 모드 전환
 
 | 명령 | 설명 |
 |------|------|
@@ -133,27 +278,6 @@ Team 실행 중 → /harness-stop → /harness-solo → 프롬프트로 계속
 
 ---
 
-## 에이전트 구성
-
-| 에이전트 | 역할 | 모델 |
-|----------|------|------|
-| **Dispatcher** | 요청 분석 → 파이프라인 결정 | opus |
-| **Brainstormer** | 러프한 요구사항 → 구조화된 spec | opus |
-| **Planner** | 제품 사양 + API 계약서 + 서비스 분할 | opus |
-| **Generator-Backend** | NestJS MSA 서비스 구현 | sonnet |
-| **Generator-Frontend** | React/Next.js UI 구현 | sonnet |
-| **Evaluator-Functional** | Playwright E2E 기능 검증 | opus |
-| **Evaluator-Visual** | 디자인/접근성/AI슬롭 검증 | opus |
-
-### Evaluation 기준
-- PASS: Weighted Score ≥ 2.80/3.00
-- AC 100% 충족 필수 (부분 통과 = FAIL)
-- Regression 실패 1건+ = FAIL
-- Evidence 없는 Score = 0점
-- Team Mode: 최대 5회 재시도 후 사용자 개입 요청
-
----
-
 ## 디렉토리 구조
 
 ```
@@ -162,21 +286,34 @@ your-project/
 │   ├── config.json                    # 하네스 설정
 │   ├── progress.json                  # 런타임 상태 (mode, sprint, agent)
 │   ├── progress.log                   # 실시간 이벤트 로그
+│   ├── memory.md                      # 공유 학습 기록 (모든 에이전트 공통)
 │   ├── HARNESS.md                     # 하네스 상세 가이드
 │   ├── actions/                       # 활성 스프린트 문서
-│   │   ├── feature-list.json          # Feature 목록 + AC
-│   │   ├── api-contract.json          # API 계약서
+│   │   ├── pipeline.json              # Dispatcher 결정 (evaluator_chain 포함)
+│   │   ├── plan.md
+│   │   ├── feature-list.json          # Feature 목록 + Executable AC
+│   │   ├── api-contract.json
 │   │   ├── feature-queue.json         # Feature Queue 상태 (Team Mode)
-│   │   └── ...
+│   │   ├── sprint-contract.md
+│   │   ├── evaluation-code-quality.md
+│   │   ├── evaluation-functional.md
+│   │   └── evaluation-visual.md
 │   ├── archive/                       # 완료 스프린트 보관 (불변)
-│   └── gotchas/                       # 에이전트 실수 기록
+│   └── gotchas/                       # 에이전트 실수 기록 (누적 보존)
+│       ├── planner.md
+│       ├── generator-backend.md
+│       ├── generator-frontend.md
+│       ├── evaluator-code-quality.md
+│       ├── evaluator-functional.md
+│       └── evaluator-visual.md
 ├── .claude/
-│   ├── skills/harness-*/              # 에이전트 스킬 (7개)
+│   ├── skills/harness-*/              # 에이전트 스킬 (8개)
 │   ├── commands/harness-*.md          # 모드 제어 커맨드 (3개)
 │   └── settings.json                  # 훅, statusline
 ├── scripts/
 │   ├── harness-tmux.sh                # 통합 tmux 레이아웃 (Solo/Team)
 │   ├── harness-dashboard.sh           # 통합 대시보드
+│   ├── harness-gotcha-memory.sh       # Gotcha & Memory 패널
 │   ├── harness-monitor.sh             # 에이전트 모니터
 │   ├── harness-queue-manager.sh       # Feature Queue 관리
 │   ├── harness-next.sh                # 에이전트 전환 라우터
@@ -186,7 +323,7 @@ your-project/
 │   ├── harness-prompt-history.sh      # 프롬프트 히스토리
 │   └── lib/                           # 공유 라이브러리
 ├── AGENTS.md                          # 프로젝트 컨텍스트 (IA-MAP)
-└── CLAUDE.md → AGENTS.md             # 심볼릭 링크
+└── CLAUDE.md → AGENTS.md              # 심볼릭 링크
 ```
 
 ---
@@ -217,6 +354,14 @@ cat .harness/progress.json | jq '{mode, sprint, current_agent, next_agent}'
 # 강제 Solo 복귀
 jq '.mode = "solo"' .harness/progress.json > /tmp/p.json && mv /tmp/p.json .harness/progress.json
 ```
+
+### 대시보드에 feature title 이 "?" 로 표시
+- v5.5.1 에서 해결 (feature 의 `name`/`title`/`description` 순으로 fallback).
+- 그 이전 버전이면 `npm i @walwal-harness/cli@latest` 로 업데이트.
+
+### Gotcha 가 누적되지 않고 사라짐
+- v5.5.2 에서 해결 (postinstall 이 누적 엔트리를 절대 덮어쓰지 않도록 수정).
+- 반드시 `5.5.2+` 사용.
 
 ---
 
