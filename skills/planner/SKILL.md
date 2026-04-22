@@ -76,14 +76,15 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 
 ## fe_stack (FE 파이프라인 분기)
 
-`pipeline.json.fe_stack`은 FE Generator/Evaluator 선택을 결정한다:
+`pipeline.json.fe_stack` 은 스택 기록용 메타데이터이며, **에이전트 이름 치환에는 사용되지 않는다** (v5.6.5+). 모든 스택이 공통 `generator-frontend` / `evaluator-functional` / `evaluator-visual` 을 사용하고, 스택별 동작(runner, paths, API, validation) 은 adaptive ref-docs(`.harness/ref/fe-<stack>.md`) 에서 로드한다.
 
-| 값 | FE Generator | FE Evaluator | 비고 |
-|----|--------------|--------------|------|
-| `react` (기본) | `generator-frontend` | `evaluator-functional` + `evaluator-visual` | Vercel/Next.js/Tailwind |
-| `flutter` | `generator-frontend-flutter` | `evaluator-functional-flutter` | Riverpod + integrated_data_layer, Eval-Visual 생략 |
+| 스택 예 | ref-docs 경로 | 비고 |
+|---------|--------------|------|
+| `react`, `nextjs` | `.harness/ref/fe-react.md`, `.harness/ref/fe-nextjs.md` | Vercel/Next.js/Tailwind |
+| `flutter` | `.harness/ref/fe-flutter.md` | Riverpod · validation.visual.enabled=false (모바일/데스크톱) |
+| `vue`, `svelte`, `swift` 등 | `.harness/ref/fe-<stack>.md` | 각 스택 관례 |
 
-**Planner는 `pipeline.json`에 `fe_stack`을 반드시 기록해야 한다.** Dispatcher가 이 값으로 `next_agent`를 라우팅한다.
+**Planner는 `pipeline.json`에 `fe_stack`을 반드시 기록해야 한다.** Generator/Evaluator 는 세션 시작 시 이 값으로 올바른 ref-docs 를 로드한다.
 
 ## Process
 

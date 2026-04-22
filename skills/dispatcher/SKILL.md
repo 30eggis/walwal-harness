@@ -147,7 +147,7 @@ AGENTS.md 비하네스  → 기존 백업 + 리빌드
 - FULLSTACK / FE-ONLY: `["evaluator-code-quality", "evaluator-functional", "evaluator-visual"]`
 - BE-ONLY: `["evaluator-code-quality", "evaluator-functional"]` (functional 은 api-only 모드)
 
-Flutter 치환 규칙은 chain 배열의 각 원소에도 동일 적용. `fe_stack == "flutter"` + `fe_target in (mobile, desktop)` 이면 `evaluator-visual` 을 chain 에서 제거하고 `evaluator-functional` → `evaluator-functional-flutter` 로 치환한다. `evaluator-code-quality` 는 스택/타겟 무관 공통.
+스택 특성(예: Flutter mobile 에서 Visual skip) 이 필요하면 해당 스택 ref-docs (`.harness/ref/fe-<stack>.md`) 의 `validation.visual.enabled` 를 false 로 두면 evaluator-visual 이 MANUAL_REQUIRED 로 우아하게 우회한다. 별도 치환 에이전트는 사용하지 않는다.
 
 ### Evaluator 체인 라우팅 규칙
 
@@ -163,11 +163,9 @@ Gotcha retry 시에도 체인 시작점은 chain[0] 부터 재실행.
 
 FE-ONLY 또는 FULLSTACK 선택 시, `pipeline.json`에 **`fe_stack`** 필드를 포함해야 한다:
 
-- `scan-result.json.tech_stack.fe_stack` 값을 기본으로 사용 (`react` | `flutter`)
+- `scan-result.json.tech_stack.fe_stack` 값을 기본으로 사용 (예: `react`, `nextjs`, `vue`, `flutter`, `swift` 등)
 - 값이 없거나 불명확하면 Planner가 확정하도록 위임 (Dispatcher는 `"unknown"` 기록 + `notes` 에 메모)
-- Flutter 선택 시 `agents_active`/`agents_skipped`에 치환된 에이전트명을 기록
-  - active: `generator-frontend-flutter`, `evaluator-functional-flutter`
-  - skipped: `generator-frontend`, `evaluator-functional`, `evaluator-visual`
+- **에이전트 이름 치환은 하지 않는다** (v5.6.5+). 모든 FE 스택은 공통 `generator-frontend` / `evaluator-functional` / `evaluator-visual` 을 사용하고, 스택 특성은 `.harness/ref/fe-<stack>.md` (adaptive ref-docs) 에서 로드한다.
 
 ## 6. Brainstormer Routing Decision
 
@@ -222,7 +220,7 @@ Planner 를 호출해야 한다고 판단되면, **사용자에게 단 하나의
 | 상황 | next_agent |
 |------|-----------|
 | "Eval, X 다시 검증해" | `evaluator-functional` (또는 `evaluator-visual`) |
-| "Generator-FE, Y 버그 고쳐" | `generator-frontend` (또는 Flutter 변형) |
+| "Generator-FE, Y 버그 고쳐" | `generator-frontend` |
 | "Generator-BE, API 재생성해" | `generator-backend` |
 | Eval FAIL → retry | `failure.retry_target` |
 | Gotcha 수정 | `failure.retry_target` 또는 현재 에이전트 |
@@ -240,14 +238,8 @@ Planner 를 호출해야 한다고 판단되면, **사용자에게 단 하나의
 이 경우 기존 `.harness/actions/brainstorm-spec.md` 는 Brainstormer 의 On Start 에서
 `.harness/archive/brainstorm-spec-<timestamp>.md` 로 백업된다.
 
-## 7. Handoff 라우팅 (fe_stack 반영)
+## 7. Handoff 라우팅
 
-Dispatcher가 `next_agent` 를 세팅할 때 pipeline.json.fe_stack 을 참조해 치환:
+Dispatcher 가 `next_agent` 를 세팅할 때 **스택별 에이전트 이름 치환은 하지 않는다** (v5.6.5+). 모든 FE 스택이 공통 `generator-frontend` / `evaluator-functional` / `evaluator-visual` 을 사용하고, 스택 특성은 adaptive ref-docs(`.harness/ref/fe-<stack>.md`) 에서 로드한다.
 
-| 원본 next_agent | fe_stack=react | fe_stack=flutter |
-|-----------------|----------------|------------------|
-| generator-frontend | generator-frontend | generator-frontend-flutter |
-| evaluator-functional (FE 단계) | evaluator-functional | evaluator-functional-flutter |
-| evaluator-visual | evaluator-visual | (skip → 다음 단계로 이동) |
-
-**Brainstormer 는 fe_stack 치환 대상이 아니다** — 언어/스택 무관 공통 에이전트.
+예외적 스킵 규칙은 ref-docs 의 `validation.visual.enabled` 플래그로 제어 — false 면 evaluator-visual 이 MANUAL_REQUIRED 로 우아하게 우회한다 (별도 에이전트 이름 변경 없음).

@@ -28,35 +28,19 @@ docmeta:
 
 # Pipeline Definitions
 
-> **FE Stack 차원**: 모든 FE 관련 파이프라인은 `fe_stack` 필드로 React/Flutter를 구분한다.
+> **FE Stack 차원**: 모든 FE 관련 파이프라인은 `fe_stack` 필드로 스택을 기록한다.
 > Planner가 scan-result.json(`tech_stack.fe_stack`) 또는 사용자 질문으로 확정한다.
 
-## fe_stack + fe_target 스위치 매트릭스
+## 단일 에이전트 체인 (v5.6.5+)
 
-| fe_stack | fe_target | FE Generator | Eval-Functional | Eval-Visual |
-|----------|-----------|--------------|----------------|-------------|
-| `react`  | (n/a)     | `generator-frontend` | `evaluator-functional` (Playwright) | `evaluator-visual` |
-| `flutter`| **`web`** | `generator-frontend-flutter` | **`evaluator-functional`** (Playwright!) | **`evaluator-visual`** (Playwright!) |
-| `flutter`| `mobile`  | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | **SKIP** |
-| `flutter`| `desktop` | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | **SKIP** |
+**에이전트 이름 치환은 하지 않는다**. 모든 FE 스택(React, Next.js, Vue, Svelte, Flutter, Swift, 기타) 은 공통 `generator-frontend` / `evaluator-functional` / `evaluator-visual` 을 사용하며, 스택 특성(runner, paths, API, validation) 은 **adaptive ref-docs** (`.harness/ref/fe-<stack>.md`) 에서 로드한다.
 
-> **Flutter Web**: 컴파일 결과가 HTML+JS+CSS 이므로 React 경로의 Playwright evaluator 가 정상 동작.
-> Generator-Frontend-Flutter 의 Self-Verification 에서 `flutter analyze` / `flutter test` /
-> `flutter build web --release` 가 이미 통과한 상태로 handoff 됨이 전제.
+| 스택별 스킵/우회 | 방법 |
+|------------------|------|
+| Visual 렌더 검증이 불가능한 네이티브 모바일/데스크톱 | ref-docs 의 `validation.visual.enabled = false` — `evaluator-visual` 이 MANUAL_REQUIRED 로 우아하게 우회 |
+| Playwright 대신 스택 네이티브 E2E (예: XCUITest, Flutter `flutter_driver`) | ref-docs 의 `validation.functional_tests` 에 해당 명령 나열 — `evaluator-functional` 이 로드 실행 |
 
-Dispatcher는 `next_agent`를 설정할 때 `pipeline.json` 의 `fe_stack` + `fe_target` 두 값을 보고 치환한다:
-
-```
-if pipeline.json.fe_stack == "flutter":
-    "generator-frontend" → "generator-frontend-flutter"  (모든 fe_target 공통)
-
-    if fe_target == "web":
-        "evaluator-functional" → "evaluator-functional"  (그대로, Playwright 사용)
-        "evaluator-visual"     → "evaluator-visual"      (그대로)
-    elif fe_target in ("mobile", "desktop"):
-        "evaluator-functional" → "evaluator-functional-flutter"
-        "evaluator-visual"     → __skip__
-```
+Dispatcher 는 `fe_stack` 을 `pipeline.json` 에 기록만 하고, 에이전트 이름은 변경하지 않는다. Generator/Evaluator 는 세션 시작 시 스스로 ref-docs 를 로드해 스택에 맞는 동작을 한다.
 
 ## Evaluator Chain (공통)
 
@@ -83,10 +67,10 @@ agents:
   - planner (light):
       skip: MSA 서비스 설계, BE 기능 목록
       do: OpenAPI → api-contract.json 변환, FE 컴포넌트 설계, feature-list (layer: frontend만), fe_stack 확정
-  - generator-frontend OR generator-frontend-flutter  # fe_stack에 따라
+  - generator-frontend                                 # 모든 스택 공통 (ref-docs 로드)
   - evaluator-code-quality                             # 공통 — 브라우저 없음
-  - evaluator-functional OR evaluator-functional-flutter
-  - evaluator-visual  # fe_stack == "flutter" + fe_target in (mobile,desktop) 이면 SKIP
+  - evaluator-functional                               # 모든 스택 공통
+  - evaluator-visual                                   # ref.validation.visual.enabled=false 면 MANUAL_REQUIRED 로 우회
 evaluator_chain:
   - evaluator-code-quality
   - evaluator-functional
@@ -95,9 +79,9 @@ skip:
   - generator-backend
 notes:
   - api-contract.json은 OpenAPI에서 파생 (Planner가 변환)
-  - Eval-Func(React)의 API Health Check는 외부 서버 대상
+  - Eval-Func 의 API Health Check는 외부 서버 대상 (ref.api.base_url)
   - AGENTS.md IA-MAP에 BE 경로 없음 (외부 서버)
-  - fe_stack=flutter (mobile/desktop) 인 경우 evaluator-visual 생략
+  - 네이티브 모바일/데스크톱 스택은 ref-docs 에서 visual.enabled=false 로 설정
 ```
 
 ## BE-ONLY

@@ -29,9 +29,10 @@ get_allowed_paths() {
       echo "tsconfig"
       echo "docker-compose"
       ;;
-    generator-frontend|generator-frontend-flutter)
+    generator-frontend)
       echo "apps/web/"
       echo "apps/flutter/"
+      echo "lib/"
       echo ".harness/actions/sprint-contract.md"
       echo ".harness/actions/feature-list.json"
       echo ".harness/progress.json"
@@ -43,7 +44,7 @@ get_allowed_paths() {
       echo ".harness/actions/evaluation-code-quality.md"
       echo ".harness/progress.json"
       ;;
-    evaluator-functional|evaluator-functional-flutter)
+    evaluator-functional)
       echo ".harness/actions/evaluation-functional.md"
       echo ".harness/progress.json"
       echo "tests/"

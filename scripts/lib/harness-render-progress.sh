@@ -311,7 +311,7 @@ render_agent_bar() {
     fe_stack=$(jq -r '.fe_stack // "react"' "$PIPELINE_JSON" 2>/dev/null || echo "react")
     fe_target=$(jq -r '.fe_target // empty' "$PIPELINE_JSON" 2>/dev/null || true)
     if [ -z "$fe_target" ]; then
-      fe_target=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.${fe_stack}._default_target // \"web\"" "$CONFIG" 2>/dev/null || echo "web")
+      fe_target="web"  # v5.6.5+: 치환 로직 제거. 기본 web.
     fi
   fi
 
@@ -325,14 +325,7 @@ render_agent_bar() {
 
   while IFS= read -r agent; do
     agent=$(echo "$agent" | sed 's/:.*//')  # strip mode suffix like :light, :api-only
-
-    # fe_stack + fe_target 치환 적용
-    if [ "$fe_stack" = "flutter" ]; then
-      local sub
-      sub=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.flutter.by_target[\"${fe_target}\"][\"${agent}\"] // \"${agent}\"" "$CONFIG" 2>/dev/null)
-      if [ "$sub" = "__skip__" ]; then continue; fi
-      agent="$sub"
-    fi
+    # v5.6.5+: fe_stack 에이전트 치환 제거. 스택별 동작은 ref-docs 로 조절.
 
     if [ "$first" = true ]; then
       first=false

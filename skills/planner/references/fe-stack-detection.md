@@ -107,72 +107,58 @@ Flutter 프로젝트의 타깃을 확인합니다:
 이번 스프린트의 타깃은? (A/B/C)
 ```
 
-### fe_target → Eval 흐름
+### fe_target 과 Eval 흐름 (v5.6.5+)
 
-| fe_target | Generator | Eval-Functional | Eval-Visual |
-|-----------|-----------|----------------|-------------|
-| `web` | `generator-frontend-flutter` | `evaluator-functional` (Playwright!) | `evaluator-visual` (Playwright!) |
-| `mobile` | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | SKIP |
-| `desktop` | `generator-frontend-flutter` | `evaluator-functional-flutter` (정적 분석) | SKIP |
+에이전트 이름 치환은 하지 않는다. 모든 스택이 공통 `generator-frontend` / `evaluator-functional` / `evaluator-visual` 을 사용하고, 스택 특성은 `.harness/ref/fe-<stack>.md` (adaptive ref-docs) 의 `validation` 블록으로 조절된다.
 
-**핵심**: Flutter Web 의 빌드 결과물(HTML/JS/CSS)은 일반 웹앱과 동일하므로 Playwright 기반
-React 경로의 evaluator 를 그대로 재사용한다. Generator-Frontend-Flutter 의 Self-Verification
-단계에서 `flutter analyze`/`flutter test`/`flutter build web` 정적 검증이 이미 통과한 상태로 handoff 된다.
+| fe_target | 전략 | 방법 |
+|-----------|------|------|
+| `web` (Flutter Web, Next.js 등) | 일반 Playwright 평가 | ref.validation.visual.enabled = true |
+| `mobile` (iOS/Android 네이티브) | Visual 은 MANUAL_REQUIRED | ref.validation.visual.enabled = false + functional_tests 에 스택 네이티브 명령 |
+| `desktop` (macOS/Windows/Linux 네이티브) | Visual MANUAL_REQUIRED | 동일 |
+
+Generator 는 `ref.runner.dev_command` / `ref.paths.*` 를 로드해 스택별 빌드·테스트·구조를 따른다.
 
 ## 3. pipeline.json 갱신
 
-`fe_stack` + `fe_target` 확정 후 `pipeline.json`에 반드시 추가:
+`fe_stack` + `fe_target` 확정 후 `pipeline.json` 에 기록:
 
 ```json
 {
   "pipeline": "FULLSTACK",
   "planner_mode": "full",
   "fe_stack": "flutter",
-  "fe_target": "web",
+  "fe_target": "mobile",
   "agents_active": [
     "planner",
     "generator-backend",
-    "generator-frontend-flutter",
-    "evaluator-functional",
-    "evaluator-visual"
-  ],
-  "agents_skipped": [
     "generator-frontend",
-    "evaluator-functional-flutter"
+    "evaluator-code-quality",
+    "evaluator-functional"
   ],
-  "evaluator_mode": "playwright-web",
-  "notes": "Flutter Web — 컴파일 결과가 HTML+JS+CSS 이므로 React 경로의 Playwright evaluator 사용. Generator 의 Self-Verification 에서 flutter analyze/test 통과 전제."
+  "agents_skipped": [],
+  "evaluator_mode": "native",
+  "notes": "Flutter mobile — ref.validation.visual.enabled=false, evaluator-visual 은 MANUAL_REQUIRED 로 우회."
 }
 ```
 
 ### fe_stack + fe_target → 파이프라인 매핑
 
-| pipeline | fe_stack | fe_target | agents_active 예시 |
-|----------|----------|-----------|-------------------|
-| FULLSTACK | react | (n/a) | planner, generator-backend, generator-frontend, evaluator-functional, evaluator-visual |
-| FULLSTACK | flutter | **web** | planner, generator-backend, generator-frontend-flutter, evaluator-functional, evaluator-visual |
-| FULLSTACK | flutter | mobile | planner, generator-backend, generator-frontend-flutter, evaluator-functional-flutter |
-| FULLSTACK | flutter | desktop | planner, generator-backend, generator-frontend-flutter, evaluator-functional-flutter |
-| FE-ONLY | react | (n/a) | planner, generator-frontend, evaluator-functional, evaluator-visual |
-| FE-ONLY | flutter | **web** | planner, generator-frontend-flutter, evaluator-functional, evaluator-visual |
-| FE-ONLY | flutter | mobile | planner, generator-frontend-flutter, evaluator-functional-flutter |
-| BE-ONLY | (무관) | (n/a) | planner, generator-backend, evaluator-functional |
+| pipeline | 에이전트 체인 (스택 무관) | ref-docs 로 조절되는 부분 |
+|----------|--------------------------|---------------------------|
+| FULLSTACK | planner → gen-be → gen-fe → eval-code-quality → eval-func → eval-visual | Gen/Eval 모두 ref.* 로드 |
+| FE-ONLY | planner(light) → gen-fe → eval-code-quality → eval-func → eval-visual | 동일 |
+| BE-ONLY | planner → gen-be → eval-code-quality → eval-func | visual 체인 없음 |
 
-## 4. Flutter 선택 시 추가 작업
+## 4. Flutter 등 네이티브 스택 선택 시 추가 작업
 
-Flutter로 확정되면 Planner는:
-
-1. **AGENTS.md IA-MAP** 의 `[FE]` 섹션을 Flutter 구조로 바꿔야 한다.
-   - `apps/web/` → `lib/ui/pages/`, `lib/ui/component/`
-   - `libs/shared-dto/` 대신 `integrated_data_layer/` 경로 등록
-   - 소유자: `→ Generator-Frontend-Flutter`
-
-2. **api-contract.json** 은 언어 중립적이어야 한다 — Planner는 TypeScript 타입이 아니라 **스키마 JSON** 으로만 작성. Flutter Generator가 Retrofit/JsonSerializable로 변환한다.
-
-3. **feature-list.json** 의 `layer: "frontend"` feature들은 `fe_stack: "flutter"` 태그를 달아서 Evaluator가 구분하도록 한다.
+1. **AGENTS.md IA-MAP** 의 `[FE]` 섹션에 해당 스택 구조 반영 (예: Flutter 면 `lib/ui/pages/`, `integrated_data_layer/` 등).
+2. **api-contract.json** 은 언어 중립 스키마 JSON — Generator 가 스택 타입으로 변환.
+3. **feature-list.json** 의 `layer: "frontend"` feature 에 `fe_stack` 태그 유지 (필터링 용도).
+4. **`.harness/ref/fe-<stack>.md`** 의 `validation` 블록을 스택에 맞게 채워 두기 — 이게 실제 동작을 바꾸는 유일한 지점.
 
 ## 5. 금지
 
 - 파이프라인 실행 도중 `fe_stack` 변경 금지 — 스프린트 경계에서만 가능
-- React/Flutter 코드 혼재 생성 금지 — Generator는 하나의 stack만 담당
+- 서로 다른 스택 코드 혼재 생성 금지 — Generator 는 하나의 stack만 담당
 - 사용자가 명시적으로 한 스택을 지시했는데 감지 결과로 다른 스택을 강제하지 말 것

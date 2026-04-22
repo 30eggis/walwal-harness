@@ -54,7 +54,7 @@ if [ -f "$PIPELINE_JSON" ]; then
   fe_target=$(jq -r '.fe_target // empty' "$PIPELINE_JSON" 2>/dev/null || true)
   if [ -z "$fe_target" ]; then
     # pipeline.json 에 fe_target 미지정 시 config.json 의 _default_target 사용
-    fe_target=$(jq -r ".flow.pipeline_selection.fe_stack_substitution.${fe_stack}._default_target // \"web\"" "$CONFIG" 2>/dev/null || echo "web")
+    fe_target="web"  # v5.6.5+: 치환 로직 제거. fe_target 은 pipeline.json 에서 명시하거나 web 기본.
   fi
 fi
 
