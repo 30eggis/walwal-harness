@@ -58,6 +58,23 @@ if pipeline.json.fe_stack == "flutter":
         "evaluator-visual"     → __skip__
 ```
 
+## Evaluator Chain (공통)
+
+모든 파이프라인의 Generator 이후 단계는 **평가자 체인**으로 처리한다. 직렬 실행 + 조기 종료:
+
+```
+Generator → evaluator-code-quality → evaluator-functional → evaluator-visual → archive
+                    │                        │                      │
+                    └─ FAIL ─ reroute ────────┴──────────────────────┘
+                              → Generator (failure.retry_target)
+```
+
+- **code-quality** (정적, 저비용, 브라우저 없음): BE/FE/libs 공통 코드 품질
+- **functional** (동작, 중비용): API·E2E 행동 검증
+- **visual** (렌더, 고비용): 레이아웃/접근성
+
+앞단 FAIL 시 뒷단은 실행하지 않는다. 구조가 깨진 코드에 동작 테스트 낭비 방지.
+
 ## FE-ONLY
 
 ```yaml
@@ -67,15 +84,20 @@ agents:
       skip: MSA 서비스 설계, BE 기능 목록
       do: OpenAPI → api-contract.json 변환, FE 컴포넌트 설계, feature-list (layer: frontend만), fe_stack 확정
   - generator-frontend OR generator-frontend-flutter  # fe_stack에 따라
+  - evaluator-code-quality                             # 공통 — 브라우저 없음
   - evaluator-functional OR evaluator-functional-flutter
-  - evaluator-visual  # fe_stack == "flutter" 이면 SKIP
+  - evaluator-visual  # fe_stack == "flutter" + fe_target in (mobile,desktop) 이면 SKIP
+evaluator_chain:
+  - evaluator-code-quality
+  - evaluator-functional
+  - evaluator-visual
 skip:
   - generator-backend
 notes:
   - api-contract.json은 OpenAPI에서 파생 (Planner가 변환)
   - Eval-Func(React)의 API Health Check는 외부 서버 대상
   - AGENTS.md IA-MAP에 BE 경로 없음 (외부 서버)
-  - fe_stack=flutter 인 경우 evaluator-visual 생략
+  - fe_stack=flutter (mobile/desktop) 인 경우 evaluator-visual 생략
 ```
 
 ## BE-ONLY
@@ -87,15 +109,20 @@ agents:
       skip: FE 컴포넌트 설계, 비주얼 요구사항
       do: 기존 코드 분석, 신규 API 설계, api-contract.json 확장
   - generator-backend
+  - evaluator-code-quality                  # 공통
   - evaluator-functional:
       mode: api-only
       skip: browser 테스트
       do: curl/httpie로 API 엔드포인트 직접 검증
+evaluator_chain:
+  - evaluator-code-quality
+  - evaluator-functional
 skip:
   - generator-frontend
   - evaluator-visual
 notes:
   - Eval-Func는 Playwright 대신 CLI 기반 API 테스트
+  - Code-Quality 는 BE 코드의 레이어/DI/DTO/에러 전파/테스트 품질 감사
 ```
 
 ## FULLSTACK
@@ -106,6 +133,11 @@ agents:
   - planner (full)
   - generator-backend
   - generator-frontend
+  - evaluator-code-quality
+  - evaluator-functional
+  - evaluator-visual
+evaluator_chain:
+  - evaluator-code-quality
   - evaluator-functional
   - evaluator-visual
 skip: none

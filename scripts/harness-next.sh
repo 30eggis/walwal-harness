@@ -442,7 +442,14 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
       ;;
   esac
 
-  # ── Cross-Validation ──
+  # ── Cross-Validation (chain: code-quality → functional → visual) ──
+  local cross_validation_from_code_quality="null"
+  if [ "$next_agent" = "evaluator-functional" ] || [ "$next_agent" = "evaluator-visual" ]; then
+    local cq_eval="$PROJECT_ROOT/.harness/actions/evaluation-code-quality.md"
+    if [ -f "$cq_eval" ]; then
+      cross_validation_from_code_quality=$(sed -n '/```json/,/```/p' "$cq_eval" | tail -n +2 | head -n -1 | jq 'select(.evaluator == "code-quality" or .cross_validation_from_code_quality)' 2>/dev/null || echo "null")
+    fi
+  fi
   if [ "$next_agent" = "evaluator-visual" ]; then
     local func_eval="$PROJECT_ROOT/.harness/actions/evaluation-functional.md"
     if [ -f "$func_eval" ]; then
@@ -466,6 +473,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
     --argjson regression "$regression_source" \
     --argjson eval_config "$eval_config" \
     --argjson cross_val "$cross_validation_data" \
+    --argjson cross_val_cq "$cross_validation_from_code_quality" \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{
       from: $from,
@@ -482,6 +490,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
       regression: $regression,
       eval_config: $eval_config,
       cross_validation_from_functional: $cross_val,
+      cross_validation_from_code_quality: $cross_val_cq,
       warnings: [],
       timestamp: $timestamp
     }' > "$HANDOFF"

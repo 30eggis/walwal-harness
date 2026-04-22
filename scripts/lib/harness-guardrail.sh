@@ -39,6 +39,10 @@ get_allowed_paths() {
       echo "tsconfig"
       echo "pubspec"
       ;;
+    evaluator-code-quality)
+      echo ".harness/actions/evaluation-code-quality.md"
+      echo ".harness/progress.json"
+      ;;
     evaluator-functional|evaluator-functional-flutter)
       echo ".harness/actions/evaluation-functional.md"
       echo ".harness/progress.json"

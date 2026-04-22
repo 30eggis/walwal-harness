@@ -1,8 +1,8 @@
 {
   "harness": {
     "name": "6-Agent Production Harness",
-    "version": "3.3.0",
-    "description": "Dispatcher + NestJS MSA + React/Next.js + Playwright 기반 실무 하네스",
+    "version": "5.5.0",
+    "description": "Dispatcher + 3-Evaluator Chain (Code-Quality → Functional → Visual) + NestJS MSA + React/Next.js + Playwright 기반 실무 하네스",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
   "agents": {
@@ -97,6 +97,47 @@
       "thinking_mode": null,
       "model_rationale": "코드 생성은 Sonnet이 비용 대비 효율적. 계획은 Planner가 이미 완료."
     },
+    "evaluator-code-quality": {
+      "role": "코드 자체의 유지보수성/아키텍처/Best Practice 검사 (BE/FE/libs 공통, 브라우저 없음)",
+      "skill": "harness-evaluator-code-quality",
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash(tsc,eslint,biome,lint 스크립트 한정)"
+      ],
+      "inputs": [
+        "actions/sprint-contract.md",
+        "actions/feature-list.json",
+        "actions/api-contract.json"
+      ],
+      "outputs": [
+        "actions/evaluation-code-quality.md"
+      ],
+      "model": "opus",
+      "thinking_mode": "ultrathink",
+      "thinking_mode_description": "시니어 리뷰어 관점. 변경 파일 전수 정적 분석 + C1-C5 축 적대적 채점.",
+      "adversarial_rules": {
+        "comment": "Code-Quality Evaluator 적대적 행동 규칙 — rubber-stamping 금지",
+        "rules": [
+          "브라우저 없이 코드만으로 판정. '동작하니 PASS' 금지.",
+          "변경 파일(git diff)은 전수 검사. '시간 제약' 핑계 금지.",
+          "모든 Score 주장은 파일:라인 evidence 동반. Evidence 없는 Score = 0.",
+          "toolchain(tsc/eslint) 에러 1건 이상이면 나머지 축 채점 전 즉시 FAIL.",
+          "api-contract.json ↔ 실제 DTO/시그니처 불일치 1건 이상 = FAIL.",
+          "레이어 역방향 의존 / MSA 직접 DB 접근 / FE view→fetch 직결 1건 이상 = C1 Score 0.",
+          "unhandled promise 1건 이상 또는 비타당한 any 3건 이상 = C4 Score 0.",
+          "PASS를 주기 전에 자문하라: '내가 이 코드를 머지 승인할 수 있는가?' NO이면 FAIL.",
+          "반복 페널티: 같은 축에서 이전 스프린트 대비 악화 시 Score 최대 1."
+        ],
+        "forbidden": [
+          "'동작은 Functional 에서 확인됐으니 OK' 식의 책임 전가",
+          "'관용적 any', '사소한 중복' 같은 자기설득",
+          "'제안사항만 남기고 Pass' — 필수 개선은 FAIL",
+          "파일 수정/커밋 (이 평가자는 읽기 전용)"
+        ]
+      }
+    },
     "evaluator-functional": {
       "role": "Playwright로 E2E 기능 검증, API 응답/DB 상태 확인",
       "skill": "harness-evaluator-functional",
@@ -182,29 +223,57 @@
       "planner",
       "generator-backend",
       "generator-frontend",
+      "evaluator-code-quality",
       "evaluator-functional",
       "evaluator-visual"
     ],
+    "evaluator_chain": {
+      "comment": "Generator 완료 후 실행되는 평가자 체인. 직렬 실행 + 조기 종료 — 앞단 FAIL 시 이후 평가자는 생략하고 Generator 로 리라우팅. 모두 PASS 여야 다음 스프린트로 이동.",
+      "execution": "serial_with_early_exit",
+      "order_rationale": "code-quality(정적, 저비용) → functional(동작, 중비용) → visual(렌더, 고비용). 구조가 깨진 코드에 동작 테스트를 낭비하지 않기 위함.",
+      "on_any_fail": "reroute_to_generator",
+      "on_all_pass": "advance_sprint"
+    },
     "pipeline_selection": {
-      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. fe_stack 필드로 React/Flutter를 구분. harness-next.sh가 pipeline.json.fe_stack 을 읽어 generator-frontend/evaluator-functional 을 Flutter 변형으로 치환한다.",
+      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. fe_stack 필드로 React/Flutter를 구분. harness-next.sh가 pipeline.json.fe_stack 을 읽어 generator-frontend/evaluator-functional 을 Flutter 변형으로 치환한다. evaluator_chain 은 파이프라인별로 포함되는 평가자 조합.",
       "pipelines": {
         "FULLSTACK": [
           "planner",
           "generator-backend",
           "generator-frontend",
+          "evaluator-code-quality",
           "evaluator-functional",
           "evaluator-visual"
         ],
         "FE-ONLY": [
           "planner:light",
           "generator-frontend",
+          "evaluator-code-quality",
           "evaluator-functional",
           "evaluator-visual"
         ],
         "BE-ONLY": [
           "planner",
           "generator-backend",
+          "evaluator-code-quality",
           "evaluator-functional:api-only"
+        ]
+      },
+      "evaluator_chains": {
+        "comment": "파이프라인별 평가자 체인. Dispatcher가 pipeline.json.evaluator_chain 으로 기록. harness-next.sh 가 PASS 시 체인상 다음 평가자로 next_agent 설정, 단독 or 마지막이면 archive 로 이동.",
+        "FULLSTACK": [
+          "evaluator-code-quality",
+          "evaluator-functional",
+          "evaluator-visual"
+        ],
+        "FE-ONLY": [
+          "evaluator-code-quality",
+          "evaluator-functional",
+          "evaluator-visual"
+        ],
+        "BE-ONLY": [
+          "evaluator-code-quality",
+          "evaluator-functional"
         ]
       }
     },
@@ -249,7 +318,7 @@
     },
     "cross_validation": {
       "enabled": true,
-      "comment": "evaluator-functional과 evaluator-visual이 서로의 결과를 참조하여 불일치를 감지. evaluation-*.md의 Cross-Validation Data JSON 블록을 기계적으로 파싱."
+      "comment": "evaluator-code-quality / evaluator-functional / evaluator-visual 세 평가자의 결과를 상호 참조하여 불일치를 감지. evaluation-*.md의 Cross-Validation Data JSON 블록을 기계적으로 파싱. 예: code-quality에서 감지한 contract_divergence 를 functional 이 재확인."
     },
     "acceptance_criteria_schema": {
       "comment": "Planner가 feature-list.json에 기능 정의 시 반드시 작성해야 하는 실행 가능한 검증 조건 스키마. Evaluator는 이 조건을 기계적으로 실행한다.",
@@ -374,6 +443,9 @@
         "plan.md": "draft",
         "api-contract.json": "draft",
         "feature-list.json": "draft"
+      },
+      "evaluator-code-quality": {
+        "sprint-contract.md": "draft"
       },
       "evaluator-functional": {
         "sprint-contract.md": "draft"

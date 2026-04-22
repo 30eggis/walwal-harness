@@ -67,6 +67,7 @@ if [ -f "$FEATURE_LIST" ]; then
   total_features=$(jq '.features | length' "$FEATURE_LIST" 2>/dev/null || echo 0)
   completed_features=$(jq '[.features[]? | select(
     (.passes // []) | (
+      (map(select(. == "evaluator-code-quality")) | length > 0) and
       (map(select(. == "evaluator-functional")) | length > 0) and
       (map(select(. == "evaluator-visual")) | length > 0)
     )

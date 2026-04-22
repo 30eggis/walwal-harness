@@ -25,22 +25,8 @@ disable-model-invocation: false
    - `pipeline` → 선택된 파이프라인 (FULLSTACK/FE-ONLY/BE-ONLY)
    - `sprint.number` → `1`, `sprint.status` → `"in_progress"` (신규 파이프라인인 경우에만)
 2. `.harness/progress.log`에 요약 한 줄 추가
-3. **모드 감지**: `.harness/progress.json`의 `mode` 필드 확인
-   - **`"team"`**: Team Mode 활성. 별도 안내 없이 즉시 STOP.
-     출력 (아래 3줄을 그대로 사용):
-     ```
-     ✓ Dispatcher 완료 — pipeline.json 생성됨 (next_agent=<값>).
-     → 별도 tmux 창의 Team Worker들이 이 파일을 감지해 자동으로 다음 에이전트를 실행합니다. 사용자 입력은 필요 없습니다.
-     → 진행 상황은 tmux Dashboard/Team 패널에서 확인하세요. 중단하려면 `bash scripts/harness-tmux.sh --kill`.
-     ```
-   - **`"solo"` / `"paused"`**: Solo Mode. 자동 실행되는 것이 아무것도 없음 — 사용자 입력 대기.
-     출력 (아래 2줄을 그대로 사용):
-     ```
-     ✓ Dispatcher 완료 — pipeline.json 생성됨 (next_agent=<값>). 자동 실행은 시작되지 않았습니다.
-     → 다음 에이전트를 돌리려면 `/harness-solo` 를 입력하거나, 그냥 후속 지시를 프롬프트로 주세요.
-     ```
-4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-   - Team 모드에서는 `/harness-team 실행하시겠습니까?` 같은 **질문을 하지 않는다**. Teams는 이미 실행 중이거나 사용자가 별도로 시작한다.
+3. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
+4. 출력: `"✓ Dispatcher 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
 
 ## Auto-Routing (UserPromptSubmit Hook)
 
@@ -120,13 +106,34 @@ AGENTS.md 비하네스  → 기존 백업 + 리빌드
 
 `.harness/actions/pipeline.json` 생성 → 사용자 확인 → Session Boundary Protocol On Complete 실행
 
+### evaluator_chain 필드 (모든 파이프라인 필수)
+
+`pipeline.json` 에 **`evaluator_chain`** 배열을 기록한다. `config.json.flow.pipeline_selection.evaluator_chains.<pipeline>` 의 값을 복사:
+
+- FULLSTACK / FE-ONLY: `["evaluator-code-quality", "evaluator-functional", "evaluator-visual"]`
+- BE-ONLY: `["evaluator-code-quality", "evaluator-functional"]` (functional 은 api-only 모드)
+
+Flutter 치환 규칙은 chain 배열의 각 원소에도 동일 적용. `fe_stack == "flutter"` + `fe_target in (mobile, desktop)` 이면 `evaluator-visual` 을 chain 에서 제거하고 `evaluator-functional` → `evaluator-functional-flutter` 로 치환한다. `evaluator-code-quality` 는 스택/타겟 무관 공통.
+
+### Evaluator 체인 라우팅 규칙
+
+Generator 완료 후 `next_agent` 는 chain[0] (항상 `evaluator-code-quality`).
+
+각 평가자의 On Complete:
+- **PASS**: chain 상 다음 평가자로 `next_agent` 설정. 마지막 평가자면 `archive`.
+- **FAIL**: chain 나머지 **건너뛰고** `failure.retry_target` (해당 결함 위치의 Generator) 로 리라우팅.
+
+Gotcha retry 시에도 체인 시작점은 chain[0] 부터 재실행.
+
 ### fe_stack 필드 (FE 파이프라인에서 필수)
 
-FE-ONLY 또는 FULLSTACK 선택 시, `pipeline.json` 에 **`fe_stack`** 필드를 포함해야 한다:
+FE-ONLY 또는 FULLSTACK 선택 시, `pipeline.json`에 **`fe_stack`** 필드를 포함해야 한다:
 
-- `scan-result.json.tech_stack.fe_stack` (또는 `tech_stack.frontend`) 값을 기본으로 사용
-- 값이 없거나 불명확하면 Planner 가 확정하도록 위임 (Dispatcher 는 `"unknown"` 기록 + `notes` 에 메모)
-- v5.2 이후: **에이전트 분기 없음** — 동일한 `generator-frontend` / `evaluator-functional` 에이전트가 `.harness/ref/fe-<fe_stack>.md` 를 로드해 스택 적응적으로 동작
+- `scan-result.json.tech_stack.fe_stack` 값을 기본으로 사용 (`react` | `flutter`)
+- 값이 없거나 불명확하면 Planner가 확정하도록 위임 (Dispatcher는 `"unknown"` 기록 + `notes` 에 메모)
+- Flutter 선택 시 `agents_active`/`agents_skipped`에 치환된 에이전트명을 기록
+  - active: `generator-frontend-flutter`, `evaluator-functional-flutter`
+  - skipped: `generator-frontend`, `evaluator-functional`, `evaluator-visual`
 
 ## 6. Brainstormer Routing Decision
 
@@ -181,7 +188,7 @@ Planner 를 호출해야 한다고 판단되면, **사용자에게 단 하나의
 | 상황 | next_agent |
 |------|-----------|
 | "Eval, X 다시 검증해" | `evaluator-functional` (또는 `evaluator-visual`) |
-| "Generator-FE, Y 버그 고쳐" | `generator-frontend` |
+| "Generator-FE, Y 버그 고쳐" | `generator-frontend` (또는 Flutter 변형) |
 | "Generator-BE, API 재생성해" | `generator-backend` |
 | Eval FAIL → retry | `failure.retry_target` |
 | Gotcha 수정 | `failure.retry_target` 또는 현재 에이전트 |
@@ -199,48 +206,14 @@ Planner 를 호출해야 한다고 판단되면, **사용자에게 단 하나의
 이 경우 기존 `.harness/actions/brainstorm-spec.md` 는 Brainstormer 의 On Start 에서
 `.harness/archive/brainstorm-spec-<timestamp>.md` 로 백업된다.
 
-## 7. Handoff 라우팅 (v5.2 — 스택 치환 없음)
+## 7. Handoff 라우팅 (fe_stack 반영)
 
-v5.2 이후 에이전트 치환은 사용하지 않는다. Dispatcher 가 `next_agent` 를 세팅할 때 `pipeline.json.fe_stack` 은 **참고용 메타데이터**로만 기록되고, 실제 스택별 행동은 에이전트가 자기 On Start 에서 `.harness/ref/<role>-<stack>.md` 를 로드해 결정한다.
+Dispatcher가 `next_agent` 를 세팅할 때 pipeline.json.fe_stack 을 참조해 치환:
 
-| 에이전트 | 스택 적응 메커니즘 |
-|---------|------------------|
-| `generator-frontend` | On Start 에서 `.harness/ref/fe-<stack>.md` 로드 |
-| `generator-backend` | On Start 에서 `.harness/ref/be-<stack>.md` 로드 |
-| `evaluator-functional` | `ref.validation.pre_eval_gate` / `functional_tests` / `anti_pattern_rules` 실행 |
-| `evaluator-visual` | `ref.validation.visual.enabled == false` 면 MANUAL_REQUIRED 로 skip |
+| 원본 next_agent | fe_stack=react | fe_stack=flutter |
+|-----------------|----------------|------------------|
+| generator-frontend | generator-frontend | generator-frontend-flutter |
+| evaluator-functional (FE 단계) | evaluator-functional | evaluator-functional-flutter |
+| evaluator-visual | evaluator-visual | (skip → 다음 단계로 이동) |
 
-## 8. Auto Gotcha Registration (v5.2)
-
-evaluator-functional / evaluator-visual 이 안티패턴을 발견하면 Dispatcher 경유로 자동 gotcha 파일에 등록한다. 이 섹션은 Dispatcher 가 등록 이벤트를 받았을 때의 행동을 정의한다.
-
-### 8.1 수신 이벤트 페이로드
-
-`api-contract.json.contracts["gotcha_register_interface"]` 참조. 필수 필드:
-- `agent` (예: `"generator-frontend"`)
-- `stack` (예: `"swift"`)
-- `rule_id`, `severity`, `occurrences[] (file/line/snippet)`, `source_feature`
-
-### 8.2 대상 파일 결정
-
-`.harness/gotchas/<agent>-<stack>.md` (없으면 생성). 스택 특정 규칙이 아닌 공통 규칙은 `<agent>.md` 로 라우팅 (gotcha-flow.md 의 "라우팅 규칙" 참조).
-
-### 8.3 등록 절차
-
-```
-1. 대상 파일 열기 (없으면 표준 헤더로 생성)
-2. 기존 항목 중 같은 rule_id 검색:
-   - 있음 → Occurrences +1, Last seen 업데이트, snippet 최신으로 교체
-   - 없음 → 다음 G-NNN 번호로 새 항목 추가
-3. progress.log 에 `"auto_gotcha_registered"` 이벤트 기록
-4. evaluation-*.md 에 "Registered gotchas: <G-IDs>" 요약 기록
-```
-
-항목 포맷은 gotcha-flow.md 의 "Gotcha 항목 형식" 섹션과 동일.
-
-### 8.4 멱등성 / 중복 방지
-
-- 동일 feature 의 동일 rule_id 는 한 번의 평가 안에서 최대 1회만 Occurrences 증가
-- Retry 시에는 이전 Occurrences 유지 (재평가이므로 중복 카운팅 금지)
-
-**Brainstormer 는 스택 치환 대상이 아니다** — 언어/스택 무관 공통 에이전트.
+**Brainstormer 는 fe_stack 치환 대상이 아니다** — 언어/스택 무관 공통 에이전트.

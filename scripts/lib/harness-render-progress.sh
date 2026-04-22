@@ -120,23 +120,29 @@ render_progress() {
         fi
 
         # Check passes
-        be_pass="○"; fe_pass="○"; eval_func_pass="○"; eval_visual_pass="○"
+        be_pass="○"; fe_pass="○"; eval_cq_pass="○"; eval_func_pass="○"; eval_visual_pass="○"
         local eval_done=false
 
         while IFS= read -r p; do
           case "$p" in
-            generator-backend)    be_pass="✓" ;;
-            generator-frontend)   fe_pass="✓" ;;
-            evaluator-functional) eval_func_pass="✓" ;;
-            evaluator-visual)     eval_visual_pass="✓" ;;
+            generator-backend)       be_pass="✓" ;;
+            generator-frontend)      fe_pass="✓" ;;
+            evaluator-code-quality)  eval_cq_pass="✓" ;;
+            evaluator-functional)    eval_func_pass="✓" ;;
+            evaluator-visual)        eval_visual_pass="✓" ;;
           esac
         done <<< "$passes"
 
-        # Eval column: both must pass
+        # Eval column: chain 내 존재하는 평가자 모두 PASS 여야 ✓
         local eval_pass="○"
-        if [ "$eval_func_pass" = "✓" ] && [ "$eval_visual_pass" = "✓" ]; then
+        local eval_passed_count=0
+        local eval_total=3
+        [ "$eval_cq_pass" = "✓" ]      && eval_passed_count=$((eval_passed_count + 1))
+        [ "$eval_func_pass" = "✓" ]    && eval_passed_count=$((eval_passed_count + 1))
+        [ "$eval_visual_pass" = "✓" ]  && eval_passed_count=$((eval_passed_count + 1))
+        if [ "$eval_passed_count" -eq "$eval_total" ]; then
           eval_pass="✓"
-        elif [ "$eval_func_pass" = "✓" ] || [ "$eval_visual_pass" = "✓" ]; then
+        elif [ "$eval_passed_count" -gt 0 ]; then
           eval_pass="◐"
         fi
 
@@ -204,22 +210,19 @@ render_progress() {
             generator-frontend)
               if [ "$show_fe" = true ]; then done_steps=$((done_steps + 1)); fi
               ;;
-            evaluator-functional|evaluator-visual)
-              # Each eval counts as 0.5 of the eval step
-              # We'll handle this by checking both at the end
+            evaluator-code-quality|evaluator-functional|evaluator-visual)
+              # Chain 내 평가자. 아래에서 통합 집계.
               ;;
           esac
         done <<< "$passes"
 
-        # Check eval completion
-        local ef ev
+        # Check eval completion — 체인상의 3개 평가자 모두 통과 시에만 1 step 인정
+        local ecq ef ev
+        ecq=$(jq -r ".features[$i].passes // [] | map(select(. == \"evaluator-code-quality\")) | length" "$FEATURES" 2>/dev/null)
         ef=$(jq -r ".features[$i].passes // [] | map(select(. == \"evaluator-functional\")) | length" "$FEATURES" 2>/dev/null)
         ev=$(jq -r ".features[$i].passes // [] | map(select(. == \"evaluator-visual\")) | length" "$FEATURES" 2>/dev/null)
-        if [ "${ef:-0}" -gt 0 ] && [ "${ev:-0}" -gt 0 ]; then
+        if [ "${ecq:-0}" -gt 0 ] && [ "${ef:-0}" -gt 0 ] && [ "${ev:-0}" -gt 0 ]; then
           done_steps=$((done_steps + 1))
-        elif [ "${ef:-0}" -gt 0 ] || [ "${ev:-0}" -gt 0 ]; then
-          # partial eval — don't count
-          :
         fi
 
         i=$((i + 1))
