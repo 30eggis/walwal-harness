@@ -59,16 +59,19 @@ bash scripts/harness-tmux.sh --team --force-tmux
 
 **`--force-tmux` 필수**: iTerm2 감지 경로는 백그라운드에 iTerm2가 떠 있기만 해도 활성화되어 AppleScript 실패 시 팀 레이아웃이 조용히 사라짐. Team Mode는 항상 tmux로 강제하여 재현 가능한 레이아웃을 보장.
 
-### Step 3: 초기 Worker 생성
+### Step 3: 초기 Worker 생성 (Auto-Dispatch)
 
-Queue에서 ready 피처를 최대 3개 dequeue하고, **각각 background Agent로 생성**합니다.
+**v5.6.4+**: 개별 dequeue 대신 **`auto-dispatch`** 한 번으로 모든 idle team 에 ready feature 를 원자적으로 배정합니다. 의존성 없는 작업은 병렬로 즉시 시작됩니다.
 
 ```bash
-# 각 팀마다 dequeue
-bash scripts/harness-queue-manager.sh dequeue 1 .
-bash scripts/harness-queue-manager.sh dequeue 2 .
-bash scripts/harness-queue-manager.sh dequeue 3 .
+# 모든 idle team ↔ ready feature 쌍을 한 번에 배정
+bash scripts/harness-queue-manager.sh auto-dispatch .
+# → [{"team":1,"feature":"F-001"},{"team":2,"feature":"F-002"},{"team":3,"feature":"F-003"}]
 ```
+
+출력(JSON 배열)을 파싱해 각 `{team, feature}` 쌍마다 **background Agent** 를 생성합니다.
+
+> **Fallback**: 단일 팀만 배정하려면 `dequeue <team_id>` 도 계속 사용 가능.
 
 dequeue 성공한 피처마다 **background Agent**를 생성합니다:
 
@@ -99,24 +102,28 @@ ORCHESTRATION LOOP:
      - FAIL (재시도 가능)인 경우 → Step 4b (Retry)
      - ESCALATED인 경우 → 사용자에게 알림, 해당 팀 유휴
 
-  2. Queue 상태 확인:
+  2. **Auto-Dispatch (필수)** — worker 완료 직후 idle 이 된 팀뿐 아니라
+     모든 idle team 에 ready feature 를 즉시 재배정:
+
+     bash scripts/harness-queue-manager.sh auto-dispatch .
+
+     반환된 모든 (team, feature) 쌍에 대해 즉시 background Agent 생성.
+     한 작업의 merge 지연이 다른 idle team 을 놀게 두지 않는다.
+
+  3. Queue 상태 확인 (로그용):
+     bash scripts/harness-queue-manager.sh idle-slots .
      bash scripts/harness-queue-manager.sh status .
 
-  3. ready > 0 이면:
-     → 새 Worker를 background Agent로 생성 (Step 3과 동일)
-     → LOOP 계속
-
-  4. ready = 0 AND in_progress > 0 이면:
-     → 다른 Worker 완료를 대기
-     → LOOP 계속
-
-  5. ready = 0 AND in_progress = 0 이면:
-     → Sprint 전환 시도:
+  4. auto-dispatch 가 pairs=[] (= ready 도 0, idle 도 0 혹은 idle 만 있고 ready 가 0) 이면:
+     → ready=0 AND in_progress>0 → 다른 worker 완료 대기. LOOP 계속
+     → ready=0 AND in_progress=0 → Sprint 전환 시도:
        bash scripts/harness-queue-manager.sh next-sprint .
-       - "Advancing" → Step 3으로 (새 Sprint 피처 dequeue + Worker 생성)
+       - "Advancing" → auto-dispatch 다시 실행 (Step 2로 복귀)
        - "ALL SPRINTS COMPLETE" → 최종 보고. LOOP 종료.
        - "Cannot advance" → 실패 피처 사용자 개입 요청. LOOP 종료.
 ```
+
+**핵심 원칙**: worker 완료 알림 → **즉시 auto-dispatch** → 반환된 모든 쌍에 대해 병렬 spawn. 팀 간 의존성이 없으면 idle 시간은 "Agent 생성에 걸리는 수초" 로 수렴한다.
 
 #### Step 4a: Merge + Unblock (PASS 처리)
 

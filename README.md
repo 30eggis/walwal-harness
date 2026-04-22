@@ -83,10 +83,33 @@ npx walwal-harness team
 
 | 패널 | 내용 | 소스 |
 |------|------|------|
-| **Dashboard** | Pipeline · Sprint · Feature passes (●/◐/○/◌/✗) · Queue R:B:P · Retry | `harness-dashboard.sh` |
+| **Dashboard** | Pipeline · Sprint · Feature passes · Queue R:B:P · Retry | `harness-dashboard.sh` |
 | **Gotcha & Memory** | 활성 에이전트의 누적 실수 + 나머지 요약 + 공유 메모리 | `harness-gotcha-memory.sh` |
 | **TEAM 1–3** | 각 워커의 현재 feature · phase(Gen/Eval) · 실시간 stdout | `harness-queue-manager.sh` worker loop |
 | **Archive Prompt** | 직전 완료 feature 요약 (다음 팀 컨텍스트 주입용) | archive 디렉토리 |
+
+##### Feature 상태 아이콘 (v5.6.4+)
+
+| 아이콘 | 상태 | 의미 |
+|--------|------|------|
+| `●` (녹색) | PASS | Evaluator 통과 · merge 완료 |
+| `◐` (청색) | IN PROGRESS | 현재 team 배정됨 (phase 표기: T1:gen / T2:eval) |
+| `○` (노랑) | READY | 의존성 해소됨 · idle team 배정 대기 |
+| `◍` (자색) | **BLOCKED** | 선행 feature 대기 · deps 개수 함께 표시 |
+| `◌` (어두움) | PENDING | 아직 큐 미등록 (sprint 미진입 or 사전 분석 단계) |
+| `✗` (빨강) | FAILED | 재시도 한도 도달 · 사용자 개입 필요 |
+
+##### Team Idle Auto-Dispatch (v5.6.4+)
+
+Worker 완료 시 Lead 는 `auto-dispatch` 한 호출로 **모든 idle team ↔ ready feature** 쌍을 원자적으로 재배정합니다. 의존성 없는 작업은 병렬로 즉시 시작되어 team idle 시간은 "Agent 생성 소요 초" 로 수렴:
+
+```bash
+bash scripts/harness-queue-manager.sh auto-dispatch .
+# → [{"team":1,"feature":"F-001"},{"team":2,"feature":"F-002"}]
+
+bash scripts/harness-queue-manager.sh idle-slots .
+# → {"idle_teams":["3"], "ready_features":["F-003","F-004"], "dispatchable":1}
+```
 
 - 새로고침 주기: `HARNESS_REFRESH=5` (초). 환경변수로 조정.
 - 단축키: `tmux prefix + 방향키` 로 패널 이동, `prefix + z` 로 확대/축소.

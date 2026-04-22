@@ -269,6 +269,7 @@ render_team_features() {
     ($q[0].queue.failed // []) as $failed |
     ($q[0].queue.ready // []) as $ready |
     ($q[0].queue.in_progress // {}) as $prog |
+    ($q[0].queue.blocked // {}) as $blocked |
     .features[] |
     .id as $fid |
     (.name // .title // .description // "?" | if length > 18 then .[0:16] + ".." else . end) as $fname |
@@ -276,18 +277,21 @@ render_team_features() {
      elif $prog[$fid] then "I|\($prog[$fid].team)|\($prog[$fid].phase)"
      elif ($fid | IN($failed[])) then "F"
      elif ($fid | IN($ready[])) then "R"
-     else "B" end) as $st |
+     elif $blocked[$fid] then "BLK|\($blocked[$fid] | length)"
+     else "U" end) as $st |
     "\($st)\t\($fid)\t\($fname)"
   ' "$FEATURES" 2>/dev/null | while IFS=$'\t' read -r st fid fname; do
     case "$st" in
-      P)    printf "  ${GREEN}●${RESET} %-6s %s\n" "$fid" "$fname" ;;
-      F)    printf "  ${RED}✗${RESET} %-6s %s\n" "$fid" "$fname" ;;
-      R)    printf "  ${YELLOW}○${RESET} %-6s %s\n" "$fid" "$fname" ;;
-      B)    printf "  ${DIM}◌${RESET} %-6s %s\n" "$fid" "$fname" ;;
-      I\|*) team=$(echo "$st" | cut -d'|' -f2)
-            phase=$(echo "$st" | cut -d'|' -f3)
-            printf "  ${CYAN}◐${RESET} %-6s %-14s T%s:%s\n" "$fid" "$fname" "$team" "$phase" ;;
-      *)    printf "  ? %-6s %s\n" "$fid" "$fname" ;;
+      P)      printf "  ${GREEN}●${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      F)      printf "  ${RED}✗${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      R)      printf "  ${YELLOW}○${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      BLK\|*) deps=$(echo "$st" | cut -d'|' -f2)
+              printf "  ${MAGENTA}◍${RESET} %-6s %-22s ${DIM}blocked (deps:%s)${RESET}\n" "$fid" "$fname" "$deps" ;;
+      U)      printf "  ${DIM}◌${RESET} %-6s %s\n" "$fid" "$fname" ;;
+      I\|*)   team=$(echo "$st" | cut -d'|' -f2)
+              phase=$(echo "$st" | cut -d'|' -f3)
+              printf "  ${CYAN}◐${RESET} %-6s %-22s T%s:%s\n" "$fid" "$fname" "$team" "$phase" ;;
+      *)      printf "  ? %-6s %s\n" "$fid" "$fname" ;;
     esac
   done
 }

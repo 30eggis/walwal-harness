@@ -424,19 +424,84 @@ cmd_recover() {
   echo "[queue] Recovered ${stale_count} stale features back to ready queue."
 }
 
+# ══════════════════════════════════════════
+# auto-dispatch — Pair all idle teams with ready features in one atomic step.
+#   Output: JSON array of {team, feature} on stdout.
+#   Atomically moves ready → in_progress + teams[tid] = busy for each pair.
+#   Dependencies are already honored (ready queue only holds unblocked features).
+# ══════════════════════════════════════════
+cmd_auto_dispatch() {
+  if [ ! -f "$QUEUE" ]; then echo "[queue] Run 'init' first." >&2; exit 1; fi
+
+  acquire_queue_lock
+
+  local result
+  result=$(jq '
+    . as $root |
+    ($root.teams | to_entries | map(select(.value.status == "idle")) | map(.key)) as $idle |
+    ($root.queue.ready) as $ready |
+    (if ($idle | length) < ($ready | length) then ($idle | length) else ($ready | length) end) as $n |
+    [range(0; $n) | { team: ($idle[.] | tonumber), feature: $ready[.] }] as $pairs |
+    (reduce $pairs[] as $p ($root;
+      .queue.ready -= [$p.feature] |
+      .queue.in_progress[$p.feature] = { team: $p.team, phase: "gen", attempt: 1 } |
+      .teams[($p.team | tostring)] = {
+        status: "busy",
+        feature: $p.feature,
+        branch: ("feature/" + $p.feature),
+        pid: null
+      }
+    )) as $updated |
+    { state: $updated, pairs: $pairs }
+  ' "$QUEUE")
+
+  local new_state pairs
+  new_state=$(echo "$result" | jq '.state')
+  pairs=$(echo "$result" | jq -c '.pairs')
+
+  # Write updated state
+  echo "$new_state" > "${QUEUE}.tmp" && mv "${QUEUE}.tmp" "$QUEUE"
+
+  release_queue_lock
+
+  # Emit pairs (single JSON line) for caller
+  echo "$pairs"
+}
+
+# ══════════════════════════════════════════
+# idle-slots — Report how many teams are idle + how many ready features wait.
+#   No state mutation. Useful for dashboards / quick checks.
+# ══════════════════════════════════════════
+cmd_idle_slots() {
+  if [ ! -f "$QUEUE" ]; then echo "[queue] Run 'init' first." >&2; exit 1; fi
+  jq '{
+    idle_teams: [.teams | to_entries[] | select(.value.status == "idle") | .key],
+    ready_features: .queue.ready,
+    dispatchable: (
+      (if ([.teams | to_entries[] | select(.value.status == "idle") | .key] | length) <
+          (.queue.ready | length)
+        then [.teams | to_entries[] | select(.value.status == "idle") | .key] | length
+        else .queue.ready | length
+      end)
+    )
+  }' "$QUEUE"
+}
+
 # ── Dispatch ──
 case "$CMD" in
-  init)          cmd_init "$@" ;;
-  dequeue)       cmd_dequeue "$@" ;;
-  pass)          cmd_pass "$@" ;;
-  fail)          cmd_fail "$@" ;;
-  requeue)       cmd_requeue "$@" ;;
-  update_phase)  cmd_update_phase "$@" ;;
-  recover)       cmd_recover ;;
-  next-sprint)   cmd_next_sprint ;;
-  status)        cmd_status ;;
+  init)           cmd_init "$@" ;;
+  dequeue)        cmd_dequeue "$@" ;;
+  auto-dispatch)  cmd_auto_dispatch ;;
+  idle-slots)     cmd_idle_slots ;;
+  pass)           cmd_pass "$@" ;;
+  fail)           cmd_fail "$@" ;;
+  requeue)        cmd_requeue "$@" ;;
+  update_phase)   cmd_update_phase "$@" ;;
+  recover)        cmd_recover ;;
+  next-sprint)    cmd_next_sprint ;;
+  status)         cmd_status ;;
   *)
-    echo "Usage: harness-queue-manager.sh <init|dequeue|pass|fail|requeue|recover|next-sprint|update_phase|status> [args]"
+    echo "Usage: harness-queue-manager.sh <init|dequeue|auto-dispatch|idle-slots|pass|fail|requeue|recover|next-sprint|update_phase|status> [args]"
     exit 1
     ;;
 esac
