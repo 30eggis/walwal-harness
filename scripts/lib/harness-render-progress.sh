@@ -111,7 +111,7 @@ render_progress() {
       while [ $i -lt "$total_features" ]; do
         local fid fname passes be_pass fe_pass eval_func_pass eval_visual_pass
         fid=$(jq -r ".features[$i].id // \"F-$((i+1))\"" "$FEATURES")
-        fname=$(jq -r ".features[$i].name // .features[$i].description // \"Feature $((i+1))\"" "$FEATURES")
+        fname=$(jq -r ".features[$i].name // .features[$i].title // .features[$i].description // \"Feature $((i+1))\"" "$FEATURES")
         passes=$(jq -r ".features[$i].passes // [] | .[]" "$FEATURES" 2>/dev/null)
 
         # Truncate name to 20 chars

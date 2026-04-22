@@ -271,7 +271,7 @@ render_team_features() {
     ($q[0].queue.in_progress // {}) as $prog |
     .features[] |
     .id as $fid |
-    (.name // .description // "?" | if length > 18 then .[0:16] + ".." else . end) as $fname |
+    (.name // .title // .description // "?" | if length > 18 then .[0:16] + ".." else . end) as $fname |
     (if ($fid | IN($passed[])) then "P"
      elif $prog[$fid] then "I|\($prog[$fid].team)|\($prog[$fid].phase)"
      elif ($fid | IN($failed[])) then "F"
