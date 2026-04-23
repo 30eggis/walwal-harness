@@ -487,6 +487,68 @@ cmd_idle_slots() {
   }' "$QUEUE"
 }
 
+# ── Rate-Limit Hold checkpoint (v5.6.7+) ──
+CHECKPOINT="$PROJECT_ROOT/.harness/actions/team-checkpoint.json"
+
+cmd_hold() {
+  # Args: <reason> [retry_seconds=600]
+  local reason="${1:-rate_limit}"
+  local retry_secs="${2:-600}"
+  local now_iso retry_iso
+  now_iso="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  retry_iso="$(date -u -v+"${retry_secs}"S +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+              || date -u -d "+${retry_secs} seconds" +%Y-%m-%dT%H:%M:%SZ)"
+  acquire_queue_lock
+  trap release_queue_lock EXIT
+  local in_progress pending
+  in_progress="$(jq '[.teams[] | select(.current_feature != null) |
+                     {team: .team_id, feature: .current_feature, phase: (.current_phase // "gen")}]' "$QUEUE")"
+  pending="$(jq '[.features[] | select(.status == "ready") | .id]' "$QUEUE")"
+  local tmp="${CHECKPOINT}.tmp"
+  jq -n --arg ts "$now_iso" --arg retry "$retry_iso" --arg reason "$reason" \
+        --argjson inprog "$in_progress" --argjson ready "$pending" \
+        '{timestamp:$ts, retry_at:$retry, last_error:$reason,
+          in_progress:$inprog, ready_features:$ready,
+          hold_count: 1, escalate_after: 72}' > "$tmp" && mv "$tmp" "$CHECKPOINT"
+  release_queue_lock
+  trap - EXIT
+  echo "[hold] checkpoint written — retry_at=$retry_iso reason=$reason"
+}
+
+cmd_resume_probe() {
+  # Lightweight probe — called on ScheduleWakeup resume.
+  # Exits 0 if ready to resume, 1 if still held, 2 if escalated.
+  [ ! -f "$CHECKPOINT" ] && { echo "[resume] no checkpoint — nothing to resume"; exit 0; }
+  local hold_count escalate_after
+  hold_count="$(jq -r '.hold_count // 1' "$CHECKPOINT")"
+  escalate_after="$(jq -r '.escalate_after // 72' "$CHECKPOINT")"
+  if [ "$hold_count" -ge "$escalate_after" ]; then
+    echo "[resume] ESCALATED — held $hold_count cycles (max=$escalate_after). Manual intervention required."
+    exit 2
+  fi
+  # Probe: minimal claude call — if rate-limited, exits non-zero quickly.
+  if command -v claude >/dev/null 2>&1; then
+    if echo "ping" | timeout 30 claude -p "reply only: pong" >/dev/null 2>&1; then
+      echo "[resume] probe OK — clearing hold"
+      rm -f "$CHECKPOINT"
+      exit 0
+    fi
+  fi
+  # Still held — increment and report
+  local tmp="${CHECKPOINT}.tmp"
+  jq '.hold_count = (.hold_count + 1) | .last_probe_at = now | todate' "$CHECKPOINT" > "$tmp" && mv "$tmp" "$CHECKPOINT"
+  echo "[resume] still held (cycle $((hold_count+1))/$escalate_after) — schedule another wake-up"
+  exit 1
+}
+
+cmd_hold_status() {
+  if [ ! -f "$CHECKPOINT" ]; then
+    echo '{"held":false}'
+    return
+  fi
+  jq '. + {held:true}' "$CHECKPOINT"
+}
+
 # ── Dispatch ──
 case "$CMD" in
   init)           cmd_init "$@" ;;
@@ -500,8 +562,11 @@ case "$CMD" in
   recover)        cmd_recover ;;
   next-sprint)    cmd_next_sprint ;;
   status)         cmd_status ;;
+  hold)           cmd_hold "$@" ;;
+  resume-probe)   cmd_resume_probe ;;
+  hold-status)    cmd_hold_status ;;
   *)
-    echo "Usage: harness-queue-manager.sh <init|dequeue|auto-dispatch|idle-slots|pass|fail|requeue|recover|next-sprint|update_phase|status> [args]"
+    echo "Usage: harness-queue-manager.sh <init|dequeue|auto-dispatch|idle-slots|pass|fail|requeue|recover|next-sprint|update_phase|status|hold|resume-probe|hold-status> [args]"
     exit 1
     ;;
 esac

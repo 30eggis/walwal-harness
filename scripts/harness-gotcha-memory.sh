@@ -7,6 +7,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/harness-render-progress.sh"
+source "$SCRIPT_DIR/lib/harness-keywait.sh"
 
 PROJECT_ROOT="${1:-}"
 if [ -z "$PROJECT_ROOT" ]; then
@@ -181,7 +182,11 @@ while true; do
   sig=$(compute_signature)
   if [ "$sig" != "$LAST_SIG" ]; then
     render
+    printf "${DIM}  [r] refresh  [q] quit${RESET}\033[K\n"
     LAST_SIG="$sig"
   fi
-  sleep "$REFRESH_SEC"
+  if ! wait_or_refresh "$REFRESH_SEC"; then
+    # 'r' 키 → 캐시 무효화해서 다음 루프에서 강제 렌더
+    LAST_SIG=""
+  fi
 done

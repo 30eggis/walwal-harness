@@ -7,6 +7,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/harness-render-progress.sh"
+source "$SCRIPT_DIR/lib/harness-keywait.sh"
 
 PROJECT_ROOT="${1:-}"
 if [ -z "$PROJECT_ROOT" ]; then
@@ -158,5 +159,6 @@ while true; do
   tput cup 0 0 2>/dev/null
   echo "$buf"
   tput ed 2>/dev/null
-  sleep 3
+  printf "${DIM}  [r] refresh  [q] quit${RESET}\033[K\n"
+  wait_or_refresh 3 || true
 done

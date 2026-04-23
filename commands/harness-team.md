@@ -59,6 +59,39 @@ bash scripts/harness-tmux.sh --team --force-tmux
 
 **`--force-tmux` 필수**: iTerm2 감지 경로는 백그라운드에 iTerm2가 떠 있기만 해도 활성화되어 AppleScript 실패 시 팀 레이아웃이 조용히 사라짐. Team Mode는 항상 tmux로 강제하여 재현 가능한 레이아웃을 보장.
 
+### Step 2.5: Worker Pre-flight Bundle 빌드 (v5.6.6+)
+
+Worker 는 plain Agent 로 실행되어 SKILL.md Startup 체크리스트를 자동 주입받지 못한다. Lead 가 Worker spawn 직전에 **역할별 바인딩 문서를 프롬프트에 직접 주입**한다. 이렇게 하면 "Worker 가 읽어야 함" → "이미 읽은 상태로 시작" 으로 전환되어 스킵이 구조적으로 불가능해진다.
+
+```bash
+# Generator-{be|fe} / Evaluator-{functional|visual|code-quality} 별 번들 빌드
+build_preflight_bundle() {
+  local role="$1"   # generator-frontend | generator-backend | evaluator-functional | ...
+  local hroot="$2"  # HARNESS_ROOT (worktree 가 아닌 원본 루트)
+  {
+    echo "===== ROOT CONVENTIONS.md ====="
+    [ -f "$hroot/CONVENTIONS.md" ] && cat "$hroot/CONVENTIONS.md" || echo "(none)"
+    echo
+    echo "===== AGENTS.md ====="
+    [ -f "$hroot/AGENTS.md" ] && cat "$hroot/AGENTS.md" || echo "(none)"
+    echo
+    echo "===== .harness/conventions/shared.md ====="
+    [ -f "$hroot/.harness/conventions/shared.md" ] && cat "$hroot/.harness/conventions/shared.md" || echo "(empty)"
+    echo
+    echo "===== .harness/conventions/$role.md ====="
+    [ -f "$hroot/.harness/conventions/$role.md" ] && cat "$hroot/.harness/conventions/$role.md" || echo "(empty)"
+    echo
+    echo "===== .harness/gotchas/$role.md ====="
+    [ -f "$hroot/.harness/gotchas/$role.md" ] && cat "$hroot/.harness/gotchas/$role.md" || echo "(empty)"
+    echo
+    echo "===== .harness/memory.md ====="
+    [ -f "$hroot/.harness/memory.md" ] && cat "$hroot/.harness/memory.md" || echo "(empty)"
+  }
+}
+```
+
+Worker/내부 Evaluator Agent 프롬프트 상단에 이 번들 출력을 `## Binding Rules (pre-loaded)` 섹션으로 삽입한다. Worker 는 이를 **추가 조회 없이 이미 적용되는 규범**으로 취급한다.
+
 ### Step 3: 초기 Worker 생성 (Auto-Dispatch)
 
 **v5.6.4+**: 개별 dequeue 대신 **`auto-dispatch`** 한 번으로 모든 idle team 에 ready feature 를 원자적으로 배정합니다. 의존성 없는 작업은 병렬로 즉시 시작됩니다.
@@ -97,10 +130,11 @@ ORCHESTRATION LOOP:
 
   Background Agent 완료 알림을 받으면:
 
-  1. Worker 결과 분석:
-     - PASS인 경우 → Step 4a (Merge + Unblock)
-     - FAIL (재시도 가능)인 경우 → Step 4b (Retry)
-     - ESCALATED인 경우 → 사용자에게 알림, 해당 팀 유휴
+  1. Worker 결과 분석 (반환 메시지 첫 줄 태그로 분기):
+     - `PASS` → Step 4a (Merge + Unblock)
+     - `FAIL` (재시도 가능) → Step 4b (Retry)
+     - `RATE_LIMIT` → Step 4c (Rate-Limit Hold, 10m probe)
+     - `ESCALATED` → 사용자에게 알림, 해당 팀 유휴
 
   2. **Auto-Dispatch (필수)** — worker 완료 직후 idle 이 된 팀뿐 아니라
      모든 idle team 에 ready feature 를 즉시 재배정:
@@ -145,6 +179,47 @@ Worker가 PASS로 반환되면:
    echo "$(date +'%Y-%m-%d %H:%M') | lead | pass | {FEATURE_ID} merged + unblocked deps" >> .harness/progress.log
    ```
 
+#### Step 4c: Rate-Limit Hold (토큰 한도 대응 · v5.6.7+)
+
+Worker 반환 첫 줄이 `RATE_LIMIT` 으로 시작하면 Lead 는 **에러 아닌 hold 모드**로 전환한다. 나머지 Worker 들은 자연 완료까지 계속 실행되고, 그 결과도 RATE_LIMIT 이면 합쳐서 hold 상태에 누적된다.
+
+```bash
+# 1) Checkpoint 기록 (current in_progress + ready 스냅샷 저장)
+bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" hold rate_limit 600 .
+
+# 2) 로그 + tmux pane 타이틀 변경
+echo "$(date +'%Y-%m-%d %H:%M') | lead | hold | rate-limit detected, pausing 10m" >> .harness/progress.log
+tmux rename-window "⏸ HOLD (resume ~$(date -v+10M +%H:%M 2>/dev/null || date -d '+10 min' +%H:%M))" 2>/dev/null || true
+
+# 3) 실패한 feature 는 requeue (WIP worktree 는 유지 — merge 없이 재사용)
+bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" requeue {FEATURE_ID} .
+```
+
+4) **ScheduleWakeup 으로 10분 뒤 재진입 스케줄**:
+```
+ScheduleWakeup({
+  delaySeconds: 600,
+  prompt: "/harness-team resume",
+  reason: "rate-limit hold — 10m probe"
+})
+```
+
+5) Lead LOOP return (중단 아님 — wake-up 이 재진입 트리거).
+
+**Wake-up 재진입 시 Lead 동작** (`/harness-team resume` 처리):
+
+```bash
+# Probe: claude CLI 가 실제로 응답하는지 최소 호출로 확인
+bash "$HARNESS_ROOT/scripts/harness-queue-manager.sh" resume-probe .
+# 종료 코드: 0=clear, 1=still held, 2=escalated(>12h)
+```
+
+- **0 (clear)** → 체크포인트 삭제됨. 즉시 `auto-dispatch` 실행 → Step 4 LOOP 복귀.
+- **1 (still held)** → 다시 `ScheduleWakeup(600, "/harness-team resume", "rate-limit still held — cycle N")` 스케줄. hold_count 증가.
+- **2 (escalated)** → 72 사이클(12시간) 초과. 사용자 개입 알림 후 LOOP 종료. 체크포인트 파일 (`.harness/actions/team-checkpoint.json`) 에 전체 상태가 남아있으므로 사용자가 수동 복구 가능.
+
+**핵심 원칙**: 토큰 리밋은 "실패"가 아닌 "일시 정지". 진행 중이던 worktree/queue 상태는 그대로 보존되고, 10분 간격 probe 로 해제 즉시 이어서 진행한다. Session 을 닫아도 이어지길 원한다면 `ScheduleWakeup` 대신 `schedule` 스킬(CronCreate) 로 cron-backed 재시도 설정 가능.
+
 #### Step 4b: Retry (FAIL 처리)
 
 Worker가 FAIL (재시도 가능)로 반환되면:
@@ -170,6 +245,15 @@ Worker가 FAIL (재시도 가능)로 반환되면:
 ```
 당신은 Harness Team-{N} 워커입니다. **단일 Feature**에 대해 Gen→Eval 사이클을 수행합니다.
 완료 후 결과를 반환합니다. 다음 Feature는 Lead가 할당합니다.
+
+## Binding Rules (pre-loaded — 스킵 금지, 이미 적용됨)
+
+Lead 가 Step 2.5 에서 build_preflight_bundle 로 생성한 번들이 아래에 주입됩니다.
+당신은 이 규칙을 이미 읽은 상태로 시작합니다. 추가 조회 불필요:
+
+{PREFLIGHT_BUNDLE}
+
+**작업 시작 전 필수 출력**: 위 번들에서 이번 Feature 작업에 **적용되는 규칙**을 3~8 줄로 요약한 뒤 진행하라. 비어있으면 "(empty)" 로 명시. 이 요약 없이 Phase 1 로 진입하면 Self-FAIL 처리하고 재시작한다. 내부 Evaluator Agent 를 생성할 때도 같은 번들을 `{PREFLIGHT_BUNDLE}` 자리에 그대로 전달하라 (Evaluator 도 plain Agent 이므로 자동주입 없음).
 
 ## 할당된 Feature
 - Feature ID: {FEATURE_ID}
@@ -301,6 +385,18 @@ logev fail "{FEATURE_ID} FAIL #{ATTEMPT} — {사유}"
 logev fail "{FEATURE_ID} FINAL FAIL after 5 attempts"
 ```
 Lead에게 반환: `ESCALATED | {FEATURE_ID} | attempts=5 | last_feedback={마지막_피드백}`
+
+### RATE_LIMIT (토큰 한도 감지 시 — v5.6.7+)
+
+Gen 또는 Eval Phase 중 429 / "rate_limit" / "quota" / "overloaded_error" / "token limit" / "usage limit" 메시지를 만나면:
+
+```bash
+logev hold "{FEATURE_ID} rate-limit hit — returning RATE_LIMIT to Lead"
+```
+Lead에게 반환 **첫 줄에 반드시 `RATE_LIMIT` 태그 포함**:
+`RATE_LIMIT | {FEATURE_ID} | phase={gen|eval} | attempt={N} | err={원문요약}`
+
+작업을 **포기하지 말고** 현재까지의 변경분을 worktree 에 그대로 commit (WIP). Lead 가 hold 해제 후 같은 worktree 로 resume.
 ```
 
 ---

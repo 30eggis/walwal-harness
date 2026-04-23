@@ -499,19 +499,29 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
 
 elif [ "$next_agent" = "archive" ]; then
   audit_log "system" "archive" "start" "sprint-${sprint_num}" "sprint cycle complete"
-  jq -n \
-    --arg from "${current_agent:-evaluator}" \
-    --argjson sprint "$sprint_num" \
-    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    '{
-      from: $from,
-      to: "archive",
-      prompt: "Sprint 문서를 아카이브하세요.\n.harness/actions/의 스프린트 문서를 .harness/archive/sprint-NNN/으로 이동합니다.\n.harness/handoff.json을 읽고 sprint 번호를 확인하세요.",
-      sprint: $sprint,
-      model: "opus",
-      thinking_mode: null,
-      timestamp: $timestamp
-    }' > "$HANDOFF"
+
+  # ── Auto-archive: run archive script synchronously ──
+  # harness-archive.sh moves .harness/actions/* to .harness/archive/D-NNN/S-NNN/
+  # and resets progress.json. On next user prompt the flow starts fresh as a new dispatch.
+  if bash "$SCRIPT_DIR/harness-archive.sh" "$PROJECT_ROOT"; then
+    audit_log "system" "archive" "complete" "sprint-${sprint_num}" "auto-archived"
+  else
+    echo "  ⚠ archive script failed — falling back to manual handoff" >&2
+    audit_log "system" "archive" "fail" "sprint-${sprint_num}" "script failed"
+    jq -n \
+      --arg from "${current_agent:-evaluator}" \
+      --argjson sprint "$sprint_num" \
+      --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      '{
+        from: $from,
+        to: "archive",
+        prompt: "Sprint 문서를 아카이브하세요. harness-archive.sh 가 실패했습니다 — 수동으로 .harness/actions/* 를 .harness/archive/D-NNN/S-NNN/ 로 이동하세요.",
+        sprint: $sprint,
+        model: "opus",
+        thinking_mode: null,
+        timestamp: $timestamp
+      }' > "$HANDOFF"
+  fi
 
 else
   echo '{}' > "$HANDOFF"

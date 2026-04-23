@@ -346,6 +346,14 @@ function scaffoldHarness() {
         fs.writeFileSync(progressPath, JSON.stringify(progress, null, 2) + '\n');
         log('progress.json migrated to v2 (mode + team_state added)');
       }
+      if (progress.version < 3) {
+        progress.version = 3;
+        if (!progress.dispatch) {
+          progress.dispatch = { counter: 0, id: null };
+        }
+        fs.writeFileSync(progressPath, JSON.stringify(progress, null, 2) + '\n');
+        log('progress.json migrated to v3 (dispatch counter added)');
+      }
     } catch (e) {
       log('WARNING: Could not migrate progress.json');
     }

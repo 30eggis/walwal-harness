@@ -9,6 +9,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/lib/harness-keywait.sh"
 
 # ── Args ──
 # Usage: harness-monitor.sh [project-root] [--team N]
@@ -382,6 +383,7 @@ while true; do
     check_transitions
   fi
 
-  sleep 3
+  printf "${DIM}  [r] refresh  [q] quit${RESET}\033[K\n"
+  wait_or_refresh 3 || true
 done
 

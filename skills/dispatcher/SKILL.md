@@ -42,6 +42,18 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
      - Gotcha 교정 후 재작업 → `failure.retry_target` (해당 에이전트)
    - `pipeline` → 선택된 파이프라인 (FULLSTACK/FE-ONLY/BE-ONLY)
    - `sprint.number` → `1`, `sprint.status` → `"in_progress"` (신규 파이프라인인 경우에만)
+   - **신규 파이프라인인 경우** `dispatch.id` 가 `null` 이면 counter 를 올리고 새 ID 를 발급 (v5.7+):
+     ```bash
+     # dispatch.id 가 이미 있으면 기존 dispatch 유지, 없으면 새로 발급
+     cur=$(jq -r '.dispatch.id // ""' .harness/progress.json)
+     if [ -z "$cur" ]; then
+       next=$(jq -r '((.dispatch.counter // 0) + 1)' .harness/progress.json)
+       new_id=$(printf 'D-%03d' "$next")
+       bash scripts/harness-progress-set.sh . \
+         ".dispatch.counter = $next | .dispatch.id = \"$new_id\""
+     fi
+     ```
+     아카이빙 후 `dispatch.id` 는 `null` 로 리셋되므로, 다음 dispatcher 실행 시 새 D-NNN 이 할당된다.
 2. `.harness/progress.log`에 요약 한 줄 추가
 3. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
 4. 출력: `"✓ Dispatcher 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
