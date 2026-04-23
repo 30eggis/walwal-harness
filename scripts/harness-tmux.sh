@@ -142,6 +142,10 @@ APPLESCRIPT
 }
 
 launch_iterm2_solo() {
+  # Solo 레이아웃 (Team 모드와 동일 구조, 우측만 단일 Monitor 패널):
+  #   Left col : Dashboard (top) + Prompt History (bottom)
+  #   Middle   : Gotcha · Memory · Conventions
+  #   Right    : Monitor (lifecycle stream, 단일 에이전트)
   osascript <<APPLESCRIPT
     tell application "iTerm2"
       activate
@@ -153,22 +157,22 @@ launch_iterm2_solo() {
           set name to "harness-studio"
           write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-dashboard.sh' '${PROJECT_ROOT}'"
 
-          -- Split right → Monitor
-          set monPane to (split vertically with default profile)
-          tell monPane
-            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}'"
-
-            -- Split right → Agent Session
-            set agentPane to (split vertically with default profile)
-            tell agentPane
-              write text "cd '${PROJECT_ROOT}' && clear"
-            end tell
+          -- Split down (bottom of Dashboard column) → Prompt History
+          set archivePane to (split horizontally with default profile)
+          tell archivePane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
           end tell
 
-          -- Split down → Prompt History (bottom-left)
-          set histPane to (split horizontally with default profile)
-          tell histPane
-            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
+          -- Split right → Gotcha · Memory · Conventions
+          set dashPane to (split vertically with default profile)
+          tell dashPane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}'"
+
+            -- Split right → Monitor (solo 단일 에이전트 라이프사이클)
+            set monPane to (split vertically with default profile)
+            tell monPane
+              write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}'"
+            end tell
           end tell
         end tell
       end tell
@@ -210,23 +214,24 @@ launch_tmux_team() {
 }
 
 launch_tmux_solo() {
+  # Solo 레이아웃 (Team 모드와 동일 구조, 우측만 단일 Monitor 패널).
   tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
 
-  PANE_DASHBOARD=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50 -P -F '#{pane_id}' \
-    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"'")
-  PANE_MONITOR=$(tmux split-window -h -p 60 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+  PANE_DASH=$(tmux new-session -d -s "$SESSION_NAME" -c "$PROJECT_ROOT" -x 200 -y 50 -P -F '#{pane_id}')
+  PANE_GOTCHA=$(tmux split-window -h -p 70 -t "$PANE_DASH" -c "$PROJECT_ROOT" -P -F '#{pane_id}')
+  PANE_MONITOR=$(tmux split-window -h -p 50 -t "$PANE_GOTCHA" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-monitor.sh\" \"${PROJECT_ROOT}\"'")
-  PANE_HISTORY=$(tmux split-window -v -p 30 -t "$PANE_DASHBOARD" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+  PANE_HISTORY=$(tmux split-window -v -p 35 -t "$PANE_DASH" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"'")
-  PANE_AGENT=$(tmux split-window -v -p 85 -t "$PANE_MONITOR" -c "$PROJECT_ROOT" -P -F '#{pane_id}')
 
-  tmux send-keys -t "$PANE_AGENT" "clear" Enter
+  tmux send-keys -t "$PANE_DASH"   "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
+  tmux send-keys -t "$PANE_GOTCHA" "bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\"" Enter
 
-  tmux select-pane -t "$PANE_DASHBOARD" -T "Dashboard"
-  tmux select-pane -t "$PANE_MONITOR"   -T "Monitor"
-  tmux select-pane -t "$PANE_HISTORY"   -T "Prompt History"
-  tmux select-pane -t "$PANE_AGENT"     -T "Agent Session"
-  tmux select-pane -t "$PANE_AGENT"
+  tmux select-pane -t "$PANE_DASH"    -T "Dashboard"
+  tmux select-pane -t "$PANE_HISTORY" -T "Prompt History"
+  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotcha · Memory · Conventions"
+  tmux select-pane -t "$PANE_MONITOR" -T "Monitor"
+  tmux select-pane -t "$PANE_DASH"
 
   tmux set-option -t "$SESSION_NAME" pane-border-status top 2>/dev/null || true
   tmux set-option -t "$SESSION_NAME" pane-border-format " #{pane_title} " 2>/dev/null || true
