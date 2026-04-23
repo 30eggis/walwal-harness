@@ -199,7 +199,7 @@ launch_tmux_team() {
 
   tmux select-pane -t "$PANE_DASH"    -T "Dashboard"
   tmux select-pane -t "$PANE_ARCHIVE" -T "Archive Prompt"
-  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotcha & Memory"
+  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotcha · Memory · Conventions"
   tmux select-pane -t "$PANE_T1"      -T "TEAM 1"
   tmux select-pane -t "$PANE_T2"      -T "TEAM 2"
   tmux select-pane -t "$PANE_T3"      -T "TEAM 3"

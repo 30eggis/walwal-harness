@@ -1,6 +1,7 @@
 #!/bin/bash
-# harness-gotcha-memory.sh — Gotcha & Memory pane (index view)
+# harness-gotcha-memory.sh — Gotcha · Memory · Conventions pane (index view)
 # 활성 에이전트의 gotcha를 최상단으로, 나머지는 요약(최근 3항목+총개수)으로 표시
+# + Shared Memory 요약 + Conventions 요약 (shared + 활성 에이전트별)
 # Usage: bash scripts/harness-gotcha-memory.sh [project-root]
 
 set -uo pipefail
@@ -16,6 +17,7 @@ fi
 
 MEMORY_FILE="$PROJECT_ROOT/.harness/memory.md"
 GOTCHAS_DIR="$PROJECT_ROOT/.harness/gotchas"
+CONVENTIONS_DIR="$PROJECT_ROOT/.harness/conventions"
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
 
 BOLD="\033[1m"
@@ -41,6 +43,12 @@ compute_signature() {
     [ -f "$MEMORY_FILE" ] && stat -f '%m %z' "$MEMORY_FILE" 2>/dev/null
     if [ -d "$GOTCHAS_DIR" ]; then
       for f in "$GOTCHAS_DIR"/*.md; do
+        [ -e "$f" ] || continue
+        stat -f '%N %m %z' "$f" 2>/dev/null
+      done
+    fi
+    if [ -d "$CONVENTIONS_DIR" ]; then
+      for f in "$CONVENTIONS_DIR"/*.md; do
         [ -e "$f" ] || continue
         stat -f '%N %m %z' "$f" 2>/dev/null
       done
@@ -115,6 +123,55 @@ render_gotcha_entry() {
   fi
 }
 
+render_conventions_summary() {
+  if [ ! -d "$CONVENTIONS_DIR" ]; then
+    echo -e "${DIM}(conventions/ 없음)${RESET}"
+    return
+  fi
+
+  local active="$1"
+  local any=false
+
+  # Shared 먼저, 그다음 활성 에이전트, 그다음 나머지
+  local ordered_files=()
+  [ -f "$CONVENTIONS_DIR/shared.md" ] && ordered_files+=("$CONVENTIONS_DIR/shared.md")
+  if [ -n "$active" ] && [ -f "$CONVENTIONS_DIR/${active}.md" ]; then
+    ordered_files+=("$CONVENTIONS_DIR/${active}.md")
+  fi
+  for cand in "$CONVENTIONS_DIR"/*.md; do
+    [ -e "$cand" ] || continue
+    local base; base=$(basename "$cand" .md)
+    [ "$base" = "README" ] && continue
+    [ "$cand" = "$CONVENTIONS_DIR/shared.md" ] && continue
+    [ -n "$active" ] && [ "$cand" = "$CONVENTIONS_DIR/${active}.md" ] && continue
+    ordered_files+=("$cand")
+  done
+
+  for f in "${ordered_files[@]}"; do
+    [ -e "$f" ] || continue
+    local name count
+    name=$(basename "$f" .md)
+    count=$(count_items "$f")
+    if [ "$name" = "shared" ]; then
+      echo -e "${BOLD}${CYAN}▸ ${name}${RESET} ${DIM}(${count} items · shared)${RESET}"
+    elif [ -n "$active" ] && [ "$name" = "$active" ]; then
+      echo -e "${BOLD}${BG_YELLOW} ▸ ${name} ${RESET} ${DIM}(${count} items · ACTIVE)${RESET}"
+    else
+      echo -e "${BOLD}${GREEN}▸ ${name}${RESET} ${DIM}(${count} items)${RESET}"
+    fi
+    if [ "$count" -eq 0 ]; then
+      echo -e "  ${DIM}(항목 없음)${RESET}"
+    else
+      recent_titles "$f" "$RECENT_N" | while IFS= read -r t; do
+        echo -e "  ${DIM}·${RESET} $t"
+      done
+    fi
+    any=true
+  done
+
+  [ "$any" = "false" ] && echo -e "${DIM}(항목 없음)${RESET}"
+}
+
 render_memory_summary() {
   if [ ! -f "$MEMORY_FILE" ]; then
     echo -e "${DIM}(memory.md 없음)${RESET}"
@@ -145,7 +202,7 @@ render() {
   active_file=""
   [ -n "$active" ] && active_file=$(file_for_agent "$active")
 
-  echo -e "${BOLD}${MAGENTA}GOTCHA INDEX${RESET}  ${DIM}$(date +%H:%M:%S) · recent=${RECENT_N} · refresh ${REFRESH_SEC}s${RESET}"
+  echo -e "${BOLD}${MAGENTA}RULES INDEX${RESET} ${DIM}Gotcha · Memory · Conventions · $(date +%H:%M:%S) · recent=${RECENT_N} · refresh ${REFRESH_SEC}s${RESET}"
   if [ -n "$active" ]; then
     echo -e "${DIM}active agent:${RESET} ${BOLD}${YELLOW}${active}${RESET}"
   else
@@ -170,6 +227,11 @@ render() {
       render_gotcha_entry "$f" "false"
     done
   fi
+
+  echo ""
+  echo -e "${DIM}${hr}${RESET}"
+  echo -e "${BOLD}${CYAN}▣ CONVENTIONS${RESET} ${DIM}(.harness/conventions)${RESET}"
+  render_conventions_summary "$active"
 
   echo ""
   echo -e "${DIM}${hr}${RESET}"
