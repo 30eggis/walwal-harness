@@ -1017,15 +1017,14 @@ function main() {
     log('║  Then say: "하네스 엔지니어링 시작"                        ║');
     log('║  Or invoke: /harness-dispatcher                          ║');
     log('║                                                          ║');
-    log('║  After Planner completes:                                ║');
-    log('║    /harness-team  → Team mode (auto parallel)            ║');
-    log('║    /harness-solo  → Solo mode (prompting sequential)     ║');
+    log('║  기본은 Solo 모드 (순차 진행) — 입력 불필요.              ║');
+    log('║  병렬 3팀 실행을 원하면 파이프라인 확정 후 /harness-team  ║');
     log('╚═══════════════════════════════════════════════════════════╝');
   } else {
     log('Next steps:');
     log('  1. Restart Claude Code session (/exit → re-enter directory)');
     log('  2. Say "하네스 엔지니어링 시작" or /harness-dispatcher');
-    log('  3. After Planner: /harness-team (team) or keep prompting (solo)');
+    log('  3. Solo 모드는 자동. Team 모드 원할 때만 파이프라인 확정 후 /harness-team');
   }
   console.log('');
 }

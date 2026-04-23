@@ -19,19 +19,36 @@
 ## 항목 형식
 
 ```markdown
-### [G-NNN] 간결한 제목
+### [G-NNN] 간결한 제목  <!-- rule_id: <unique-key> -->
+- **Status**: unverified | verified | resolved
 - **Date**: YYYY-MM-DD
-- **Trigger**: 사용자가 한 말 (원문 요약)
+- **Source**: <작성 주체>        (예: "evaluator-functional:F-003" / "dispatcher:manual")
+- **Trigger**: 사용자가 한 말 또는 "Eval 자동 감지"
 - **Wrong**: 에이전트가 했던 잘못된 행동
 - **Right**: 올바른 행동
 - **Why**: 왜 잘못인지 근거
 - **Scope**: 이 규칙이 적용되는 조건/범위
+- **Occurrences**: 1
+- **Last-Seen**: YYYY-MM-DD
 ```
+
+## 작성 주체
+
+- **Dispatcher**: 사용자의 명시적 실수 지적을 Gotcha Flow 로 기록
+- **Evaluator (code-quality / functional / visual)**: evaluation-*.md 의 `gotcha_candidates` JSON 블록을 통해 자동 등록 (v5.7.1+). `harness-next.sh` 가 Evaluator 완료 직후 `scripts/harness-gotcha-register.sh --scan-evaluations` 로 처리.
+
+## Status 라이프사이클 (v5.7.1+)
+
+- **unverified**: 신규 자동/수동 등록 기본값. Generator 는 참조하지만 페널티 강도 낮음.
+- **verified**: Planner/사용자 리뷰 후 승격. 이후 위반 시 하드 페널티.
+- **resolved**: 근본 원인이 코드/스킬/컨벤션에 반영되어 더 이상 재발하지 않는 항목. 삭제 대신 태그 유지.
+
+Planner 는 스프린트 전환 시 `unverified` 항목을 검토해 `verified` 또는 제거 판정을 내린다 (AGENTS.md "메모리 오염 방어" 섹션).
 
 ## 관리 규칙
 
-- Dispatcher만 gotchas 파일에 쓰기 가능
+- Dispatcher + Evaluator 만 gotchas 파일에 쓰기 가능 (자동 등록 포함)
 - 각 에이전트는 자신의 gotchas 파일을 읽기 전용으로 참조
-- 중복 항목 금지 — 같은 실수는 기존 항목에 횟수 증가
-- 해결된 항목은 삭제하지 않고 `[RESOLVED]` 태그 추가
-- 항목이 20개 초과 시 가장 오래된 RESOLVED 항목부터 정리
+- 중복 항목 금지 — 동일 `rule_id` 는 `Occurrences` + `Last-Seen` 만 갱신
+- 해결된 항목: `Status: resolved` 또는 제목 뒤 `[RESOLVED]` 태그
+- 항목이 20개 초과 시 가장 오래된 resolved 항목부터 정리

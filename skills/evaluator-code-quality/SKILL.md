@@ -158,6 +158,34 @@ Cross-Validation 데이터 블록 포함 (Functional/Visual 이 참조):
 }
 ```
 
+## Auto Gotcha Registration — v5.7.1+
+
+**필수 emission**: `actions/evaluation-code-quality.md` 끝부분에 `gotcha_candidates` JSON 블록을 반드시 포함 (후보 없으면 `[]`). `harness-next.sh` 가 Evaluator 완료 직후 이 블록을 스캔해 자동 등록한다.
+
+````
+```gotcha_candidates
+[
+  {
+    "target": "generator-backend",
+    "rule_id": "be-any-type-leak",
+    "title": "서비스 레이어 any 남용",
+    "wrong": "UserService.findAll() 반환 타입을 any[] 로 선언",
+    "right": "api-contract.json 의 DTO 타입을 재사용하거나 shared-dto 에 정의",
+    "why": "C4 Type Safety 축은 25% 가중. evidence 없는 any 는 Score 0.",
+    "scope": "모든 BE service/controller 레이어",
+    "source": "evaluator-code-quality:F-002"
+  }
+]
+```
+````
+
+등록 규칙:
+- `target`: 실수를 반복할 대상 에이전트 (`generator-backend`, `generator-frontend`, `planner` 등).
+- `rule_id`: dedup 키 (동일 rule_id 는 Occurrences +1, 본문 미변경).
+- 신규 항목은 `Status: unverified`. Planner 리뷰 후 `verified` 승격.
+- **FAIL 시**: 실패 근본 원인 1건 이상을 반드시 등록.
+- **PASS 시**: 발견된 경미한 위반이 있으면 등록 (스코어 미반영이지만 반복 방지).
+
 ## Adversarial Rules
 
 - "동작하니 PASS" 금지. 여기서는 구조를 본다.

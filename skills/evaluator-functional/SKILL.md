@@ -137,16 +137,38 @@ Evaluator 는 스택마다 다른 검증 도구를 가진다. `scan-result.json.
    - false → evaluation-functional.md 에 "MANUAL_REQUIRED: {manual_check}" 기록, Visual 은 __skip__
 ```
 
-### Auto Gotcha Registration (안티패턴 자동 등록)
+### Auto Gotcha Registration (안티패턴 + 평가 실패 자동 등록) — v5.7.1+
 
-`validation.anti_pattern_rules` 실행에서 위반 1건 이상 발견 시 — Dispatcher 경유로 자동 gotcha 등록:
+**필수 emission**: `actions/evaluation-functional.md` 끝부분에 아래 fenced JSON 블록을 반드시 포함한다 (후보 없으면 빈 배열 `[]`). `harness-next.sh` 가 Evaluator 완료 직후 이 블록을 스캔해 `scripts/harness-gotcha-register.sh` 로 자동 등록한다.
 
-- 대상 파일: `.harness/gotchas/generator-<role>-<stack>.md` (없으면 생성)
-- 항목 포맷: `### [G-NNN] <rule_id>` / severity / occurrences / last_seen(file:line) / snippet / source feature
-- 중복 rule_id: Occurrences 카운터 +1 + last_seen 업데이트
-- 상세 계약: `api-contract.json.contracts["gotcha_register_interface"]`
+````
+```gotcha_candidates
+[
+  {
+    "target": "generator-frontend",
+    "rule_id": "fe-console-error-ignored",
+    "title": "콘솔 JS 에러 방치",
+    "wrong": "렌더 직후 발생하는 TypeError 를 수정하지 않고 PASS 주장",
+    "right": "콘솔 JS 에러 0 이 될 때까지 수정 후 재제출",
+    "why": "Evaluator-Functional 콘솔 청결 축은 15% 가중 하드 임계 (0개)",
+    "scope": "모든 FE Feature",
+    "source": "evaluator-functional:F-003"
+  }
+]
+```
+````
 
-이 메커니즘이 작동하려면 Dispatcher 의 "Auto Gotcha Registration" 섹션을 참고하라.
+등록 규칙:
+- `target`: 실수를 반복할 **대상 에이전트** (예: `generator-frontend`, `generator-backend`, `planner`). 본인(`evaluator-*`) 대상도 가능.
+- `rule_id`: 전역 유일 식별자. 동일 rule_id 는 Occurrences 증가 + Last-Seen 갱신 (본문 미변경).
+- `source`: 출처 — `<agent>:<feature-id>` 형식 권장.
+- 신규 항목은 `Status: unverified` 로 기록. Planner 리뷰 후 수동으로 `verified` 승격.
+- 대상 파일: `.harness/gotchas/<target>.md` (스택별 파일 필요 시 `<target>-<stack>.md` 를 `target` 에 명시).
+
+**FAIL 시**: 실패 근본 원인 1건 이상을 반드시 candidate 로 등록 (중복 실수 방지가 목적).
+**PASS 시**: 발견된 안티패턴/경미한 위반이 있으면 등록 (스코어에는 반영 안 됐지만 반복 방지).
+
+Dispatcher 경유 수동 등록은 여전히 가능하지만, **이 자동 파이프라인이 기본 경로**다.
 
 ## Evaluation Steps
 

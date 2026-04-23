@@ -83,6 +83,7 @@ fi
 # ─────────────────────────────────────────
 if [ "$sprint_status" = "init" ]; then
   echo "# Harness ready — say \"하네스 엔지니어링 시작\" or /harness-dispatcher"
+  echo "# 기본은 Solo 모드. 병렬 3팀 실행을 원하면 Planner 완료 후 /harness-team."
   exit 0
 fi
 

@@ -121,6 +121,34 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 
 **어떤 차원이든 하드 임계값 미달 → FAIL**
 
+## Auto Gotcha Registration — v5.7.1+
+
+**필수 emission**: `actions/evaluation-visual.md` 끝부분에 `gotcha_candidates` JSON 블록을 반드시 포함 (후보 없으면 `[]`). `harness-next.sh` 가 Evaluator 완료 직후 이 블록을 스캔해 자동 등록한다.
+
+````
+```gotcha_candidates
+[
+  {
+    "target": "generator-frontend",
+    "rule_id": "fe-contrast-fail",
+    "title": "텍스트 대비 WCAG AA 미달",
+    "wrong": "버튼 #888 on #aaa — 3.0:1 (AA 4.5:1 미만)",
+    "right": "primary 버튼은 body 컬러 대비 4.5:1 이상 보장. Tailwind tokens 활용.",
+    "why": "접근성은 Evaluator-Visual 하드 임계",
+    "scope": "모든 인터랙티브 엘리먼트",
+    "source": "evaluator-visual:F-004"
+  }
+]
+```
+````
+
+등록 규칙:
+- `target`: 실수를 반복할 대상 에이전트 (일반적으로 `generator-frontend`, 디자인 토큰 결함은 `planner`).
+- `rule_id`: dedup 키.
+- 신규 항목은 `Status: unverified`. Planner 리뷰 후 `verified` 승격.
+- **FAIL 시**: 실패 근본 원인 1건 이상 반드시 등록.
+- **PASS 시**: 감지된 경미한 디자인 편차가 있으면 등록 (반복 방지).
+
 ## After Evaluation
 
 - **PASS** → Session Boundary Protocol On Complete (PASS) 실행

@@ -152,6 +152,28 @@ AGENTS.md 비하네스  → 기존 백업 + 리빌드
 
 `.harness/actions/pipeline.json` 생성 → 사용자 확인 → Session Boundary Protocol On Complete 실행
 
+### Mode Recommendation (v5.7.1+)
+
+⚠️ **Dispatcher → Planner 전환 시에는 mode 질문을 하지 않는다.** Planner 는 mode 와 무관한 단일 실행이다. 과거의 "harness-solo 를 입력하세요" 안내는 제거.
+
+파이프라인이 확정되면 (Planner 호출 직전) **단 한 문단** 으로 Mode 추천을 출력하되, 응답을 기다리지 않고 **default=solo 로 그대로 진행**한다. 사용자가 team 을 원하면 언제든 `/harness-team` 으로 전환 가능.
+
+추천 로직:
+- Planner 가 feature-list.json 을 확정한 뒤 `features.length >= 3` 이고 서로 의존성이 낮으면 → "Team 모드 권장" 안내
+- `features.length < 3` 또는 단일 feature 연속 작업 → "Solo 모드 권장" 안내
+- Dispatcher 단계에서는 feature 수를 모를 수 있으므로 **기본은 Solo 진행**, Planner 완료 후 자동으로 재평가
+
+출력 예:
+```
+Pipeline: FULLSTACK 확정. Solo 모드로 자동 진행합니다.
+(병렬 3팀 실행을 원하면 Planner 완료 후 /harness-team 입력)
+```
+
+**금지**:
+- "solo 입력하세요 / team 입력하세요" 식의 선택 강요
+- mode 결정을 기다리며 Planner 호출을 보류하는 것
+- 이미 mode 가 설정된 상태(`progress.json.mode` 존재)에서 재질문하는 것
+
 ### evaluator_chain 필드 (모든 파이프라인 필수)
 
 `pipeline.json` 에 **`evaluator_chain`** 배열을 기록한다. `config.json.flow.pipeline_selection.evaluator_chains.<pipeline>` 의 값을 복사:

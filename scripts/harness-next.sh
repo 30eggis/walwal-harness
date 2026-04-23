@@ -315,6 +315,23 @@ if [ "$agent_status" = "completed" ]; then
 fi
 
 # ─────────────────────────────────────────
+# Auto Gotcha Registration — Evaluator 완료 직후 evaluation-*.md 스캔
+#   evaluation-*.md 내부의 ```gotcha_candidates``` JSON 블록을 읽어
+#   .harness/gotchas/<target>.md 에 unverified 상태로 등록/dedup.
+# ─────────────────────────────────────────
+case "$current_agent" in
+  evaluator-*)
+    if [ "$agent_status" = "completed" ] || [ "$agent_status" = "failed" ]; then
+      if [ -x "$SCRIPT_DIR/harness-gotcha-register.sh" ]; then
+        bash "$SCRIPT_DIR/harness-gotcha-register.sh" "$PROJECT_ROOT" --scan-evaluations 2>&1 \
+          | grep -E '^\[gotcha-register\]' || true
+        audit_gate "gotcha-register" "scan" "$current_agent"
+      fi
+    fi
+    ;;
+esac
+
+# ─────────────────────────────────────────
 # Run Pre-Eval Gate (if applicable)
 # ─────────────────────────────────────────
 if [ "$agent_status" = "completed" ]; then
