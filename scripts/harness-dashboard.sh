@@ -197,10 +197,22 @@ render_team_queue_summary() {
   ready=$(jq '.queue.ready | length' "$QUEUE" 2>/dev/null || echo 0)
   blocked=$(jq '.queue.blocked | length' "$QUEUE" 2>/dev/null || echo 0)
   in_prog=$(jq '.queue.in_progress | length' "$QUEUE" 2>/dev/null || echo 0)
-  passed=$(jq '.queue.passed | length' "$QUEUE" 2>/dev/null || echo 0)
   failed=$(jq '.queue.failed | length' "$QUEUE" 2>/dev/null || echo 0)
-  ready=${ready:-0}; blocked=${blocked:-0}; in_prog=${in_prog:-0}; passed=${passed:-0}; failed=${failed:-0}
-  total=$((ready + blocked + in_prog + passed + failed))
+
+  # passed 는 queue.passed ∪ feature-list.json 의 self-passed 를 dedup 합집합으로 계산
+  # (과거 sprint 에서 PASS 되어 queue 에서 빠진 feature 도 카운트)
+  if [ -f "$FEATURES" ]; then
+    passed=$(jq -r --slurpfile q "$QUEUE" '
+      ($q[0].queue.passed // []) as $qp |
+      ([.features[] | select((.passes // []) | any(. == "evaluator-functional" or . == "evaluator-visual" or . == "evaluator-code-quality")) | .id]) as $sp |
+      ($qp + $sp | unique | length)
+    ' "$FEATURES" 2>/dev/null || echo 0)
+    total=$(jq '.features | length' "$FEATURES" 2>/dev/null || echo 0)
+  else
+    passed=$(jq '.queue.passed | length' "$QUEUE" 2>/dev/null || echo 0)
+    total=$((ready + blocked + in_prog + passed + failed))
+  fi
+  ready=${ready:-0}; blocked=${blocked:-0}; in_prog=${in_prog:-0}; passed=${passed:-0}; failed=${failed:-0}; total=${total:-0}
 
   local pct=0
   if [ "$total" -gt 0 ]; then pct=$(( passed * 100 / total )); fi
@@ -274,7 +286,11 @@ render_team_features() {
     .features[] |
     .id as $fid |
     (.name // .title // .description // "?" | if length > 18 then .[0:16] + ".." else . end) as $fname |
-    (if ($fid | IN($passed[])) then "P"
+    # passed 판정: queue.passed 또는 feature.passes 에 evaluator-functional/visual/code-quality 가 있으면 PASS.
+    # 과거 sprint 에서 PASS 된 feature 가 새 sprint queue 재생성 시 queue.passed 에서 누락되어도
+    # feature-list.json 의 passes 배열은 이력으로 남아있으므로, 거기서도 검사한다.
+    ((.passes // []) | any(. == "evaluator-functional" or . == "evaluator-visual" or . == "evaluator-code-quality")) as $self_passed |
+    (if ($fid | IN($passed[])) or $self_passed then "P"
      elif $prog[$fid] then "I|\($prog[$fid].team)|\($prog[$fid].phase)"
      elif ($fid | IN($failed[])) then "F"
      elif ($fid | IN($ready[])) then "R"
