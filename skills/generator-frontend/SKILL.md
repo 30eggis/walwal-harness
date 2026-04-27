@@ -123,3 +123,13 @@ Team Mode 에서 Team Worker 가 호출할 때, 프롬프트에 `FEATURE_ID` 가
 
 - `ref-docs` 가 placeholder 상태(`generator: "init-ref-docs.sh (placeholder)"`) → 본격 구현 전에 Claude 세션에서 `bash init.sh refresh-ref fe <stack>` 후 프롬프트 실행으로 본문 채우기를 권고
 - `scan-result.json.tech_stack_confidence == "unknown"` → 사용자에게 객관식(감지 후보 top 5 + 자유입력 fallback)으로 스택 확인 요청
+
+## ⚠ MANDATORY — 동적 Gotcha / Convention 등록 (Generator 도 mandatory)
+
+작업 완료 시 `.harness/actions/gen-report-{FEATURE_ID}.md` 를 작성하고 끝에 **`gotcha_candidates` 와 `convention_candidates` fenced JSON 블록 두 개**를 포함한다 (비어 있으면 `[]`). harness-next.sh / Team Lead 가 자동 스캔하여 `.harness/gotchas/` `.harness/conventions/` 에 dedup append.
+
+**FE Generator 가 등록해야 하는 패턴** (자기 발견):
+- RSC↔CC 경계 위반, missing 'use client', not-found.tsx/error.tsx 누락, typed-routes 미스매치 → `gotcha_candidates` (target=generator-frontend)
+- 일관된 컴포넌트/훅/스타일 룰, 폴더 구조, shadcn 사용 패턴 → `convention_candidates` (scope=generator-frontend)
+
+상세 스키마 / `gen-report-{FEATURE_ID}.md` 형식 → [공통 가이드 — dynamic-registration](../_shared/dynamic-registration.md)

@@ -119,3 +119,35 @@ api-contract.json 의 DTO 스키마는 해당 스택의 타입 표현(Pydantic /
 
 - `ref-docs` 가 placeholder 상태 → 본격 구현 전에 `bash init.sh refresh-ref be <stack>` 으로 채우기 권고
 - `scan-result.json.tech_stack_confidence == "unknown"` → 사용자에게 객관식 + 자유입력 fallback 로 스택 확인 요청
+
+## ⚠ MANDATORY — 동적 Gotcha / Convention 등록 (Generator 도 mandatory)
+
+작업 완료 시 `.harness/actions/gen-report-{FEATURE_ID}.md` 를 작성하고 끝에 **`gotcha_candidates` 와 `convention_candidates` fenced JSON 블록 두 개**를 포함한다 (비어 있으면 `[]`). harness-next.sh / Team Lead 가 자동 스캔하여 `.harness/gotchas/` `.harness/conventions/` 에 dedup append.
+
+**Generator 가 등록해야 하는 패턴** (자기 발견):
+- 한 번 시도했다가 깨졌던 접근, 자체 fix 한 코드 실수 → `gotcha_candidates` (target=generator-backend, source="generator-backend:F-XXX")
+- 작업 중 적용한 일관된 코드 구조/패턴 (다른 feature 가 모방해야 할) → `convention_candidates` (scope=generator-backend)
+
+`gen-report-{FEATURE_ID}.md` 최소 형식:
+```markdown
+# Generator-Backend Report — {FEATURE_ID}
+
+## 변경 파일
+- ...
+
+## 자체 게이트 결과
+- tsc: OK · eslint: 0 warn · jest: N/N
+
+## 발견 패턴
+(짧은 설명)
+
+```gotcha_candidates
+[]
+```
+
+```convention_candidates
+[]
+```
+```
+
+상세 스키마 → [공통 가이드 — dynamic-registration](../_shared/dynamic-registration.md)

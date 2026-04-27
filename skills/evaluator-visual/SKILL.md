@@ -153,3 +153,13 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 
 - **PASS** → Session Boundary Protocol On Complete (PASS) 실행
 - **FAIL** → Session Boundary Protocol On Fail 실행
+
+## ⚠ MANDATORY — 동적 Gotcha / Convention 등록
+
+evaluation-visual.md 의 끝에 **반드시 `gotcha_candidates` 와 `convention_candidates` fenced JSON 블록**을 작성한다 (비어 있으면 `[]`). harness-next.sh / Team Lead 가 자동 스캔하여 `.harness/gotchas/` `.harness/conventions/` 에 dedup append.
+
+**Visual eval 특화 검출 대상**:
+- 콘솔 에러/Hydration mismatch → `gotcha_candidates` (target=generator-frontend)
+- 디자인 토큰 불일치, 일관된 spacing/font 룰 → `convention_candidates` (scope=generator-frontend)
+
+상세 스키마 / 예시 / 필수 필드 → [공통 가이드 — dynamic-registration](../_shared/dynamic-registration.md)

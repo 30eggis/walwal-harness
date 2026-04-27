@@ -320,12 +320,14 @@ fi
 #   .harness/gotchas/<target>.md 에 unverified 상태로 등록/dedup.
 # ─────────────────────────────────────────
 case "$current_agent" in
-  evaluator-*)
+  evaluator-*|generator-*)
     if [ "$agent_status" = "completed" ] || [ "$agent_status" = "failed" ]; then
       if [ -x "$SCRIPT_DIR/harness-gotcha-register.sh" ]; then
-        bash "$SCRIPT_DIR/harness-gotcha-register.sh" "$PROJECT_ROOT" --scan-evaluations 2>&1 \
+        # --scan-all 로 evaluation-*.md + gen-report-*.md + lead-report-*.md 의
+        # gotcha_candidates / convention_candidates 블록 모두 동적 등록
+        bash "$SCRIPT_DIR/harness-gotcha-register.sh" "$PROJECT_ROOT" --scan-all 2>&1 \
           | grep -E '^\[gotcha-register\]' || true
-        audit_gate "gotcha-register" "scan" "$current_agent"
+        audit_gate "gotcha-register" "scan-all" "$current_agent"
       fi
     fi
     ;;

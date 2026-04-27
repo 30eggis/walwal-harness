@@ -171,43 +171,173 @@ register_from_json() {
 }
 
 # ─────────────────────────────────────────
-# evaluation-*.md 스캔 — ```gotcha_candidates ... ``` JSON fenced block 추출
+# Convention 등록 — .harness/conventions/<scope>.md 에 [C-NNN] entry append
+#   $1: scope (shared, generator-backend, generator-frontend, ... — 파일명 base)
+#   $2: rule_id (dedup key)
+#   $3: title
+#   $4: rule (긍정 가이드 본문 — "X 는 항상 Y 로")
+#   $5: why
+#   $6: source
+# ─────────────────────────────────────────
+CONVENTIONS_DIR="$PROJECT_ROOT/.harness/conventions"
+register_convention_one() {
+  local scope="$1" rule_id="$2" title="$3" rule="$4" why="$5" source="$6"
+  mkdir -p "$CONVENTIONS_DIR"
+  local file="$CONVENTIONS_DIR/${scope}.md"
+
+  if [ ! -f "$file" ]; then
+    cat > "$file" <<EOF
+# Conventions — ${scope}
+
+> Dispatcher가 관리. 긍정 가이드("~를 사용해", "항상 ~") 자동 등록.
+
+EOF
+  fi
+
+  # dedup: 같은 rule_id 가 있으면 해당 [C-NNN] 블록의 Occurrences +1, Last-Seen 갱신
+  if grep -qE "<!-- rule_id: ${rule_id} -->" "$file" 2>/dev/null; then
+    awk -v rid="$rule_id" -v today="$TODAY" '
+      BEGIN { in_block = 0 }
+      /^### \[C-[0-9]+\].*<!-- rule_id: / {
+        in_block = ($0 ~ ("rule_id: " rid " -->"))
+      }
+      in_block && /^- \*\*Occurrences\*\*:/ {
+        n = $NF + 0
+        print "- **Occurrences**: " (n + 1)
+        next
+      }
+      in_block && /^- \*\*Last-Seen\*\*:/ {
+        print "- **Last-Seen**: " today
+        next
+      }
+      /^### / && !/<!-- rule_id: / { in_block = 0 }
+      { print }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+    echo "[gotcha-register] convention/${scope}: dedup ${rule_id} (occurrence bumped)"
+    return 0
+  fi
+
+  # 신규 — 다음 [C-NNN] 번호 할당 (set -e 회피: || true)
+  local last_n
+  last_n=$(grep -oE '\[C-[0-9]+\]' "$file" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || true)
+  last_n=${last_n:-0}
+  local next_n=$(printf "%03d" $((last_n + 1)))
+
+  cat >> "$file" <<EOF
+
+### [C-${next_n}] ${title}  <!-- rule_id: ${rule_id} -->
+- **Status**: unverified
+- **Date**: ${TODAY}
+- **Source**: ${source}
+- **Rule**: ${rule}
+- **Why**: ${why}
+- **Occurrences**: 1
+- **Last-Seen**: ${TODAY}
+EOF
+
+  echo "[gotcha-register] convention/${scope}: registered C-${next_n} (${rule_id}) — unverified"
+}
+
+register_conventions_from_json() {
+  local json="$1"
+  local count
+  count=$(echo "$json" | jq 'length' 2>/dev/null || echo 0)
+  [ "$count" -eq 0 ] && return 0
+  local i
+  for ((i=0; i<count; i++)); do
+    local sc r ti ru wh so
+    sc=$(echo "$json" | jq -r ".[$i].scope // \"shared\"")
+    r=$(echo "$json"  | jq -r ".[$i].rule_id // empty")
+    ti=$(echo "$json" | jq -r ".[$i].title // empty")
+    ru=$(echo "$json" | jq -r ".[$i].rule // empty")
+    wh=$(echo "$json" | jq -r ".[$i].why // empty")
+    so=$(echo "$json" | jq -r ".[$i].source // \"agent:auto\"")
+    if [ -z "$r" ] || [ -z "$ti" ] || [ -z "$ru" ]; then
+      echo "[gotcha-register] convention skip: missing rule_id/title/rule at index $i" >&2
+      continue
+    fi
+    register_convention_one "$sc" "$r" "$ti" "$ru" "$wh" "$so"
+  done
+}
+
+# ─────────────────────────────────────────
+# 단일 파일에서 fenced block 추출 (block_tag 인자로 종류 지정)
+#   $1: file path · $2: block tag (gotcha_candidates 또는 convention_candidates)
+# stdout 으로 각 block JSON 을 한 줄씩 출력 (\0 구분자)
+# ─────────────────────────────────────────
+extract_blocks() {
+  local file="$1" tag="$2"
+  local blocks_prefix
+  blocks_prefix=$(mktemp -d)
+  awk -v dir="$blocks_prefix" -v tag="$tag" '
+    BEGIN { idx=0; flag=0; buf="" }
+    $0 ~ ("^```" tag "[[:space:]]*$") { flag=1; buf=""; next }
+    /^```[[:space:]]*$/ && flag {
+      flag=0
+      idx++
+      outfile = sprintf("%s/block-%03d.json", dir, idx)
+      print buf > outfile
+      close(outfile)
+      buf=""
+      next
+    }
+    flag { buf = buf $0 "\n" }
+  ' "$file"
+  echo "$blocks_prefix"
+}
+
+process_blocks_in_file() {
+  local file="$1"
+  # gotcha_candidates
+  local g_dir
+  g_dir=$(extract_blocks "$file" "gotcha_candidates")
+  local b
+  for b in "$g_dir"/block-*.json; do
+    [ -f "$b" ] || continue
+    if jq empty "$b" 2>/dev/null; then
+      register_from_json "$(cat "$b")"
+    else
+      echo "[gotcha-register] skip: invalid gotcha_candidates JSON in $(basename "$file")" >&2
+    fi
+  done
+  rm -rf "$g_dir"
+
+  # convention_candidates
+  local c_dir
+  c_dir=$(extract_blocks "$file" "convention_candidates")
+  for b in "$c_dir"/block-*.json; do
+    [ -f "$b" ] || continue
+    if jq empty "$b" 2>/dev/null; then
+      register_conventions_from_json "$(cat "$b")"
+    else
+      echo "[gotcha-register] skip: invalid convention_candidates JSON in $(basename "$file")" >&2
+    fi
+  done
+  rm -rf "$c_dir"
+}
+
+# ─────────────────────────────────────────
+# evaluation-*.md 스캔 — ```gotcha_candidates``` + ```convention_candidates``` 둘 다
 # ─────────────────────────────────────────
 scan_evaluations() {
-  if [ ! -d "$ACTIONS_DIR" ]; then return 0; fi
+  [ -d "$ACTIONS_DIR" ] || return 0
   local f
   for f in "$ACTIONS_DIR"/evaluation-*.md; do
     [ -f "$f" ] || continue
+    process_blocks_in_file "$f"
+  done
+}
 
-    # Enumerate blocks — simple per-file awk that prints each block into a
-    # uniquely-named temp file. Avoids macOS awk \0 quirks.
-    local blocks_prefix
-    blocks_prefix=$(mktemp -d)
-    awk -v dir="$blocks_prefix" '
-      BEGIN { idx=0 }
-      /^```gotcha_candidates[[:space:]]*$/ { flag=1; buf=""; next }
-      /^```[[:space:]]*$/ && flag {
-        flag=0
-        idx++
-        outfile = sprintf("%s/block-%03d.json", dir, idx)
-        print buf > outfile
-        close(outfile)
-        buf=""
-        next
-      }
-      flag { buf = buf $0 "\n" }
-    ' "$f"
-
-    local blockfile
-    for blockfile in "$blocks_prefix"/block-*.json; do
-      [ -f "$blockfile" ] || continue
-      if jq empty "$blockfile" 2>/dev/null; then
-        register_from_json "$(cat "$blockfile")"
-      else
-        echo "[gotcha-register] skip: invalid JSON block in $(basename "$f")" >&2
-      fi
-    done
-    rm -rf "$blocks_prefix"
+# ─────────────────────────────────────────
+# 모든 worker report 스캔 — evaluation-*.md + gen-report-*.md + lead-report-*.md
+# Generator 는 gen-report-{F-ID}.md 작성, Lead 는 lead-report-{date}.md 작성 가능
+# ─────────────────────────────────────────
+scan_all() {
+  [ -d "$ACTIONS_DIR" ] || return 0
+  local f
+  for f in "$ACTIONS_DIR"/evaluation-*.md "$ACTIONS_DIR"/gen-report-*.md "$ACTIONS_DIR"/lead-report-*.md; do
+    [ -f "$f" ] || continue
+    process_blocks_in_file "$f"
   done
 }
 
@@ -237,6 +367,7 @@ while [ $# -gt 0 ]; do
     --source)   SOURCE="$2"; shift 2 ;;
     --from-json) MODE="json"; FROM_JSON="$2"; shift 2 ;;
     --scan-evaluations) MODE="scan"; shift ;;
+    --scan-all) MODE="scan-all"; shift ;;
     *) echo "[gotcha-register] unknown arg: $1" >&2; exit 1 ;;
   esac
 done
@@ -255,5 +386,8 @@ case "$MODE" in
     ;;
   scan)
     scan_evaluations
+    ;;
+  scan-all)
+    scan_all
     ;;
 esac

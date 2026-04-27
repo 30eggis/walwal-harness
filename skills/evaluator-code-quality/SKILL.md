@@ -206,3 +206,13 @@ Cross-Validation 데이터 블록 포함 (Functional/Visual 이 참조):
 
 - **PASS** → Session Boundary Protocol On Complete (PASS) 실행
 - **FAIL** → Session Boundary Protocol On Fail 실행
+
+## ⚠ MANDATORY — 동적 Gotcha / Convention 등록
+
+evaluation-code-quality.md 의 끝에 **반드시 `gotcha_candidates` 와 `convention_candidates` fenced JSON 블록**을 작성한다 (비어 있으면 `[]`). harness-next.sh / Team Lead 가 자동 스캔하여 `.harness/gotchas/` `.harness/conventions/` 에 dedup append.
+
+**Code-quality 특화 검출 대상**:
+- 정적 분석으로 잡을 수 있는데 generator 가 빠뜨린 패턴 → `gotcha_candidates`
+- 코드 구조/명명/import 정렬 등 일관 룰 → `convention_candidates`
+
+상세 스키마 / 예시 / 필수 필드 → [공통 가이드 — dynamic-registration](../_shared/dynamic-registration.md)

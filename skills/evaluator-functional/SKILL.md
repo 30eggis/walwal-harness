@@ -204,3 +204,68 @@ Playwright 도구 → [도구 레퍼런스](references/playwright-tools.md)
 
 - **PASS** → Session Boundary Protocol On Complete (PASS) 실행
 - **FAIL** → Session Boundary Protocol On Fail 실행
+
+## ⚠ MANDATORY — 동적 Gotcha / Convention 등록 (모든 평가에서 필수)
+
+evaluation-functional.md 의 끝에 **반드시 두 개의 fenced JSON 블록**을 작성한다. 비어 있어도 `[]` 로 명시 (블록 자체를 생략 금지). harness-next.sh 가 평가 직후 자동으로 이 블록들을 파싱하여 `.harness/gotchas/<target>.md` 와 `.harness/conventions/<scope>.md` 에 dedup append 한다.
+
+**왜 mandatory 인가**: 사용자 명시 — "Gen/Eval 이 발견한 패턴은 메뉴얼로 시키기 전에 동적으로 등록되어야 한다. 자동으로 패턴화되는 이슈는 등록하라." 한 번 발견된 실수가 다음 sprint 에서 반복되지 않게 하려면 평가자가 그 자리에서 등록하는 것이 유일한 closure.
+
+### 1) gotcha_candidates — 부정 가이드 (실수 패턴)
+
+평가 중 발견한 **반복 가능한 실수** (한 번이라도 동일 패턴이 다시 나올 위험이 있는 결함). 한 평가에서 0~N 개.
+
+검출 기준 (하나라도 해당하면 등록):
+- 같은 sprint 내 다른 feature 에서도 재발할 가능성이 있는 결함
+- generator 가 자주 빠뜨리는 케이스 (e.g. RSC↔CC 경계, schema 누락)
+- spec/contract 위반 패턴
+- AC 부분 통과 / Hard Gate 위반 사유
+
+```gotcha_candidates
+[
+  {
+    "target": "generator-frontend",
+    "rule_id": "rsc-cc-boundary-monitoring",
+    "title": "Server Component 에서 useState/useEffect 호출",
+    "wrong": "app/monitoring/page.tsx 에 'use client' 없이 hook 사용 → 빌드 통과해도 런타임에 깨짐",
+    "right": "client-side state 사용 시 파일 최상단에 'use client' 명시. 또는 server component 로 유지하면서 client 부분만 분리.",
+    "why": "Next.js App Router 의 RSC↔CC 경계는 정적 분석으로 100% 안 잡힘. F-209 에서 발견.",
+    "scope": "app/**/page.tsx, app/**/layout.tsx",
+    "source": "evaluator-functional:F-209"
+  }
+]
+```
+
+비어 있으면:
+```gotcha_candidates
+[]
+```
+
+### 2) convention_candidates — 긍정 가이드 (반복 가능한 best practice)
+
+평가 중 확립된 **반복 가능한 모범 사례** (다른 feature 에서도 같은 방식으로 적용해야 하는 룰). 한 평가에서 0~N 개.
+
+검출 기준:
+- 같은 sprint 의 다른 feature 가 모방해야 할 패턴
+- API 계약 / 폴더 구조 / 명명 규칙 관련 결정
+- 사용자가 "이렇게 해" 라고 한 한 번의 발언이 평가에서 일반화 가능한 경우
+
+```convention_candidates
+[
+  {
+    "scope": "generator-frontend",
+    "rule_id": "route-segment-files",
+    "title": "App Router 세그먼트 필수 파일 세트",
+    "rule": "모든 app/**/page.tsx 는 같은 폴더에 not-found.tsx, error.tsx, loading.tsx 를 함께 배치한다.",
+    "why": "Next.js 의 segment-level 에러/로딩 처리. 누락 시 default 흰 화면 노출. F-209 평가에서 표준화 결정.",
+    "source": "evaluator-functional:F-209"
+  }
+]
+```
+
+비어 있으면:
+```convention_candidates
+[]
+```
+
+**금지**: 두 블록 중 하나라도 누락된 채로 평가 종료 → On Complete protocol 위반. harness-next.sh 의 audit gate 에서 누락 감지 시 경고.

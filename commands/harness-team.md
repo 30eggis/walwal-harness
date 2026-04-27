@@ -197,7 +197,16 @@ bash scripts/harness-queue-manager.sh fail {FEATURE_ID} .
    git merge {BRANCH_NAME} --no-edit
    ```
    - 충돌 시: 자동 해결 시도 → 실패 시 사용자 개입 요청
-3. **Queue 업데이트** (unblock 포함):
+3. **동적 Gotcha/Convention 등록** (merge 직후 필수):
+   ```bash
+   # worker 가 작성한 evaluation-*.md / gen-report-*.md 의
+   # gotcha_candidates / convention_candidates 블록을 모두 dedup append
+   bash scripts/harness-gotcha-register.sh . --scan-all
+   ```
+   다음 worker spawn 전에 갱신된 gotchas/conventions 가 file system 에 반영되어야 함.
+   실수가 sprint 중에 등록되지 않으면 다음 worker 가 같은 실수 반복.
+
+4. **Queue 업데이트** (unblock 포함):
    ```bash
    bash scripts/harness-queue-manager.sh pass {FEATURE_ID} .
    ```
