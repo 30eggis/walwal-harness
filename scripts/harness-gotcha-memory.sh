@@ -2,7 +2,15 @@
 # harness-gotcha-memory.sh — Gotcha · Memory · Conventions pane (index view)
 # 활성 에이전트의 gotcha를 최상단으로, 나머지는 요약(최근 3항목+총개수)으로 표시
 # + Shared Memory 요약 + Conventions 요약 (shared + 활성 에이전트별)
-# Usage: bash scripts/harness-gotcha-memory.sh [project-root]
+#
+# Usage:
+#   bash scripts/harness-gotcha-memory.sh [project-root]            # 전체 (legacy)
+#   bash scripts/harness-gotcha-memory.sh [project-root] --mode gotcha       # gotcha 만
+#   bash scripts/harness-gotcha-memory.sh [project-root] --mode conventions  # conventions 만
+#   bash scripts/harness-gotcha-memory.sh [project-root] --mode memory       # memory 만
+#
+# tmux 분할 환경에서는 각 sub-pane 이 한 mode 만 렌더 → 좁은 창에서도 잘리지 않음.
+# tmux copy-mode (prefix + [) 로 각 pane 독립 스크롤.
 
 set -uo pipefail
 
@@ -10,10 +18,25 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/harness-render-progress.sh"
 source "$SCRIPT_DIR/lib/harness-keywait.sh"
 
-PROJECT_ROOT="${1:-}"
+# Args parsing — first non-flag = project root, --mode = view mode
+PROJECT_ROOT=""
+MODE="all"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --mode) MODE="$2"; shift 2 ;;
+    --mode=*) MODE="${1#--mode=}"; shift ;;
+    *) [ -z "$PROJECT_ROOT" ] && PROJECT_ROOT="$1"; shift ;;
+  esac
+done
+
 if [ -z "$PROJECT_ROOT" ]; then
   PROJECT_ROOT="$(resolve_harness_root ".")" || { echo "[gotcha] .harness/ not found."; exit 1; }
 fi
+
+case "$MODE" in
+  all|gotcha|conventions|memory) ;;
+  *) echo "[gotcha] unknown mode: $MODE" >&2; exit 1 ;;
+esac
 
 MEMORY_FILE="$PROJECT_ROOT/.harness/memory.md"
 GOTCHAS_DIR="$PROJECT_ROOT/.harness/gotchas"
@@ -190,52 +213,115 @@ render_memory_summary() {
   fi
 }
 
-render() {
-  # clear 대신 커서 홈 + 화면 끝까지 지우기 — 깜빡임 최소화
-  printf '\033[H\033[2J\033[3J'
+render_header() {
+  local title="$1"
   local cols hr
   cols=$(tput cols 2>/dev/null || echo 80)
   hr=$(printf '─%.0s' $(seq 1 "$cols"))
+  echo -e "${BOLD}${MAGENTA}${title}${RESET} ${DIM}$(date +%H:%M:%S) · recent=${RECENT_N} · refresh ${REFRESH_SEC}s${RESET}"
+  local active="$1_active"
+  [ -n "${2:-}" ] && echo -e "${DIM}active agent:${RESET} ${BOLD}${YELLOW}$2${RESET}"
+  echo -e "${DIM}${hr}${RESET}"
+}
+
+render_gotcha_section() {
+  local active="$1" active_file="$2"
+  local cols hr
+  cols=$(tput cols 2>/dev/null || echo 80)
+  hr=$(printf '─%.0s' $(seq 1 "$cols"))
+  echo -e "${BOLD}${MAGENTA}▣ GOTCHAS${RESET} ${DIM}(.harness/gotchas) · $(date +%H:%M:%S) · refresh ${REFRESH_SEC}s${RESET}"
+  if [ -n "$active" ]; then
+    echo -e "${DIM}active agent:${RESET} ${BOLD}${YELLOW}${active}${RESET}"
+  fi
+  echo -e "${DIM}${hr}${RESET}"
+
+  if [ -n "$active_file" ]; then
+    render_gotcha_entry "$active_file" "true"
+    echo ""
+  fi
+  if [ -d "$GOTCHAS_DIR" ]; then
+    for f in "$GOTCHAS_DIR"/*.md; do
+      [ -e "$f" ] || continue
+      [ "$f" = "$active_file" ] && continue
+      local base; base=$(basename "$f" .md)
+      [ "$base" = "README" ] && continue
+      render_gotcha_entry "$f" "false"
+    done
+  fi
+}
+
+render_conventions_section() {
+  local active="$1"
+  local cols hr
+  cols=$(tput cols 2>/dev/null || echo 80)
+  hr=$(printf '─%.0s' $(seq 1 "$cols"))
+  echo -e "${BOLD}${CYAN}▣ CONVENTIONS${RESET} ${DIM}(.harness/conventions) · $(date +%H:%M:%S) · refresh ${REFRESH_SEC}s${RESET}"
+  echo -e "${DIM}${hr}${RESET}"
+  render_conventions_summary "$active"
+}
+
+render_memory_section() {
+  local cols hr
+  cols=$(tput cols 2>/dev/null || echo 80)
+  hr=$(printf '─%.0s' $(seq 1 "$cols"))
+  echo -e "${BOLD}${CYAN}▣ SHARED MEMORY${RESET} ${DIM}(memory.md) · $(date +%H:%M:%S) · refresh ${REFRESH_SEC}s${RESET}"
+  echo -e "${DIM}${hr}${RESET}"
+  render_memory_summary
+}
+
+render() {
+  # clear 대신 커서 홈 + 화면 끝까지 지우기 — 깜빡임 최소화
+  printf '\033[H\033[2J\033[3J'
 
   local active active_file
   active=$(get_active_agent)
   active_file=""
   [ -n "$active" ] && active_file=$(file_for_agent "$active")
 
-  echo -e "${BOLD}${MAGENTA}RULES INDEX${RESET} ${DIM}Gotcha · Memory · Conventions · $(date +%H:%M:%S) · recent=${RECENT_N} · refresh ${REFRESH_SEC}s${RESET}"
-  if [ -n "$active" ]; then
-    echo -e "${DIM}active agent:${RESET} ${BOLD}${YELLOW}${active}${RESET}"
-  else
-    echo -e "${DIM}active agent: (none)${RESET}"
-  fi
-  echo -e "${DIM}${hr}${RESET}"
+  case "$MODE" in
+    gotcha)
+      render_gotcha_section "$active" "$active_file"
+      ;;
+    conventions)
+      render_conventions_section "$active"
+      ;;
+    memory)
+      render_memory_section
+      ;;
+    all)
+      local cols hr
+      cols=$(tput cols 2>/dev/null || echo 80)
+      hr=$(printf '─%.0s' $(seq 1 "$cols"))
+      echo -e "${BOLD}${MAGENTA}RULES INDEX${RESET} ${DIM}Gotcha · Memory · Conventions · $(date +%H:%M:%S) · recent=${RECENT_N} · refresh ${REFRESH_SEC}s${RESET}"
+      if [ -n "$active" ]; then
+        echo -e "${DIM}active agent:${RESET} ${BOLD}${YELLOW}${active}${RESET}"
+      else
+        echo -e "${DIM}active agent: (none)${RESET}"
+      fi
+      echo -e "${DIM}${hr}${RESET}"
 
-  # 활성 에이전트 gotcha 최상단
-  if [ -n "$active_file" ]; then
-    render_gotcha_entry "$active_file" "true"
-    echo ""
-  fi
-
-  # 나머지 gotcha
-  if [ -d "$GOTCHAS_DIR" ]; then
-    for f in "$GOTCHAS_DIR"/*.md; do
-      [ -e "$f" ] || continue
-      [ "$f" = "$active_file" ] && continue
-      local base
-      base=$(basename "$f" .md)
-      [ "$base" = "README" ] && continue
-      render_gotcha_entry "$f" "false"
-    done
-  fi
-
-  echo ""
-  echo -e "${DIM}${hr}${RESET}"
-  echo -e "${BOLD}${CYAN}▣ CONVENTIONS${RESET} ${DIM}(.harness/conventions)${RESET}"
-  render_conventions_summary "$active"
-
-  echo ""
-  echo -e "${DIM}${hr}${RESET}"
-  render_memory_summary
+      if [ -n "$active_file" ]; then
+        render_gotcha_entry "$active_file" "true"
+        echo ""
+      fi
+      if [ -d "$GOTCHAS_DIR" ]; then
+        for f in "$GOTCHAS_DIR"/*.md; do
+          [ -e "$f" ] || continue
+          [ "$f" = "$active_file" ] && continue
+          local base; base=$(basename "$f" .md)
+          [ "$base" = "README" ] && continue
+          render_gotcha_entry "$f" "false"
+        done
+      fi
+      echo ""
+      echo -e "${DIM}${hr}${RESET}"
+      echo -e "${BOLD}${CYAN}▣ CONVENTIONS${RESET} ${DIM}(.harness/conventions)${RESET}"
+      render_conventions_summary "$active"
+      echo ""
+      echo -e "${DIM}${hr}${RESET}"
+      render_memory_summary
+      ;;
+  esac
 }
 
 trap 'exit 0' INT TERM

@@ -112,7 +112,7 @@ launch_iterm2_team() {
             write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
           end tell
 
-          -- Split right → Gotcha & Memory
+          -- Split right → Gotcha & Memory (combined view; tmux 경로는 3분할 사용)
           set dashPane to (split vertically with default profile)
           tell dashPane
             write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}'"
@@ -163,7 +163,7 @@ launch_iterm2_solo() {
             write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
           end tell
 
-          -- Split right → Gotcha · Memory · Conventions
+          -- Split right → Gotcha · Memory · Conventions (combined view; tmux 경로는 3분할)
           set dashPane to (split vertically with default profile)
           tell dashPane
             write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}'"
@@ -198,12 +198,21 @@ launch_tmux_team() {
   PANE_ARCHIVE=$(tmux split-window -v -p 35 -t "$PANE_DASH" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"'")
 
+  # Gotcha 패널을 3 개 sub-pane 으로 수직 분할: Gotchas / Conventions / Memory
+  # 각 pane 은 tmux copy-mode (prefix + [) 로 독립 스크롤 가능
+  PANE_CONV=$(tmux split-window -v -p 60 -t "$PANE_GOTCHA" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\" --mode conventions'")
+  PANE_MEM=$(tmux split-window -v -p 50 -t "$PANE_CONV" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\" --mode memory'")
+
   tmux send-keys -t "$PANE_DASH"   "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
-  tmux send-keys -t "$PANE_GOTCHA" "bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\"" Enter
+  tmux send-keys -t "$PANE_GOTCHA" "bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\" --mode gotcha" Enter
 
   tmux select-pane -t "$PANE_DASH"    -T "Dashboard"
   tmux select-pane -t "$PANE_ARCHIVE" -T "Archive Prompt"
-  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotcha · Memory · Conventions"
+  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotchas (scrollable: prefix + [ )"
+  tmux select-pane -t "$PANE_CONV"    -T "Conventions (scrollable: prefix + [ )"
+  tmux select-pane -t "$PANE_MEM"     -T "Shared Memory (scrollable: prefix + [ )"
   tmux select-pane -t "$PANE_T1"      -T "TEAM 1"
   tmux select-pane -t "$PANE_T2"      -T "TEAM 2"
   tmux select-pane -t "$PANE_T3"      -T "TEAM 3"
@@ -224,12 +233,20 @@ launch_tmux_solo() {
   PANE_HISTORY=$(tmux split-window -v -p 35 -t "$PANE_DASH" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
     "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-prompt-history.sh\" \"${PROJECT_ROOT}\"'")
 
+  # Gotcha 패널을 3 개 sub-pane 으로 수직 분할: Gotchas / Conventions / Memory
+  PANE_CONV=$(tmux split-window -v -p 60 -t "$PANE_GOTCHA" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\" --mode conventions'")
+  PANE_MEM=$(tmux split-window -v -p 50 -t "$PANE_CONV" -c "$PROJECT_ROOT" -P -F '#{pane_id}' \
+    "bash --norc --noprofile -c 'exec bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\" --mode memory'")
+
   tmux send-keys -t "$PANE_DASH"   "bash \"${SCRIPT_DIR}/harness-dashboard.sh\" \"${PROJECT_ROOT}\"" Enter
-  tmux send-keys -t "$PANE_GOTCHA" "bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\"" Enter
+  tmux send-keys -t "$PANE_GOTCHA" "bash \"${SCRIPT_DIR}/harness-gotcha-memory.sh\" \"${PROJECT_ROOT}\" --mode gotcha" Enter
 
   tmux select-pane -t "$PANE_DASH"    -T "Dashboard"
   tmux select-pane -t "$PANE_HISTORY" -T "Prompt History"
-  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotcha · Memory · Conventions"
+  tmux select-pane -t "$PANE_GOTCHA"  -T "Gotchas (scrollable: prefix + [ )"
+  tmux select-pane -t "$PANE_CONV"    -T "Conventions (scrollable: prefix + [ )"
+  tmux select-pane -t "$PANE_MEM"     -T "Shared Memory (scrollable: prefix + [ )"
   tmux select-pane -t "$PANE_MONITOR" -T "Monitor"
   tmux select-pane -t "$PANE_DASH"
 
