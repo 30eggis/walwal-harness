@@ -161,7 +161,35 @@ ORCHESTRATION LOOP:
 
 #### Step 4a: Merge + Unblock (PASS 처리)
 
-Worker가 PASS로 반환되면:
+**⚠ HARD GATE — Runtime Bug 검출 시 PASS 처리 금지**
+
+Worker 가 PASS 로 반환했더라도, 보고서에 다음 신호가 하나라도 포함되어 있으면 **PASS 처리하지 말고 즉시 FAIL 로 전환**한다. carry-over / 다음 sprint 미루기 절대 금지 — 견고한 기반 위에서만 다음 sprint 로 진행한다.
+
+검출 시그널 (worker 반환 텍스트 검색):
+- "runtime bug", "런타임 버그", "런타임 에러", "runtime error"
+- "RSC", "Client Component" 경계 위반 (use client 누락 등)
+- "not-found", "error.tsx", "loading.tsx" 누락/오류
+- "typed-routes", "TypeScript route" 미스매치
+- "console error", "uncaught", "Hydration error", "hydration mismatch"
+- 그 외 worker 가 자신의 결과를 "carry-over", "다음 sprint 에서 처리", "추후 수정", "follow-up" 으로 표현하는 모든 케이스
+
+위 신호 검출 시 처리:
+```bash
+# 1) PASS 가 아니라 FAIL 로 큐 업데이트
+bash scripts/harness-queue-manager.sh fail {FEATURE_ID} .
+
+# 2) 즉시 같은 feature 를 재투입 (worktree 재사용 또는 새 worker)
+#    Agent 프롬프트에 worker 가 보고한 버그 목록을 명시하고
+#    "이 sprint 안에서 fix 완료될 때까지 done 처리 금지" 강제
+```
+
+3) Sprint 전환 게이트: `next-sprint` 호출 전에 carry-over / known-bug 가 0 인지 반드시 확인. 1 건이라도 남아있으면 sprint advance 금지 — 같은 sprint 안에서 fix sprint 를 한 사이클 더 돈다.
+
+이 룰을 위반한 사례: F-209 평가에서 "monitoring page RSC/CC, not-found.tsx, sidebar-nav typed-routes" 3 개 런타임 버그를 인지한 채 PASS 처리하고 Sprint 4 carry-over 로 미룬 적이 있다. 사용자 명시: "오류가 있는 것을 인지한 채로 스프린트를 넘어가는 행위는 절대 용납할 수 없다."
+
+---
+
+위 hard gate 를 통과한(=깨끗한 PASS) 경우에만:
 
 1. **Worktree branch 확인**: Agent 반환 결과에서 worktree path와 branch 확인
 2. **Main에 merge**:
