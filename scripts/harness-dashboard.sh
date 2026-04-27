@@ -82,12 +82,28 @@ render_solo_sprint_overview() {
   fi
 
   local pipeline sprint_num sprint_status current_agent agent_status retry_count
-  pipeline=$(jq -r '.pipeline // "?"' "$PROGRESS")
-  sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS")
-  sprint_status=$(jq -r '.sprint.status // "init"' "$PROGRESS")
-  current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS")
-  agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS")
-  retry_count=$(jq -r '.sprint.retry_count // 0' "$PROGRESS")
+  # progress.json 이 깨졌을 때 jq 가 stderr 로 에러를 뿜고 stdout 은 빈 문자열을 반환.
+  # 모든 jq 호출에 2>/dev/null + bash fallback 으로 변수 기본값 보장.
+  if ! jq empty "$PROGRESS" 2>/dev/null; then
+    echo -e "  ${RED}⚠ .harness/progress.json 이 손상되었습니다 (invalid JSON).${RESET}"
+    echo -e "  ${DIM}복구: cp .harness/progress.json{,.bak} && jq . .harness/progress.json.bak${RESET}"
+    echo -e "  ${DIM}또는: npx @walwal-harness/cli@latest --force (전체 재초기화)${RESET}"
+    echo ""
+    return
+  fi
+  pipeline=$(jq -r '.pipeline // "?"' "$PROGRESS" 2>/dev/null)
+  sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
+  sprint_status=$(jq -r '.sprint.status // "init"' "$PROGRESS" 2>/dev/null)
+  current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
+  agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
+  retry_count=$(jq -r '.sprint.retry_count // 0' "$PROGRESS" 2>/dev/null)
+  # 빈 문자열 → 기본값 (jq 가 silently fail 한 잔여 케이스 대비)
+  pipeline="${pipeline:-?}"
+  sprint_num="${sprint_num:-0}"
+  sprint_status="${sprint_status:-init}"
+  current_agent="${current_agent:-none}"
+  agent_status="${agent_status:-pending}"
+  retry_count="${retry_count:-0}"
 
   local status_color="$RESET"
   case "$agent_status" in
