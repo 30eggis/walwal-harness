@@ -112,26 +112,35 @@ launch_iterm2_team() {
             write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
           end tell
 
-          -- Split right → Gotcha & Memory (combined view; tmux 경로는 3분할 사용)
-          set dashPane to (split vertically with default profile)
-          tell dashPane
-            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}'"
+          -- Split right → Gotchas (top of Rules column, full-height initially)
+          set gotchaPane to (split vertically with default profile)
+          tell gotchaPane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}' --mode gotcha"
 
-            -- Split right → Team 1
+            -- IMPORTANT: Team 컬럼을 먼저 분리 (전체 높이 유지). 그 후에 gotchaPane 을 horizontal 분할.
             set t1Pane to (split vertically with default profile)
             tell t1Pane
               write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}' --team 1"
 
-              -- Split down → Team 2
               set t2Pane to (split horizontally with default profile)
               tell t2Pane
                 write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}' --team 2"
 
-                -- Split down → Team 3
                 set t3Pane to (split horizontally with default profile)
                 tell t3Pane
                   write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}' --team 3"
                 end tell
+              end tell
+            end tell
+
+            -- Team 컬럼 분리 후, gotchaPane (Rules 컬럼) 을 horizontal 두 번 split → Conventions / Memory
+            set convPane to (split horizontally with default profile)
+            tell convPane
+              write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}' --mode conventions"
+
+              set memPane to (split horizontally with default profile)
+              tell memPane
+                write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}' --mode memory"
               end tell
             end tell
           end tell
@@ -163,15 +172,26 @@ launch_iterm2_solo() {
             write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-prompt-history.sh' '${PROJECT_ROOT}'"
           end tell
 
-          -- Split right → Gotcha · Memory · Conventions (combined view; tmux 경로는 3분할)
-          set dashPane to (split vertically with default profile)
-          tell dashPane
-            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}'"
+          -- Split right → Gotchas (top of Rules column, full-height initially)
+          set gotchaPane to (split vertically with default profile)
+          tell gotchaPane
+            write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}' --mode gotcha"
 
-            -- Split right → Monitor (solo 단일 에이전트 라이프사이클)
+            -- Monitor 컬럼을 먼저 분리 (전체 높이 유지)
             set monPane to (split vertically with default profile)
             tell monPane
               write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-monitor.sh' '${PROJECT_ROOT}'"
+            end tell
+
+            -- Monitor 분리 후, gotchaPane (Rules 컬럼) 을 horizontal 두 번 split → Conventions / Memory
+            set convPane to (split horizontally with default profile)
+            tell convPane
+              write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}' --mode conventions"
+
+              set memPane to (split horizontally with default profile)
+              tell memPane
+                write text "cd '${PROJECT_ROOT}' && bash '${SCRIPT_DIR}/harness-gotcha-memory.sh' '${PROJECT_ROOT}' --mode memory"
+              end tell
             end tell
           end tell
         end tell
