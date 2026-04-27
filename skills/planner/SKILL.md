@@ -36,8 +36,9 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
    - `completed_agents`에 `"planner"` 추가
    - `next_agent` → 파이프라인에 따라 결정 (FULLSTACK/BE-ONLY: `"generator-backend"`, FE-ONLY: `"generator-frontend"`)
 2. `.harness/progress.log`에 요약 추가
-3. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-4. 출력: `"✓ Planner 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+3. 출력: `"✓ Planner 완료. plan.md / api-contract.json 검토 후 승인 신호를 주세요. 승인 시 /harness-next 자동 진행."`
+4. **사용자 승인 게이트**: 사용자의 명시적 승인 ("승인", "ok", "다음", "진행", "go" 등) 을 기다린 후, **`/harness-next` 슬래시 명령을 호출하여 다음 에이전트로 자동 핸드오프**.
+5. 사용자가 피드백/수정 요청을 하면 plan.md / feature-list.json / api-contract.json 을 갱신하고 다시 승인 요청. 승인 없이는 `/harness-next` 호출 금지.
 
 ## Startup
 

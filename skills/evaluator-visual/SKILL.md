@@ -43,8 +43,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
    - `failure` 필드 초기화
 3. `feature-list.json`의 통과 feature `passes`에 `"evaluator-visual"` 추가
 4. `.harness/progress.log`에 PASS 요약 추가
-5. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-6. 출력: `"✓ Evaluator-Visual PASS. bash scripts/harness-next.sh 실행하여 아카이브 진행."`
+5. 출력: `"✓ Evaluator-Visual PASS. /harness-next 자동 진행 (아카이브)."`
+6. **즉시 `/harness-next` 슬래시 명령을 호출하여 아카이브 단계로 자동 핸드오프** (Solo 모드. Team 모드는 Lead가 별도 오케스트레이션).
 
 ### On Fail
 1. **Screenshot Cleanup** — PASS 와 동일하게 스크린샷 파일 삭제 (FAIL 시에도 정리 필수).
@@ -58,8 +58,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
    - `sprint.retry_count` 증가
 3. `sprint.retry_count >= 10`이면 `agent_status` → `"blocked"`, 사용자 개입 요청
 4. `.harness/progress.log`에 FAIL 요약 추가
-5. **STOP.**
-6. 출력: `"✖ Evaluator-Visual FAIL. bash scripts/harness-next.sh 실행하여 재작업 대상 확인."`
+5. 출력: `"✖ Evaluator-Visual FAIL. /harness-next 자동 진행 (재작업 대상으로 라우팅)."`
+6. **즉시 `/harness-next` 슬래시 명령을 호출하여 `failure.retry_target` 으로 자동 핸드오프** (Solo 모드).
 
 ## FE Playwright Mandatory Rule (v5.4)
 

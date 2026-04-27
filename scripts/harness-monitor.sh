@@ -137,7 +137,16 @@ render_team_section() {
   local have_logs=0
   if [ -f "$PROGRESS_LOG" ]; then
     local matched
-    matched=$(grep -E "team-${team_num}\b|team_${team_num}\b" "$PROGRESS_LOG" 2>/dev/null | tail -"$log_lines")
+    # Team panel 필터: agent 필드($2)가 해당 team 번호를 포함하는 모든 prefix 매칭.
+    # 허용: team-N, team_N, eval-N, eval_N, gen-N, gen-fe-N, worker-N, lead-N 등
+    # (워커가 evaluator 분리를 위해 eval-N 으로 로깅해도 누락되지 않게 한다)
+    matched=$(awk -F'|' -v n="${team_num}" '
+      {
+        # $2 = agent (앞뒤 공백 trim)
+        a=$2; gsub(/^ +| +$/,"",a)
+        # agent 토큰이 [-_]N\b 로 끝나거나 -N- / _N_ 처럼 N이 토큰 경계에 포함되면 매치
+        if (match(a, "(^|[-_])" n "([-_]|$)")) print
+      }' "$PROGRESS_LOG" 2>/dev/null | tail -"$log_lines")
     if [ -n "$matched" ]; then
       have_logs=1
       local cols

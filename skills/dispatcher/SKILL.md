@@ -55,8 +55,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
      ```
      아카이빙 후 `dispatch.id` 는 `null` 로 리셋되므로, 다음 dispatcher 실행 시 새 D-NNN 이 할당된다.
 2. `.harness/progress.log`에 요약 한 줄 추가
-3. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-4. 출력: `"✓ Dispatcher 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+3. 출력: `"✓ Dispatcher 완료. /harness-next 자동 진행."`
+4. **즉시 `/harness-next` 슬래시 명령을 호출하여 다음 에이전트로 자동 핸드오프** (Solo 모드. Team 모드는 Lead가 별도 오케스트레이션). Brainstorming/Planner 단계가 아니면 사용자 승인 게이트 없음.
 
 ## Auto-Routing (UserPromptSubmit Hook)
 

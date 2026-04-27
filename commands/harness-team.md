@@ -269,6 +269,13 @@ LOG="$HARNESS_ROOT/.harness/progress.log"
 logev() { echo "$(date +'%Y-%m-%d %H:%M') | team-{N} | $1 | $2" >> "$LOG"; }
 ```
 
+**⚠ Prefix 규칙 (필수, 위반 금지)**
+
+- 두 번째 필드($2)는 **반드시 `team-{N}`** 으로 통일한다 (`{N}` 자리에 팀 번호).
+- Worker 가 "evaluator 분간이 더 깔끔해 보인다" 는 이유로 `eval-{N}`, `gen-fe-{N}`, `worker-{N}` 등으로 임의 변경하지 말 것. Dashboard/monitor 의 team panel 필터가 prefix 단위로 매칭하며, 과거 실제로 `eval-{N}` 변형 때문에 7개 워커의 evaluator 라인이 패널에서 모두 누락된 사고가 있었다.
+- Generator 와 Evaluator 의 구분은 prefix 가 아니라 **action 필드($3)** 에서 한다: `gen-*` vs `eval-*` action 으로 충분히 색상/아이콘 분리됨.
+- monitor 필터는 `team-{N}` 외 변형도 매칭하도록 robust 하게 보강되었지만, 그래도 위 규칙은 단일 진실의 원천으로 유지한다.
+
 | ACTION | 사용 시점 | DETAIL 예시 (필수 포함 정보) |
 |--------|-----------|------------------------------|
 | `gen-start`  | Gen Phase 시작 (1회) | `F-001 "사용자 회원가입 API" start — goal=POST /users, 6 AC` — **Feature 제목+목표** 포함 필수 |
@@ -336,6 +343,8 @@ HARNESS_ROOT=$(git worktree list | head -1 | awk '{print $1}')
 LOG=\"$HARNESS_ROOT/.harness/progress.log\"
 logev() { echo \"$(date +'%Y-%m-%d %H:%M') | team-{N} | $1 | $2\" >> \"$LOG\"; }
 ```
+
+**⚠ 두 번째 필드($2)는 반드시 `team-{N}` 그대로 사용.** Evaluator 라고 `eval-{N}` 으로 바꾸지 말 것 — dashboard/monitor 가 prefix 로 팀을 묶어 렌더링하므로 변형 시 패널에서 라인이 누락된다. Generator/Evaluator 구분은 action 필드($3 = `gen-*` / `eval-*`)에서 자동으로 된다.
 
 **로깅 시점:**
 1. 평가 시작 즉시: `logev eval-start \"{FEATURE_ID} evaluating — {AC수} ACs\"`

@@ -41,8 +41,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
    - `failure` 필드 초기화
 2. `feature-list.json`의 통과 feature `passes`에 `"evaluator-code-quality"` 추가
 3. `.harness/progress.log`에 PASS 요약 추가
-4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-5. 출력: `"✓ Evaluator-Code-Quality PASS. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+4. 출력: `"✓ Evaluator-Code-Quality PASS. /harness-next 자동 진행."`
+5. **즉시 `/harness-next` 슬래시 명령을 호출하여 다음 에이전트로 자동 핸드오프** (Solo 모드. Team 모드는 Lead가 별도 오케스트레이션).
 
 ### On Fail
 1. progress.json 업데이트:
@@ -55,8 +55,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
    - `sprint.retry_count` 증가
 2. `sprint.retry_count >= 10`이면 `agent_status` → `"blocked"`, 사용자 개입 요청
 3. `.harness/progress.log`에 FAIL 요약 추가
-4. **STOP.**
-5. 출력: `"✖ Evaluator-Code-Quality FAIL. bash scripts/harness-next.sh 실행하여 재작업 대상 확인."`
+4. 출력: `"✖ Evaluator-Code-Quality FAIL. /harness-next 자동 진행 (재작업 대상으로 라우팅)."`
+5. **즉시 `/harness-next` 슬래시 명령을 호출하여 `failure.retry_target` 으로 자동 핸드오프** (Solo 모드).
 
 ## Critical Mindset
 

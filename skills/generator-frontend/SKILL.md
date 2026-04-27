@@ -39,8 +39,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
    - `failure` 필드 초기화 (retry 성공 시)
 2. `feature-list.json` 의 해당 feature `passes` 에 `"generator-frontend"` 추가
 3. `.harness/progress.log` 에 요약 추가
-4. **STOP. 다음 에이전트를 직접 호출하지 않는다.**
-5. 출력: `"✓ Generator-Frontend 완료. bash scripts/harness-next.sh 실행하여 다음 단계 확인."`
+4. 출력: `"✓ Generator-Frontend 완료. /harness-next 자동 진행."`
+5. **즉시 `/harness-next` 슬래시 명령을 호출하여 다음 에이전트로 자동 핸드오프** (Solo 모드. Team 모드는 Lead가 별도 오케스트레이션).
 
 ## Startup (Adaptive Loading)
 
