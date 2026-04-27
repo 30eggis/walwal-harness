@@ -54,7 +54,12 @@ RESET="\033[0m"
 BG_YELLOW="\033[43m"
 
 REFRESH_SEC="${HARNESS_REFRESH:-5}"
-RECENT_N="${HARNESS_GOTCHA_RECENT:-3}"
+# 단독 mode 패널은 전체 표시 (충분한 세로 공간), 통합 뷰만 최근 3 개로 압축.
+if [ "$MODE" = "all" ]; then
+  RECENT_N="${HARNESS_GOTCHA_RECENT:-3}"
+else
+  RECENT_N="${HARNESS_GOTCHA_RECENT:-9999}"
+fi
 
 # 렌더 캐시 — 내용이 바뀌지 않으면 redraw 스킵
 LAST_SIG=""
@@ -104,9 +109,12 @@ count_items() {
 }
 
 # 최근 N개 항목 제목 추출 (### 헤딩 — 파일 하단부가 최신이라 tail)
+# rule_id 마커 주석(<!-- rule_id: ... -->) 은 시각적 노이즈라 제거
 recent_titles() {
   local f="$1" n="$2"
-  grep '^### ' "$f" 2>/dev/null | tail -n "$n" | sed 's/^### //'
+  grep '^### ' "$f" 2>/dev/null \
+    | tail -n "$n" \
+    | sed -E 's/^### //; s/[[:space:]]*<!--[[:space:]]*rule_id:[[:space:]]*[^>]*-->[[:space:]]*$//'
 }
 
 # agent 이름 → 파일 basename 매핑 (정확/접두 일치)
