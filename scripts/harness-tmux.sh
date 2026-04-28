@@ -79,10 +79,28 @@ if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT/.harness" ]; then
   exit 1
 fi
 
-# Auto-detect mode from progress.json if not specified
+# Auto-detect mode from progress.json if not specified.
+# Self-heal: feature-queue.json 에 in_progress 가 있으면 mode 와 무관하게 team 으로 간주.
+# (SessionStart 훅 외 경로에서 dashboard/tmux 가 stale solo 를 표시하던 버그)
 if [ -z "$MODE" ]; then
   if command -v jq &>/dev/null && [ -f "$PROJECT_ROOT/.harness/progress.json" ]; then
     MODE=$(jq -r '.mode // "solo"' "$PROJECT_ROOT/.harness/progress.json" 2>/dev/null)
+    QUEUE_FILE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
+    if [ "$MODE" != "team" ] && [ -f "$QUEUE_FILE" ]; then
+      ACTIVE_COUNT=$(jq -r '(.queue.in_progress | length) // 0' "$QUEUE_FILE" 2>/dev/null || echo 0)
+      if [ "${ACTIVE_COUNT:-0}" -gt 0 ]; then
+        HEAL_TEAMS=$ACTIVE_COUNT
+        [ "$HEAL_TEAMS" -gt 3 ] && HEAL_TEAMS=3
+        bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
+          ".mode = \"team\" | .team_state.active_teams = ${HEAL_TEAMS} | .team_state.paused_at = null" \
+          2>/dev/null
+        MODE="team"
+        echo "# tmux: mode auto-healed to 'team' (queue had ${ACTIVE_COUNT} in_progress)"
+        if [ -f "$PROJECT_ROOT/.harness/progress.log" ]; then
+          echo "$(date +'%Y-%m-%d %H:%M') | system | heal | mode | tmux reset solo→team (queue had ${ACTIVE_COUNT} in_progress)" >> "$PROJECT_ROOT/.harness/progress.log"
+        fi
+      fi
+    fi
   fi
   MODE="${MODE:-solo}"
 fi

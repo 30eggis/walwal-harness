@@ -46,7 +46,27 @@ get_term_width() {
 
 get_mode() {
   if [ -f "$PROGRESS" ] && command -v jq &>/dev/null; then
-    jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null
+    local raw_mode queue active
+    raw_mode=$(jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null)
+    queue="$(dirname "$PROGRESS")/actions/feature-queue.json"
+    if [ "$raw_mode" != "team" ] && [ -f "$queue" ]; then
+      active=$(jq -r '(.queue.in_progress | length) // 0' "$queue" 2>/dev/null || echo 0)
+      if [ "${active:-0}" -gt 0 ]; then
+        local heal_teams=$active
+        [ "$heal_teams" -gt 3 ] && heal_teams=3
+        local SCRIPT_DIR_LOCAL
+        SCRIPT_DIR_LOCAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        bash "$SCRIPT_DIR_LOCAL/harness-progress-set.sh" "$(dirname "$(dirname "$PROGRESS")")" \
+          ".mode = \"team\" | .team_state.active_teams = ${heal_teams} | .team_state.paused_at = null" \
+          2>/dev/null
+        if [ -f "$(dirname "$PROGRESS")/progress.log" ]; then
+          echo "$(date +'%Y-%m-%d %H:%M') | system | heal | mode | dashboard reset ${raw_mode}→team (queue had ${active} in_progress)" >> "$(dirname "$PROGRESS")/progress.log"
+        fi
+        echo "team"
+        return
+      fi
+    fi
+    echo "$raw_mode"
   else
     echo "solo"
   fi
