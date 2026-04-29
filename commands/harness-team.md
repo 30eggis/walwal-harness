@@ -447,6 +447,46 @@ Lead에게 반환 **첫 줄에 반드시 `RATE_LIMIT` 태그 포함**:
 
 ---
 
+## Ad-hoc Feature 추가 — Canonical Path (필수)
+
+Lead 가 sprint 진행 중 핫픽스 / 새 sprint feature 를 추가해야 할 때 **`feature-queue.json` 을 jq 로 직접 편집하면 안 된다**. feature-list.json 과 큐가 갈라져서 dashboard 가 누락 표시하고, Planner/Evaluator 가 AC 를 찾지 못한다.
+
+**금지**:
+```bash
+# ❌ 절대 금지 — feature-list 우회
+jq '.queue.ready += ["F-XXX"]' .harness/actions/feature-queue.json > /tmp/q.json && mv /tmp/q.json .harness/actions/feature-queue.json
+```
+
+**Canonical**:
+```bash
+# ✅ 옵션 1 — 새 sprint 의 정식 feature 들이면 Planner 재호출
+#    Planner 가 feature-list.json 에 sprint=N 으로 append → next-sprint 가 큐 채움.
+
+# ✅ 옵션 2 — 단발 핫픽스면 enqueue 명령 사용 (feature-list append + 큐 insert 원자적)
+cat > /tmp/feat.json <<EOF
+{
+  "id": "F-XXX",
+  "title": "auth refresh token lifecycle hotfix",
+  "sprint": 8,
+  "depends_on": [],
+  "layer": "fe",
+  "service": "frontend",
+  "acceptance_criteria": [{"id":"AC-1","description":"...","type":"manual","verify":{"tool":"grep","steps":["..."]}}]
+}
+EOF
+bash scripts/harness-queue-manager.sh enqueue /tmp/feat.json
+```
+
+**무결성 체크** (Lead 루프 진입 직전 권장):
+```bash
+bash scripts/harness-queue-manager.sh integrity
+# 종료 코드 0 = OK, 1 = orphan feature 발견 (feature-list 에 없는 queue 항목)
+```
+
+이 룰을 위반한 사례: Sprint 8 (2026-04-29) 에 F-716, F-800~F-806 이 jq 직접 편집으로 큐에만 등록되어 dashboard Features 패널에서 800 번대가 모두 누락된 적 있음. **dashboard 는 v5.9.6+ 에서 union 렌더 + orphan 경고로 가시화하지만, 가시화는 차단이 아님 — Lead 가 위 canonical path 만 쓸 것**.
+
+---
+
 ## 핵심 원칙
 
 ### Worker = 1 Feature Only

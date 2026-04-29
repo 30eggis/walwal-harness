@@ -236,14 +236,23 @@ render_team_queue_summary() {
   failed=$(jq '.queue.failed | length' "$QUEUE" 2>/dev/null || echo 0)
 
   # passed 는 queue.passed ∪ feature-list.json 의 self-passed 를 dedup 합집합으로 계산
-  # (과거 sprint 에서 PASS 되어 queue 에서 빠진 feature 도 카운트)
+  # total 도 feature-list IDs ∪ queue 전체 IDs 합집합으로 계산 — 새 sprint feature 가
+  # queue 에만 추가되고 feature-list 에 누락되어도 누락 없이 카운트 (예: F-800+ Sprint 8)
   if [ -f "$FEATURES" ]; then
     passed=$(jq -r --slurpfile q "$QUEUE" '
       ($q[0].queue.passed // []) as $qp |
       ([.features[] | select((.passes // []) | any(. == "evaluator-functional" or . == "evaluator-visual" or . == "evaluator-code-quality")) | .id]) as $sp |
       ($qp + $sp | unique | length)
     ' "$FEATURES" 2>/dev/null || echo 0)
-    total=$(jq '.features | length' "$FEATURES" 2>/dev/null || echo 0)
+    total=$(jq -r --slurpfile q "$QUEUE" '
+      ([.features[].id]) as $fl |
+      (($q[0].queue.ready // []) +
+       ($q[0].queue.passed // []) +
+       (($q[0].queue.failed // []) | if type == "object" then keys else . end) +
+       (($q[0].queue.in_progress // {}) | keys) +
+       (($q[0].queue.blocked // {}) | keys)) as $qids |
+      ($fl + $qids | unique | length)
+    ' "$FEATURES" 2>/dev/null || echo 0)
   else
     passed=$(jq '.queue.passed | length' "$QUEUE" 2>/dev/null || echo 0)
     total=$((ready + blocked + in_prog + passed + failed))
@@ -260,6 +269,24 @@ render_team_queue_summary() {
   for ((i=0; i<empty; i++)); do bar+="░"; done
 
   echo -e "  ${bar} ${passed}/${total} (${pct}%)  R:${GREEN}${ready}${RESET} B:${YELLOW}${blocked}${RESET} P:${CYAN}${in_prog}${RESET} ${GREEN}✓${passed}${RESET} ${RED}✗${failed}${RESET}"
+
+  # Integrity warn — 큐에 있지만 feature-list 에 없는 orphan feature 가 있으면 경고.
+  # 발생 원인: Lead 가 jq 로 큐 직접 편집 (canonical path = enqueue 명령 사용).
+  if [ -f "$FEATURES" ]; then
+    local orphan_count
+    orphan_count=$(jq -r --slurpfile q "$QUEUE" '
+      ([.features[].id]) as $fl |
+      (($q[0].queue.ready // []) +
+       ($q[0].queue.passed // []) +
+       (($q[0].queue.failed // []) | if type == "object" then keys else . end) +
+       (($q[0].queue.in_progress // {}) | keys) +
+       (($q[0].queue.blocked // {}) | keys)) as $qids |
+      ($qids - $fl) | unique | length
+    ' "$FEATURES" 2>/dev/null || echo 0)
+    if [ "${orphan_count:-0}" -gt 0 ]; then
+      echo -e "  ${YELLOW}⚠ ${orphan_count} feature(s) in queue but not in feature-list.json${RESET} ${DIM}(use: queue-manager enqueue)${RESET}"
+    fi
+  fi
 }
 
 render_team_status() {
@@ -313,19 +340,23 @@ render_team_features() {
   echo ""
   echo -e "${BOLD}Features${RESET}"
 
+  # feature-list IDs ∪ queue 전체 IDs 합집합을 iterate.
+  # feature-list 에 등록 안 된 queue-only feature 는 name="(queue)" 로 표시.
   jq -r --slurpfile q "$QUEUE" '
     ($q[0].queue.passed // []) as $passed |
-    ($q[0].queue.failed // []) as $failed |
+    ($q[0].queue.failed // []) as $failed_raw |
+    (if ($failed_raw | type) == "object" then ($failed_raw | keys) else $failed_raw end) as $failed |
     ($q[0].queue.ready // []) as $ready |
     ($q[0].queue.in_progress // {}) as $prog |
     ($q[0].queue.blocked // {}) as $blocked |
-    .features[] |
-    .id as $fid |
-    (.name // .title // .description // "?" | if length > 18 then .[0:16] + ".." else . end) as $fname |
-    # passed 판정: queue.passed 또는 feature.passes 에 evaluator-functional/visual/code-quality 가 있으면 PASS.
-    # 과거 sprint 에서 PASS 된 feature 가 새 sprint queue 재생성 시 queue.passed 에서 누락되어도
-    # feature-list.json 의 passes 배열은 이력으로 남아있으므로, 거기서도 검사한다.
-    ((.passes // []) | any(. == "evaluator-functional" or . == "evaluator-visual" or . == "evaluator-code-quality")) as $self_passed |
+    ([.features[] | {id: .id, name: (.name // .title // .description // "?"), passes: (.passes // [])}]) as $fl |
+    ([$fl[] | {(.id): .}] | add // {}) as $fl_map |
+    (([$fl[].id]) + $ready + $passed + $failed + ($prog | keys) + ($blocked | keys) | unique) as $all_ids |
+    $all_ids[] |
+    . as $fid |
+    ($fl_map[$fid] // {name: "(queue)", passes: []}) as $f |
+    ($f.name | if length > 18 then .[0:16] + ".." else . end) as $fname |
+    (($f.passes // []) | any(. == "evaluator-functional" or . == "evaluator-visual" or . == "evaluator-code-quality")) as $self_passed |
     (if ($fid | IN($passed[])) or $self_passed then "P"
      elif $prog[$fid] then "I|\($prog[$fid].team)|\($prog[$fid].phase)"
      elif ($fid | IN($failed[])) then "F"

@@ -541,6 +541,126 @@ cmd_resume_probe() {
   exit 1
 }
 
+# ══════════════════════════════════════════
+# enqueue — Append feature to feature-list.json AND insert into queue (canonical path).
+#
+# Lead 가 ad-hoc 핫픽스 / 새 sprint feature 를 추가할 때 jq 로 큐를 직접 편집하면
+# feature-list.json 과 큐가 갈라진다 (실제 사고: F-716, F-800~F-806 이 큐에만 등록).
+# 이 명령은 feature-list append → queue insert (deps 미해소면 blocked) 를 한 트랜잭션으로 처리.
+#
+# Usage: enqueue <feature-json-file>   # 파일 경로
+#        enqueue -                     # stdin 으로 JSON
+#
+# 입력 JSON 최소 필드: {id, title, sprint, depends_on?, layer?, service?, acceptance_criteria?}
+# ══════════════════════════════════════════
+cmd_enqueue() {
+  local input="${1:-}"
+  if [ -z "$input" ]; then
+    echo "[queue] enqueue: feature JSON 파일 경로 또는 '-' (stdin) 필요" >&2
+    exit 1
+  fi
+  if [ ! -f "$FEATURES" ]; then echo "[queue] feature-list.json not found." >&2; exit 1; fi
+  if [ ! -f "$QUEUE" ]; then echo "[queue] feature-queue.json not found. init 먼저." >&2; exit 1; fi
+
+  local feat_json
+  if [ "$input" = "-" ]; then
+    feat_json=$(cat)
+  else
+    feat_json=$(cat "$input")
+  fi
+
+  if ! echo "$feat_json" | jq -e '.id and .title and .sprint' >/dev/null 2>&1; then
+    echo "[queue] enqueue: id/title/sprint 필수 필드 누락" >&2
+    exit 1
+  fi
+
+  local fid
+  fid=$(echo "$feat_json" | jq -r '.id')
+
+  acquire_queue_lock
+
+  if jq -e --arg id "$fid" '.features[] | select(.id == $id)' "$FEATURES" >/dev/null 2>&1; then
+    release_queue_lock
+    echo "[queue] enqueue: $fid 이 feature-list.json 에 이미 존재" >&2
+    exit 1
+  fi
+
+  if jq -e --arg id "$fid" '
+    ($id | IN(.queue.ready[]?,.queue.passed[]?)) or
+    (.queue.in_progress[$id]?) or (.queue.blocked[$id]?) or
+    (.queue.failed[$id]? // (.queue.failed | type == "array" and ($id | IN(.queue.failed[]?))))
+  ' "$QUEUE" >/dev/null 2>&1; then
+    release_queue_lock
+    echo "[queue] enqueue: $fid 이 큐에 이미 존재" >&2
+    exit 1
+  fi
+
+  local tmp_features="${FEATURES}.tmp.$$"
+  if ! jq --argjson new "$feat_json" '.features += [$new]' "$FEATURES" > "$tmp_features" 2>/dev/null; then
+    rm -f "$tmp_features"; release_queue_lock
+    echo "[queue] enqueue: feature-list.json 업데이트 실패" >&2; exit 1
+  fi
+  mv "$tmp_features" "$FEATURES"
+
+  local deps unmet
+  deps=$(echo "$feat_json" | jq -c '.depends_on // []')
+  unmet=$(jq --argjson d "$deps" '
+    ($d - (.queue.passed // [])) | length
+  ' "$QUEUE" 2>/dev/null || echo 0)
+
+  local tmp_queue="${QUEUE}.tmp.$$"
+  if [ "${unmet:-0}" -gt 0 ]; then
+    jq --arg id "$fid" --argjson deps "$deps" '.queue.blocked[$id] = $deps' "$QUEUE" > "$tmp_queue" 2>/dev/null
+  else
+    jq --arg id "$fid" '.queue.ready += [$id]' "$QUEUE" > "$tmp_queue" 2>/dev/null
+  fi
+  if [ ! -s "$tmp_queue" ]; then
+    rm -f "$tmp_queue"; release_queue_lock
+    echo "[queue] enqueue: feature-queue.json 업데이트 실패" >&2; exit 1
+  fi
+  mv "$tmp_queue" "$QUEUE"
+
+  release_queue_lock
+
+  if [ "${unmet:-0}" -gt 0 ]; then
+    echo "[queue] enqueue: $fid → blocked (unmet deps: ${unmet})"
+  else
+    echo "[queue] enqueue: $fid → ready"
+  fi
+}
+
+# ══════════════════════════════════════════
+# integrity — feature-list ↔ queue divergence 검사.
+# 큐에 있지만 feature-list 에 없는 feature ID 를 출력. 0건이면 종료코드 0.
+# ══════════════════════════════════════════
+cmd_integrity() {
+  if [ ! -f "$FEATURES" ] || [ ! -f "$QUEUE" ]; then
+    echo "[integrity] feature-list 또는 feature-queue 없음"
+    exit 0
+  fi
+  local orphans
+  orphans=$(jq -r --slurpfile q "$QUEUE" '
+    ([.features[].id]) as $fl |
+    (($q[0].queue.ready // []) +
+     ($q[0].queue.passed // []) +
+     (($q[0].queue.failed // []) | if type == "object" then keys else . end) +
+     (($q[0].queue.in_progress // {}) | keys) +
+     (($q[0].queue.blocked // {}) | keys)) as $qids |
+    ($qids - $fl) | unique | .[]
+  ' "$FEATURES" 2>/dev/null)
+
+  if [ -z "$orphans" ]; then
+    echo "[integrity] OK — feature-list ↔ queue 동기화됨"
+    exit 0
+  fi
+  echo "[integrity] ⚠ feature-list 에 없는 queue-only feature 발견:"
+  echo "$orphans" | sed 's/^/  - /'
+  echo "[integrity] 복구 방법:"
+  echo "  1) Planner 가 해당 feature 를 feature-list.json 에 sprint 지정해서 추가하거나"
+  echo "  2) bash scripts/harness-queue-manager.sh enqueue <feature.json>  로 canonical path 사용"
+  exit 1
+}
+
 cmd_hold_status() {
   if [ ! -f "$CHECKPOINT" ]; then
     echo '{"held":false}'
@@ -565,8 +685,10 @@ case "$CMD" in
   hold)           cmd_hold "$@" ;;
   resume-probe)   cmd_resume_probe ;;
   hold-status)    cmd_hold_status ;;
+  enqueue)        cmd_enqueue "$@" ;;
+  integrity)      cmd_integrity ;;
   *)
-    echo "Usage: harness-queue-manager.sh <init|dequeue|auto-dispatch|idle-slots|pass|fail|requeue|recover|next-sprint|update_phase|status|hold|resume-probe|hold-status> [args]"
+    echo "Usage: harness-queue-manager.sh <init|dequeue|auto-dispatch|idle-slots|pass|fail|requeue|recover|next-sprint|update_phase|status|hold|resume-probe|hold-status|enqueue|integrity> [args]"
     exit 1
     ;;
 esac

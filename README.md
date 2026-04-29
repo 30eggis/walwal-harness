@@ -69,24 +69,30 @@ npx walwal-harness team
 #### 대시보드 구성
 
 ```
-┌────────────────────┬──────────────────────────┬───────────┐
-│ Dashboard          │ Gotcha & Memory          │ TEAM 1    │
-│  - pipeline/sprint │  - 활성 에이전트 gotcha   │  Gen|Eval │
-│  - feature 진행도  │  - 나머지 에이전트 요약    ├───────────┤
-│  - queue 상태      │  - SHARED MEMORY          │ TEAM 2    │
-│                    │   (memory.md 최근 N)      │  Gen|Eval │
-├────────────────────┤                          ├───────────┤
-│ Archive Prompt     │                          │ TEAM 3    │
-│  (완료 feature 요약)│                          │  Gen|Eval │
-└────────────────────┴──────────────────────────┴───────────┘
+┌────────────────────┬───────────────┬───────────┐
+│ Dashboard          │ Gotchas       │ TEAM 1    │
+│  - pipeline/sprint │  (활성 에이전트)│  Gen|Eval │
+│  - feature 진행도  ├───────────────┤           │
+│  - queue 상태      │ Conventions   ├───────────┤
+│                    │  (하우스 스타일)│ TEAM 2    │
+├────────────────────┤               │  Gen|Eval │
+│ Archive Prompt     ├───────────────┤           │
+│  (완료 feature 요약)│ Memory        ├───────────┤
+│                    │  (공유 교훈)   │ TEAM 3    │
+│                    │               │  Gen|Eval │
+└────────────────────┴───────────────┴───────────┘
 ```
 
 | 패널 | 내용 | 소스 |
 |------|------|------|
 | **Dashboard** | Pipeline · Sprint · Feature passes · Queue R:B:P · Retry | `harness-dashboard.sh` |
-| **Gotcha & Memory** | 활성 에이전트의 누적 실수 + 나머지 요약 + 공유 메모리 | `harness-gotcha-memory.sh` |
+| **Gotchas** | 활성 에이전트의 누적 실수 (`[G-NNN]`) — v5.9.1 부터 독립 패널 | `harness-gotcha-memory.sh --mode gotcha` |
+| **Conventions** | 하우스 스타일 (`[C-NNN]`) — v5.9.1 부터 독립 패널, 독립 스크롤 | `harness-gotcha-memory.sh --mode conventions` |
+| **Memory** | 공유 교훈 (`memory.md`) — v5.9.1 부터 독립 패널 | `harness-gotcha-memory.sh --mode memory` |
 | **TEAM 1–3** | 각 워커의 현재 feature · phase(Gen/Eval) · 실시간 stdout | `harness-queue-manager.sh` worker loop |
 | **Archive Prompt** | 직전 완료 feature 요약 (다음 팀 컨텍스트 주입용) | archive 디렉토리 |
+
+> **v5.9.1+** Rules 컬럼이 3분할(Gotchas/Conventions/Memory)되어 각각 독립 스크롤됩니다. tmux/iTerm2 모두 동일한 레이아웃을 보장합니다.
 
 ##### Feature 상태 아이콘 (v5.6.4+)
 
@@ -219,6 +225,16 @@ Dispatcher 자동 분류:
 ```
 
 → Dispatcher 가 `memory.md` 에 `### [M-NNN] ...` 로 기록. Planner 리뷰 후 `unverified → verified` 로 승격.
+
+#### 동적 Gotcha/Convention 자동 등록 (v5.9.0+)
+
+Worker 가 `gen-report-*.md` / `evaluation-*.md` 본문에 `gotcha_candidates` / `convention_candidates` 블록을 작성하면, Lead 가 PASS merge 직후 자동으로 dedup append:
+
+```bash
+bash scripts/harness-gotcha-register.sh . --scan-all
+```
+
+→ 다음 worker spawn 전에 갱신된 gotchas/conventions 가 file system 에 반영. **한 sprint 안에서 발견된 실수를 같은 sprint 의 다음 worker 가 즉시 회피**할 수 있게 됨. Generator 도 mandatory — 모든 에이전트가 후보를 자기 보고서에 남기는 것을 강제합니다.
 
 #### 주의 — 데이터 보존
 
@@ -469,6 +485,13 @@ jq '.mode = "solo"' .harness/progress.json > /tmp/p.json && mv /tmp/p.json .harn
 ### Gotcha 가 누적되지 않고 사라짐
 - v5.5.2 에서 해결 (postinstall 이 누적 엔트리를 절대 덮어쓰지 않도록 수정).
 - 반드시 `5.5.2+` 사용.
+
+### Dashboard 헤더가 SOLO 인데 실제로는 팀 모드로 돌고 있음
+- v5.9.5 에서 해결. `feature-queue.json.queue.in_progress > 0` 이면 dashboard refresh / tmux 재기동 시 자동으로 `mode=team` 으로 self-heal 합니다.
+- 그 이전 버전: `progress.json` 의 `mode` 만 직접 수정하거나 새 세션을 열어 SessionStart 훅의 heal 을 트리거.
+
+### `progress.json` 손상 시 dashboard crash
+- v5.9.4 에서 해결. invalid JSON 인 경우 안내 메시지로 graceful degrade. 복구 가이드는 dashboard 본문에 inline 표시됩니다.
 
 ---
 
