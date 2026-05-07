@@ -29,6 +29,27 @@ docmeta:
 
 # Changelog
 
+## 6.0.2 — `migrate` 가 memory 시스템 entry 까지 자동 처리 (2026-05-07)
+
+v6.0.1 patch 적용을 위해 사용자가 memory.md 의 [M-NEXUS-P3] 를 수동 추가해야 했던 불편을 제거. `npx walwal-harness migrate` 한 줄로 모두 처리됩니다.
+
+### Changed
+- `bin/init.js` 의 `detectMigrationNeeded()` 가 memory.md 의 시스템 entry (M-NEXUS-*, M-SYS-*) 누락도 감지.
+- `runMigrate()` 가 누락된 시스템 entry 를 template 에서 발췌해 사용자 memory.md 끝에 append. **사용자 [M-NNN] entry 는 무손상**.
+- postinstall 안내 banner 가 누락된 memory entry 목록도 함께 표시.
+
+### Migration (one-liner)
+```bash
+npm install @walwal-harness/cli@latest
+npx walwal-harness migrate          # progress + config + memory 한 번에
+```
+
+`migrate` 가 처리하는 것:
+- progress.json v3 → v4 (mode → "auto" + mode_decision)
+- config.json mode_selection 자동 주입
+- **(신규)** memory.md 시스템 entry append (M-NEXUS-P3 등)
+- 변경 전 .harness/archive/migration-<ts>/ 에 progress / config / memory 자동 백업.
+
 ## 6.0.1 — Owner ↔ CEO 정체성 + 자율 실행 룰 강화 (2026-05-07)
 
 v6.0.0 publish 직후 Owner 의 명시적 교정으로 발견된 두 가지 inviolable 룰 위반 패턴을 패키지에 정식 등재한 patch.

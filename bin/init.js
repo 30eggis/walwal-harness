@@ -973,10 +973,22 @@ function runTeamStudio() {
 // ─────────────────────────────────────────
 const TARGET_PROGRESS_VERSION = 4;
 
+// System memory entries that must exist in every install. ID prefix convention:
+//   M-NEXUS-*  : Foundational NEXUS doctrine rules
+//   M-SYS-*    : Cross-agent system-level rules
+// User-added [M-NNN] entries are NEVER touched.
+const SYSTEM_MEMORY_ENTRY_PATTERN = /^### \[M-(NEXUS|SYS)-[A-Z0-9_-]+\]/m;
+
 function detectMigrationNeeded() {
   const progressPath = path.join(HARNESS_DIR, 'progress.json');
   const configPath = path.join(HARNESS_DIR, 'config.json');
-  const flags = { progressV3toV4: false, configMissingModeSelection: false };
+  const memoryPath = path.join(HARNESS_DIR, 'memory.md');
+  const memoryTplPath = path.join(PKG_ROOT, 'assets', 'templates', 'memory.md');
+  const flags = {
+    progressV3toV4: false,
+    configMissingModeSelection: false,
+    memoryMissingSystemEntries: [],
+  };
   if (fs.existsSync(progressPath)) {
     try {
       const p = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
@@ -989,7 +1001,33 @@ function detectMigrationNeeded() {
       if (!c.mode_selection) flags.configMissingModeSelection = true;
     } catch {}
   }
+  if (fs.existsSync(memoryPath) && fs.existsSync(memoryTplPath)) {
+    try {
+      const userMem = fs.readFileSync(memoryPath, 'utf8');
+      const tplMem = fs.readFileSync(memoryTplPath, 'utf8');
+      const tplEntryIds = extractEntryIds(tplMem).filter((id) => /^M-(NEXUS|SYS)-/.test(id));
+      const userEntryIds = new Set(extractEntryIds(userMem));
+      flags.memoryMissingSystemEntries = tplEntryIds.filter((id) => !userEntryIds.has(id));
+    } catch {}
+  }
   return flags;
+}
+
+// Returns the list of memory entry IDs found in the markdown body, e.g. ["M-001", "M-NEXUS-P3"].
+function extractEntryIds(md) {
+  const re = /^### \[(M-[A-Z0-9_-]+)\]/gm;
+  const ids = [];
+  let m;
+  while ((m = re.exec(md)) !== null) ids.push(m[1]);
+  return ids;
+}
+
+// Extracts a single entry block (heading + body until next ### or EOF) from the template.
+function extractEntryBlock(md, id) {
+  const escId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(^### \\[${escId}\\][\\s\\S]*?)(?=^### \\[|\\Z)`, 'm');
+  const m = md.match(re);
+  return m ? m[1].trimEnd() : null;
 }
 
 function showMigrationProposal(flags) {
@@ -1005,6 +1043,11 @@ function showMigrationProposal(flags) {
     console.log('  • config.json: mode_selection 섹션 누락 — 자동 주입 가능');
     console.log('    Conductor 가 ready≥3 + features≥6 + depth≤2 로 자동 모드 결정.');
   }
+  if (flags.memoryMissingSystemEntries && flags.memoryMissingSystemEntries.length) {
+    console.log('  • memory.md: 시스템 entry 누락 — append 가능');
+    console.log('    [' + flags.memoryMissingSystemEntries.join(', ') + ']');
+    console.log('    사용자 [M-NNN] entry 는 보존, 시스템 entry 만 끝에 추가.');
+  }
   console.log('');
   console.log('  적용:  npx walwal-harness migrate');
   console.log('  미리보기:  npx walwal-harness migrate --dry-run');
@@ -1017,9 +1060,13 @@ function showMigrationProposal(flags) {
 function runMigrate(opts = {}) {
   const dryRun = opts.dryRun || false;
   const flags = detectMigrationNeeded();
-  if (!flags.progressV3toV4 && !flags.configMissingModeSelection) {
+  if (
+    !flags.progressV3toV4 &&
+    !flags.configMissingModeSelection &&
+    (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0)
+  ) {
     console.log('');
-    log('이미 최신 버전입니다 (progress.json v' + TARGET_PROGRESS_VERSION + ' + config.json mode_selection 존재).');
+    log('이미 최신 버전입니다 (progress v' + TARGET_PROGRESS_VERSION + ' + config.mode_selection + memory 시스템 entry 모두 존재).');
     return;
   }
 
@@ -1067,6 +1114,29 @@ function runMigrate(opts = {}) {
       if (!dryRun) {
         fs.writeFileSync(path.join(backupDir, 'config.json'), original);
         fs.writeFileSync(configPath, JSON.stringify(c, null, 2) + '\n');
+      }
+    }
+  }
+
+  // 3. memory.md — append missing system entries (M-NEXUS-*, M-SYS-*) only.
+  //    User-added [M-NNN] entries are NEVER touched.
+  const memoryPath = path.join(HARNESS_DIR, 'memory.md');
+  const memoryTplPath = path.join(PKG_ROOT, 'assets', 'templates', 'memory.md');
+  const missingMemEntries = flags.memoryMissingSystemEntries || [];
+  if (missingMemEntries.length && fs.existsSync(memoryPath) && fs.existsSync(memoryTplPath)) {
+    const original = fs.readFileSync(memoryPath, 'utf8');
+    const tpl = fs.readFileSync(memoryTplPath, 'utf8');
+    const blocks = [];
+    for (const id of missingMemEntries) {
+      const block = extractEntryBlock(tpl, id);
+      if (block) blocks.push(block);
+    }
+    if (blocks.length) {
+      log(`  memory.md: 시스템 entry ${blocks.length}개 append (${missingMemEntries.join(', ')})`);
+      if (!dryRun) {
+        fs.writeFileSync(path.join(backupDir, 'memory.md'), original);
+        const sep = original.endsWith('\n') ? '\n' : '\n\n';
+        fs.writeFileSync(memoryPath, original + sep + blocks.join('\n\n') + '\n');
       }
     }
   }
