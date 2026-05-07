@@ -1,18 +1,34 @@
 ---
 docmeta:
   id: harness-team
-  title: /harness-team — Team Mode 시작/재개
+  title: /harness-team — Team Mode 사용자 Override (v6.0+)
   type: input
   createdAt: 2026-04-20T00:00:00Z
-  updatedAt: 2026-04-20T00:00:00Z
+  updatedAt: 2026-05-07T00:00:00Z
   source:
     producer: user
     skillId: harness
-  inputs: []
-  tags: [harness, team-mode, tmux, command]
+  inputs:
+    - documentId: skill-conductor
+      uri: ../skills/conductor/SKILL.md
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 115, endLine: 145 }   # §7.5 모드 결정 + user_override
+          targetRange: { startLine: 17, endLine: 22 }
+    - documentId: config-template
+      uri: ../assets/templates/config.json
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 345, endLine: 372 }   # mode_selection.rules.force_team_when
+          targetRange: { startLine: 17, endLine: 22 }
+  tags: [harness, team-mode, tmux, command, override, v6]
 ---
 
-# /harness-team — Team Mode 시작/재개
+# /harness-team — Team Mode 사용자 Override (v6.0+)
+
+> v6.0 부터 모드 결정은 **Conductor 가 자동**으로 합니다 (config.json `mode_selection.rules.force_team_when`: ready≥3 + features≥6 + critical_path_depth≤2). 본 명령은 Conductor 의 자동 결정을 사용자가 강제로 덮어쓰는 **override** 입니다.
+>
+> **효과**: `progress.json.mode = "team"` 강제 + `mode_decision.user_override = "team"` 기록 + tmux 세션 부팅. 현재 sprint 끝까지 유지. 다음 sprint 진입 시 Conductor 가 재자동결정. **Auto 복귀**: 사용자 발화 "auto 로 돌려" 또는 "Conductor 결정으로".
 
 Planner가 완료한 feature-list.json의 피처들을 최대 3개 팀이 병렬로 Gen→Eval 사이클을 수행합니다.
 

@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+dist
+coverage
+.vitest-cache
+.env*.local
+playwright-report
+test-results

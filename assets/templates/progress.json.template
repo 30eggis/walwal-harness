@@ -1,6 +1,12 @@
 {
-  "version": 3,
-  "mode": "solo",
+  "version": 4,
+  "mode": "auto",
+  "mode_decision": {
+    "owner": "conductor",
+    "decided_at": null,
+    "rationale": null,
+    "user_override": null
+  },
   "project_name": "",
   "pipeline": null,
   "dispatch": {

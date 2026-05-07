@@ -32,7 +32,9 @@ bash scripts/harness-next.sh .
 - 에스컬레이션 체크 (3회 실패 시 → Planner)
 - 마지막 에이전트면 자동 archive 실행
 
-### Step 2: handoff.json 읽고 다음 에이전트 호출
+### Step 2: handoff.json 읽고 다음 에이전트 **즉시 호출** (필수)
+
+> **중요**: Step 1 완료 후 사용자에게 "다음 단계를 실행하시겠습니까?" 같은 추가 확인을 받지 마세요. 사용자가 이미 `/harness-next`를 호출한 시점에 다음 단계 실행에 동의한 것으로 간주합니다. 곧바로 Skill 도구로 `to` 필드의 스킬을 호출하세요.
 
 ```bash
 cat .harness/handoff.json | jq '{from, to, sprint, prompt, model, thinking_mode, failure_context}'

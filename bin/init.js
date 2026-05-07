@@ -904,16 +904,19 @@ function showHelp() {
 ╚══════════════════════════════════════╝
 
 Usage:
-  npx walwal-harness              Initialize project for harness engineering
-  npx walwal-harness --force      Re-initialize (overwrites existing files)
-  npx walwal-harness team         Launch Team Mode (tmux studio + auto teams)
-  npx walwal-harness team --kill  Kill Team Mode tmux session
-  npx walwal-harness --help       Show this help
+  npx walwal-harness                       Initialize project for harness engineering
+  npx walwal-harness --force               Re-initialize (overwrites existing files)
+  npx walwal-harness team                  Launch Team Mode (tmux studio + auto teams)
+  npx walwal-harness team --kill           Kill Team Mode tmux session
+  npx walwal-harness migrate               Apply v3 → v4 migration (mode→auto + Conductor)
+  npx walwal-harness migrate --dry-run     Preview migration changes without applying
+  npx walwal-harness --help                Show this help
 
-Modes (use inside claude/codex session):
-  /harness-solo       Solo mode — prompting-based sequential pipeline
-  /harness-team       Team mode — auto parallel Gen-Eval loop (3 teams)
+Modes (v6.0+ — Conductor 자동 결정, 사용자 override 가능):
+  /harness-solo       Solo Override — Conductor 결정을 Solo 로 강제
+  /harness-team       Team Override — Conductor 결정을 Team 으로 강제 (tmux 부팅)
   /harness-stop       Stop Team mode (preserves queue state)
+  발화 "auto 로 돌려" → Conductor 자동결정 복귀
 
 What it does:
   1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
@@ -965,6 +968,120 @@ function runTeamStudio() {
   execSync(cmd, { stdio: 'inherit' });
 }
 
+// ─────────────────────────────────────────
+// Migration — v3 → v4 (mode auto + Conductor ownership)
+// ─────────────────────────────────────────
+const TARGET_PROGRESS_VERSION = 4;
+
+function detectMigrationNeeded() {
+  const progressPath = path.join(HARNESS_DIR, 'progress.json');
+  const configPath = path.join(HARNESS_DIR, 'config.json');
+  const flags = { progressV3toV4: false, configMissingModeSelection: false };
+  if (fs.existsSync(progressPath)) {
+    try {
+      const p = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+      if ((p.version ?? 0) < TARGET_PROGRESS_VERSION) flags.progressV3toV4 = true;
+    } catch {}
+  }
+  if (fs.existsSync(configPath)) {
+    try {
+      const c = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (!c.mode_selection) flags.configMissingModeSelection = true;
+    } catch {}
+  }
+  return flags;
+}
+
+function showMigrationProposal(flags) {
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════════╗');
+  console.log('║  walwal-harness v6 — 자동 마이그레이션 사용 가능         ║');
+  console.log('╚══════════════════════════════════════════════════════════╝');
+  if (flags.progressV3toV4) {
+    console.log('  • progress.json: v3 → v4 (mode → "auto" + mode_decision 추가)');
+    console.log('    기존 mode 값은 user_override 로 보존됩니다.');
+  }
+  if (flags.configMissingModeSelection) {
+    console.log('  • config.json: mode_selection 섹션 누락 — 자동 주입 가능');
+    console.log('    Conductor 가 ready≥3 + features≥6 + depth≤2 로 자동 모드 결정.');
+  }
+  console.log('');
+  console.log('  적용:  npx walwal-harness migrate');
+  console.log('  미리보기:  npx walwal-harness migrate --dry-run');
+  console.log('');
+  console.log('  ※ 자동 강제 X — 사용자가 명령을 실행할 때만 변경됩니다.');
+  console.log('  ※ 변경 전 .harness/archive/migration-<ts>/ 에 자동 백업.');
+  console.log('');
+}
+
+function runMigrate(opts = {}) {
+  const dryRun = opts.dryRun || false;
+  const flags = detectMigrationNeeded();
+  if (!flags.progressV3toV4 && !flags.configMissingModeSelection) {
+    console.log('');
+    log('이미 최신 버전입니다 (progress.json v' + TARGET_PROGRESS_VERSION + ' + config.json mode_selection 존재).');
+    return;
+  }
+
+  console.log('');
+  log(dryRun ? '=== DRY RUN — 실제 변경 없음 ===' : '=== Migration 적용 ===');
+
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupDir = path.join(HARNESS_DIR, 'archive', `migration-${ts}`);
+  if (!dryRun) ensureDir(backupDir);
+
+  // 1. progress.json
+  const progressPath = path.join(HARNESS_DIR, 'progress.json');
+  if (flags.progressV3toV4 && fs.existsSync(progressPath)) {
+    const original = fs.readFileSync(progressPath, 'utf8');
+    const p = JSON.parse(original);
+    const oldMode = p.mode ?? 'solo';
+    const newP = {
+      ...p,
+      version: TARGET_PROGRESS_VERSION,
+      mode: 'auto',
+      mode_decision: {
+        owner: 'conductor',
+        decided_at: null,
+        rationale: `migration v3→v4 — 기존 mode="${oldMode}" 를 user_override 로 보존`,
+        user_override: oldMode === 'team' || oldMode === 'solo' ? oldMode : null,
+      },
+    };
+    log(`  progress.json: version 3 → ${TARGET_PROGRESS_VERSION}, mode "${oldMode}" → "auto" (user_override="${newP.mode_decision.user_override}")`);
+    if (!dryRun) {
+      fs.writeFileSync(path.join(backupDir, 'progress.json'), original);
+      fs.writeFileSync(progressPath, JSON.stringify(newP, null, 2) + '\n');
+    }
+  }
+
+  // 2. config.json — inject mode_selection from template if missing
+  const configPath = path.join(HARNESS_DIR, 'config.json');
+  const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
+  if (flags.configMissingModeSelection && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
+    const original = fs.readFileSync(configPath, 'utf8');
+    const c = JSON.parse(original);
+    const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
+    if (tpl.mode_selection) {
+      c.mode_selection = tpl.mode_selection;
+      log('  config.json: mode_selection 섹션 주입 (default_mode=auto, owner=conductor, force_team_when ready≥3+features≥6+depth≤2, tie_breaker=solo)');
+      if (!dryRun) {
+        fs.writeFileSync(path.join(backupDir, 'config.json'), original);
+        fs.writeFileSync(configPath, JSON.stringify(c, null, 2) + '\n');
+      }
+    }
+  }
+
+  console.log('');
+  if (dryRun) {
+    log('Dry-run 완료 — 실제 변경 적용하려면 `npx walwal-harness migrate` 실행');
+  } else {
+    log(`Migration 완료. 백업: ${backupDir}`);
+    log('Conductor 가 다음 sprint 시작 시 자동으로 모드 결정합니다.');
+    log('자동 결정 무시하려면 /harness-solo 또는 /harness-team override.');
+  }
+  console.log('');
+}
+
 function main() {
   if (isHelp) {
     showHelp();
@@ -973,6 +1090,11 @@ function main() {
 
   if (subcommand === 'team') {
     runTeamStudio();
+    return;
+  }
+
+  if (subcommand === 'migrate') {
+    runMigrate({ dryRun: args.includes('--dry-run') });
     return;
   }
 
@@ -1005,6 +1127,22 @@ function main() {
   setupAgentsMd();
   checkPlaywrightMcp();
   checkRecommendedSkills();
+
+  // v6.0 — propose migration if existing project is on v3
+  const migFlags = detectMigrationNeeded();
+  if (migFlags.progressV3toV4 || migFlags.configMissingModeSelection) {
+    showMigrationProposal(migFlags);
+  }
+
+  // v6.0 — Brick Office dashboard one-liner
+  console.log('');
+  console.log('╔══════════════════════════════════════════════════════════╗');
+  console.log('║  Brick Office — 라이브 운영 대시보드 (선택)              ║');
+  console.log('╚══════════════════════════════════════════════════════════╝');
+  console.log('  bash scripts/harness-dashboard-up.sh');
+  console.log('  → http://localhost:3001 에서 .harness/ 상태 실시간 시각화');
+  console.log('  → 첫 실행 시 git sparse-checkout 으로 ~5MB 만 가져옵니다.');
+  console.log('');
 
   console.log('');
   log('═══ Initialization Complete ═══');

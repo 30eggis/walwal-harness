@@ -1,0 +1,143 @@
+---
+docmeta:
+  id: sprint-contract
+  title: Sprint Contract — Sprint 2 (Phase C-2)
+  type: output
+  createdAt: 2026-05-07T00:00:00Z
+  updatedAt: 2026-05-07T00:00:00Z
+  source:
+    producer: agent
+    skillId: harness-planner
+  inputs:
+    - documentId: plan
+      uri: ./plan.md
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 32, endLine: 47 }    # plan §2 Sprint 2 잔여 features
+          targetRange: { startLine: 25, endLine: 95 }    # 본 contract BE+FE 섹션
+        - sourceRange: { startLine: 51, endLine: 68 }    # plan §3 Sprint 3
+          targetRange: { startLine: 95, endLine: 120 }   # FE 섹션 (드로어/i18n 의존성 정의)
+    - documentId: feature-list
+      uri: ./feature-list.json
+      relation: output-from
+    - documentId: api-contract
+      uri: ./api-contract.json
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 27, endLine: 45 }    # /api/stream SSE 명세
+          targetRange: { startLine: 38, endLine: 55 }    # F-010 BE 섹션
+  tags: [sprint-contract, sprint-2, phase-c-2, live, interaction]
+---
+
+# Sprint Contract — Sprint 2 (Phase C-2)
+
+## BE 섹션 (Generator-Backend)
+
+### F-009 — lib/watcher.ts (chokidar 헬퍼)
+
+**파일**: `apps/harness-dashboard/lib/watcher.ts`, `apps/harness-dashboard/lib/__tests__/watcher.test.ts`
+
+**API**:
+```ts
+export interface WatchHandle { close(): Promise<void> }
+export function watchHarness(
+  rootDir: string,
+  onChange: (path: string) => void
+): WatchHandle
+```
+
+- 감시 대상: `rootDir/.harness/{progress.json, progress.log, actions, archive}` (recursive: progress 파일은 명시, dir 는 ignoreInitial=true).
+- chokidar 의 `awaitWriteFinish: { stabilityThreshold: 100 }` 설정으로 부분 쓰기 콜백 폭주 방지.
+- 콜백 디바운스: 동일 파일 50ms 윈도우 합치기 (선택).
+
+**검증**:
+- vitest tmp dir → `progress.json` 새로 쓰기 → 200ms 내 onChange 호출.
+
+### F-010 — GET /api/stream (SSE)
+
+**파일**: `apps/harness-dashboard/app/api/stream/route.ts`
+
+- `export const dynamic = "force-dynamic"`, `export const runtime = "nodejs"` (chokidar fs 의존).
+- `ReadableStream` 으로 SSE 작성:
+  - 첫 메시지: 풀 snapshot.
+  - watchHarness onChange → 새 snapshot 생성 → `controller.enqueue("data: " + JSON.stringify(snap) + "\n\n")`.
+  - request.signal abort → watcher.close() + controller.close().
+- Content-Type: `text/event-stream`, Cache-Control: `no-cache, no-transform`, Connection: `keep-alive`.
+
+**검증**:
+- 통합 테스트: dev 서버 → curl `-N` 으로 SSE → 첫 라인 `data: {...}` 확인. progress.json fs.write → 두 번째 메시지 도착 확인 (2초 내).
+
+## FE 섹션 (Generator-Frontend)
+
+### F-011 — useHarnessStream (EventSource hook)
+
+**파일**: `apps/harness-dashboard/hooks/useHarnessStream.ts`
+
+```ts
+export function useHarnessStream(initial: HarnessSnapshot): {
+  snapshot: HarnessSnapshot;
+  connectionState: "connecting" | "open" | "stale" | "failed";
+}
+```
+
+- `useState(initial)` + `useEffect` 로 EventSource 생성.
+- onmessage → JSON.parse → setState.
+- onerror → 재접속은 EventSource 가 자동 처리. 5회 연속 실패 카운트 → connectionState='failed' + 토스트.
+- cleanup: es.close() on unmount.
+
+### F-014 — talking 풀 말풍선 보강
+
+**파일**: `apps/harness-dashboard/components/three/Minifig3D.tsx`
+
+- 현재 sphere indicator → drei `<Html>` 텍스트 bubble 로 교체. Ortho camera 이슈 회피: `transform={true}` + 고정 작은 크기 + `occlude={false}`. 또는 drei `Billboard` + Text 조합.
+- 텍스트: `agent.talkingPreview` (truncate 40자).
+- red-alert 진동: 이미 완료, 유지.
+
+### F-015 — Drawer 셸
+
+**파일**: `apps/harness-dashboard/components/Drawer.tsx`
+
+- props: `{ open: boolean; onClose: () => void; tab: 'agent-log'|'room-metrics'|'archive-list'; payload: any; onTabChange: (t)=>void }`
+- 오른쪽 슬라이드 (CSS transform translateX). 너비 360px, 모바일에서 100%.
+- 탭 헤더 + 컨텐츠 영역. Esc 키 / 외부 클릭 / X 버튼 닫힘.
+- 시맨틱: `<aside role="complementary" aria-label="Detail panel">` + `aria-hidden` 동기화.
+
+### F-016 — Drawer agent-log 탭
+
+**파일**: `apps/harness-dashboard/components/drawer/AgentLogTab.tsx` + `lib/log-filter.ts`
+
+- props: `{ agentId: AgentId; logLines: string[] }`
+- `progress.log` 파싱 → agentId 포함 라인 필터 → 최신 50줄.
+- 자동 스크롤 bottom (`useEffect` + scrollTop).
+- snapshot 의 새 progress.log lines 가 server 에서 push 되어야 함 → BE 가 progress.log tail 도 SSE payload 에 포함하거나 (별도 endpoint), 또는 클라이언트가 fetch /api/log on click.
+
+**Decision (Planner)**: 단순화 — `/api/log?agent=<id>` 별도 endpoint 신설 (lazy fetch on tab open). SSE payload 확장하지 않음.
+
+→ **F-016 의 BE 의존**: GET `/api/log?agent=<id>` 추가. owner=generator-backend. 본 sprint 내에서 처리.
+
+### F-017 — Drawer room-metrics 탭
+
+**파일**: `apps/harness-dashboard/components/drawer/RoomMetricsTab.tsx`
+
+- props: `{ room: RoomState }`
+- `room.metrics` 의 모든 필드를 카드 그리드로 렌더 (sprint_number / last_review / last_audit / last_check / sprint_verdict / open_alerts / open_arch_risks / open_regressions).
+- null/undefined → "—" 플레이스홀더.
+
+### F-018 — 클릭 핸들러 통합
+
+**파일**: `apps/harness-dashboard/components/Scene.tsx` + `apps/harness-dashboard/components/three/Minifig3D.tsx` + `apps/harness-dashboard/components/three/Floor3D.tsx`
+
+- Minifig3D: outermost group 에 `onClick={(e) => { e.stopPropagation(); onAgentClick(agent.id) }}`. R3F 자동 raycast.
+- Floor3D RoomBlock: floor mesh 에 `onClick={(e) => onRoomClick(rect.id)}`.
+- Scene.tsx: drawer state (mode + payload) 관리. R3F Canvas 외부에서 Drawer 렌더.
+
+## Pre-Eval Gate
+
+- `tsc --noEmit` PASS
+- `vitest run` 모든 테스트 PASS (Sprint 1 15 + 신규 watcher.test 포함)
+- `playwright test` 통과
+- `curl http://localhost:3001/api/snapshot` 200 + `curl -N http://localhost:3001/api/stream` 첫 SSE 라인 도착
+
+## Change Request
+
+(현재 없음 — Sprint 1 의 CR-001 은 본 sprint plan 에 반영 완료)

@@ -1,0 +1,92 @@
+---
+docmeta:
+  id: evaluation-code-quality
+  title: Evaluation — Code Quality (Sprint 2 / Phase C-2)
+  type: output
+  createdAt: 2026-05-07T00:00:00Z
+  updatedAt: 2026-05-07T00:00:00Z
+  source:
+    producer: agent
+    skillId: harness-evaluator-code-quality
+  inputs:
+    - documentId: sprint-contract
+      uri: ./sprint-contract.md
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 25, endLine: 70 }
+          targetRange: { startLine: 30, endLine: 80 }
+    - documentId: api-contract
+      uri: ./api-contract.json
+      relation: output-from
+  tags: [evaluation, code-quality, sprint-2, phase-c-2, PASS]
+---
+
+# Evaluation — Code Quality (Sprint 2 / Phase C-2)
+
+## Verdict: **PASS** (Weighted 3.00 / 3.00)
+
+## Diff Scope (Sprint 2 only)
+
+신규: `lib/watcher.ts` · `lib/log-filter.ts` · `app/api/stream/route.ts` · `app/api/log/route.ts` · `hooks/useHarnessStream.ts` · `components/Drawer.tsx` · `components/drawer/AgentLogTab.tsx` · `components/drawer/RoomMetricsTab.tsx` · `lib/__tests__/watcher.test.ts`. 갱신: `components/Scene.tsx` · `components/three/{Stage3D,Floor3D,Minifig3D}.tsx` · `lib/harness-state.ts` (version 1.1.0). 총 ~440 LOC 신규.
+
+## Toolchain
+
+- `tsc --noEmit`: clean
+- `vitest run`: 17/17 (5 files: safe-json·iso·harness-state·state-mapping·watcher)
+- `playwright test`: 2/2 + 통합 인터랙션 1 추가 PASS
+- `any` 0건 / `console.*` 0건 / TODO 0건
+
+## C1-C5
+
+| 축 | Score | Evidence |
+|---|---|---|
+| C1 Layer | 3 | `app/api/stream/route.ts` 가 `lib/watcher.ts` + `lib/harness-state.ts` (BE) 만 의존. Drawer / AgentLogTab / RoomMetricsTab 컴포넌트가 lib 직접 호출하지 않고 Scene.tsx 가 props 로 전달 (단방향). useHarnessStream 은 hooks/ 단일 임포트. |
+| C2 Readability | 3 | watcher.ts 의 디바운스 로직 4줄, 명명 명확 (WatchHandle, watchHarness). Drawer 의 탭/CSS transform 표준 패턴. AgentLogTab 의 fetch+abort cleanup 깔끔. |
+| C3 Reuse | 3 | useHarnessStream 가 EventSource 추상화 단일점. Drawer/Tab 컴포넌트 분리로 재사용 가능. log-filter 가 fs 읽기 단일 SoT. |
+| C4 Type Safety | 3 | 0 `any`. ConnectionState union literal. AgentId/RoomId enum 일관. SafeJsonResult 패턴 유지. SSE Route 의 enqueue 가 try/catch 로 감싸져 controller close 보장. |
+| C5 Test Quality | 3 | watcher.test 가 실제 fs.write + chokidar awaitWriteFinish 통합 검증 (mock 미사용). 통합 E2E 가 raycast 확률에 의존하지 않고 DOM 인덱스 + drawer 셸 + connection-state pill 로 검증. |
+
+가중 합 = 3.00.
+
+## Cross-Reference With Contracts
+
+- `GET /api/stream` (api-contract:24-44) ↔ `app/api/stream/route.ts` content-type `text/event-stream`, ReadableStream, abort cleanup 일치.
+- `GET /api/log` 신규 endpoint — api-contract.json 미정의. **Contract drift (additive)**: Sprint 2 sprint-contract §F-016 의 "Decision (Planner): /api/log?agent=<id>" 에 의도 명시되어 있으나 api-contract.json 갱신 누락. CR-002 권고.
+- AgentState.homeRoom (Sprint 1 CR-001) 는 본 sprint api-contract 1.1.0 에서 정식 추가됨 — 해소.
+- HarnessSnapshot.version 코드 상수 1.1.0 ↔ contract version 1.1.0 일치.
+
+## Cross-Validation Block
+
+```json
+{
+  "cross_validation_from_code_quality": {
+    "layer_violations": [],
+    "type_holes": [],
+    "contract_divergence": [
+      {
+        "field": "GET /api/log",
+        "kind": "additive_endpoint",
+        "implementation": "app/api/log/route.ts",
+        "owner_for_fix": "planner",
+        "severity": "minor",
+        "note": "sprint-contract §F-016 에서 의도된 추가. CR-002 로 다음 sprint 시 api-contract.json 정식 등재 권고."
+      }
+    ],
+    "test_evidence": {
+      "vitest": "17/17 PASS",
+      "playwright": "2/2 + interaction 1 PASS",
+      "tsc_strict": "clean"
+    }
+  }
+}
+```
+
+## 권고
+
+- CR-002: api-contract.json §endpoints 에 `GET /api/log?agent=<id>&limit=N` 정식 등재 (Planner Sprint 3 시).
+- ESLint flat config 도입은 Sprint 1 권고 그대로 (블로커 아님).
+
+```
+PASS  3.00/3.00  retry_target: -
+next_agent: evaluator-functional
+```

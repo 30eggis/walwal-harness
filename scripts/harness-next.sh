@@ -415,25 +415,24 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   # ── Collect artifacts ──
   FEATURE_LIST="$PROJECT_ROOT/.harness/actions/feature-list.json"
 
-  local -a artifacts_ready=()
+  artifacts_ready=()
   for f in plan.md feature-list.json api-contract.json sprint-contract.md evaluation-functional.md evaluation-visual.md; do
     if [ -f "$PROJECT_ROOT/.harness/actions/$f" ]; then
       artifacts_ready+=("$f")
     fi
   done
-  local artifacts_json
   artifacts_json=$(printf '%s\n' "${artifacts_ready[@]}" | jq -R . | jq -s .)
 
   # Collect focus features (incomplete ones)
-  local focus_features="[]"
+  focus_features="[]"
   if [ -f "$FEATURE_LIST" ]; then
     focus_features=$(jq '[.features[]? | select(.passes == null or (.passes | length) == 0 or ((.passes // []) | map(select(. == "evaluator-functional")) | length == 0)) | .id] | .[0:5]' "$FEATURE_LIST" 2>/dev/null || echo "[]")
   fi
 
   # ── Regression data ──
-  local regression_source="null"
-  local prev_sprint=$((sprint_num - 1))
-  local prev_archive="$PROJECT_ROOT/.harness/archive/sprint-$(printf '%03d' $prev_sprint)"
+  regression_source="null"
+  prev_sprint=$((sprint_num - 1))
+  prev_archive="$PROJECT_ROOT/.harness/archive/sprint-$(printf '%03d' $prev_sprint)"
   if [ "$prev_sprint" -ge 1 ] && [ -d "$prev_archive" ]; then
     if [ -f "$prev_archive/feature-list.json" ]; then
       regression_source=$(jq '{
@@ -445,8 +444,8 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   fi
 
   # ── Eval-specific config ──
-  local eval_config="null"
-  local cross_validation_data="null"
+  eval_config="null"
+  cross_validation_data="null"
   case "$next_agent" in
     evaluator-*)
       eval_config=$(jq '{
@@ -462,15 +461,15 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   esac
 
   # ── Cross-Validation (chain: code-quality → functional → visual) ──
-  local cross_validation_from_code_quality="null"
+  cross_validation_from_code_quality="null"
   if [ "$next_agent" = "evaluator-functional" ] || [ "$next_agent" = "evaluator-visual" ]; then
-    local cq_eval="$PROJECT_ROOT/.harness/actions/evaluation-code-quality.md"
+    cq_eval="$PROJECT_ROOT/.harness/actions/evaluation-code-quality.md"
     if [ -f "$cq_eval" ]; then
       cross_validation_from_code_quality=$(sed -n '/```json/,/```/p' "$cq_eval" | tail -n +2 | head -n -1 | jq 'select(.evaluator == "code-quality" or .cross_validation_from_code_quality)' 2>/dev/null || echo "null")
     fi
   fi
   if [ "$next_agent" = "evaluator-visual" ]; then
-    local func_eval="$PROJECT_ROOT/.harness/actions/evaluation-functional.md"
+    func_eval="$PROJECT_ROOT/.harness/actions/evaluation-functional.md"
     if [ -f "$func_eval" ]; then
       cross_validation_data=$(sed -n '/```json/,/```/p' "$func_eval" | tail -n +2 | head -n -1 | jq 'select(.evaluator == "functional")' 2>/dev/null || echo "null")
     fi

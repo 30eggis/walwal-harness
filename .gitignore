@@ -59,3 +59,4 @@ Thumbs.db
 *.tmp
 tmp/
 .worktrees/
+.superpowers/

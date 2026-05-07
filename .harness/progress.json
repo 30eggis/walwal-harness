@@ -39,9 +39,75 @@
       "updated_at": null
     }
   },
-  "updated_at": "2026-04-09",
-  "history": [],
-  "phase": "init",
+  "updated_at": "2026-05-07T05:35:09Z",
+  "history": [
+    {
+      "ts": "2026-05-07",
+      "agent": "dispatcher",
+      "event": "pipeline_selected",
+      "pipeline": "FULLSTACK",
+      "phase": "C",
+      "next": "brainstorming"
+    },
+    {
+      "ts": "2026-05-07",
+      "agent": "brainstorming",
+      "event": "spec_approved",
+      "spec": ".harness/actions/brainstorm-spec.md",
+      "next": "planner"
+    },
+    {
+      "ts": "2026-05-07",
+      "agent": "planner",
+      "event": "outputs_approved",
+      "artifacts": [
+        "plan.md",
+        "feature-list.json",
+        "api-contract.json",
+        "AGENTS.md"
+      ],
+      "next": "generator-backend"
+    },
+    {
+      "ts": "2026-05-07",
+      "agent": "generator-backend",
+      "event": "be_done",
+      "features": [
+        "F-001",
+        "F-003",
+        "F-004",
+        "F-005"
+      ],
+      "next": "generator-frontend"
+    },
+    {
+      "ts": "2026-05-07",
+      "agent": "generator-frontend",
+      "event": "fe_done",
+      "features": [
+        "F-002",
+        "F-006",
+        "F-007",
+        "F-008"
+      ],
+      "next": "evaluator-code-quality"
+    },
+    {
+      "ts": "2026-05-07",
+      "agent": "evaluator-visual",
+      "event": "PASS",
+      "weighted": "3.00/3.00",
+      "next": "archive"
+    },
+    {
+      "ts": "2026-05-07",
+      "agent": "eval-chain",
+      "event": "PASS x3",
+      "sprint": 3,
+      "next": "archive"
+    }
+  ],
+  "phase": "C",
   "org": {
     "active": [
       "dispatcher",
@@ -140,5 +206,8 @@
     "open_iac_drift": 0,
     "secret_rotations_due": [],
     "rollback_ready": false
+  },
+  "dispatch": {
+    "id": null
   }
 }

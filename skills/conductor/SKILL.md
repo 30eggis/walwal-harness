@@ -112,6 +112,65 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
 
 > 1차 릴리즈는 모드 A만 활성. 모드 B는 안정화 후 옵트인.
 
+## 7.5 모드 결정 (v6.0+, 사용자에서 이양)
+
+이전에는 사용자가 `/harness-solo` 또는 `/harness-team` 으로 직접 선택했다. v6.0 부터 **Conductor 가 sprint 시작 시점에 자동 결정**한다. 사용자 override 는 가능하지만 디폴트는 자동.
+
+### 7.5.1 결정 시점
+
+- Planner 가 `feature-list.json` 작성/갱신 직후, sprint 시작 전.
+- 새 sprint 진입 시 (이전 sprint archive 후).
+- 사용자 override 발화 감지 시 (즉시 재계산 없이 그 발화부터 적용).
+
+### 7.5.2 룰 (config.json `mode_selection.rules` 참조)
+
+```
+# Team 강제 조건 (모두 만족)
+ready_at_start ≥ 3
+feature_count ≥ 6
+critical_path_depth ≤ 2
+
+# Solo 강제 조건 (어느 하나라도)
+ready_at_start ≤ 2
+또는 feature_count ≤ 3
+또는 critical_path_depth ≥ 4
+
+# 동률 → solo (비용 안전)
+```
+
+`critical_path_depth` = feature 의존성 그래프에서 가장 긴 체인의 길이. `feature-list.json` 의 `depends_on` 으로 계산.
+
+### 7.5.3 적용
+
+1. 결정 후 `progress.json` partial update:
+   ```json
+   "mode": "solo" 또는 "team",
+   "mode_decision": {
+     "owner": "conductor",
+     "decided_at": "<iso>",
+     "rationale": "ready=4, features=8, depth=2 → team",
+     "user_override": null
+   }
+   ```
+2. `progress.log` 한 줄: `conductor: mode=team (ready=4, features=8, depth=2)`
+3. Team 결정 시 추가: tmux 세션 부재면 `scripts/harness-tmux.sh` 자동 기동 권고만 출력 (실제 부팅은 사용자 확인 필요 — 외부 OS 영향이라 hard automation 회피).
+
+### 7.5.4 사용자 override
+
+다음 발화가 감지되면 Conductor 결정을 무시하고 사용자 선호로 강제:
+
+| 발화/명령 | 효과 |
+|---|---|
+| `/harness-solo` 또는 "solo 로" | mode=solo 강제, mode_decision.user_override="solo" |
+| `/harness-team` 또는 "team 으로" | mode=team 강제, user_override="team" |
+| "auto 다시" / "Conductor 결정으로" | user_override=null, 다음 sprint 시작 시 재자동결정 |
+
+override 는 **현재 sprint 끝까지** 유지된다. 다음 sprint 진입 시 user_override 가 명시적으로 살아있지 않으면 자동 재계산.
+
+### 7.5.5 Dispatcher 위임 룰
+
+Dispatcher 는 더 이상 사용자에게 Solo/Team 모드를 묻지 않는다. dispatcher SKILL.md §4 의 모드 질문은 v6.0 부터 제거. 사용자가 모드를 명시한 경우만 user_override 로 기록 후 즉시 적용.
+
 ## 8. progress.json 추가 필드
 
 ```json

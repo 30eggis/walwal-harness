@@ -342,6 +342,35 @@
     "auto_route_dispatcher": true,
     "auto_route_dispatcher_description": "true 이면 사용자의 모든 프롬프트가 harness-dispatcher 경유로 분류/라우팅 된다. 사용자가 'harness skip' 등을 말하면 단일 메시지 한정으로 건너뛴다."
   },
+  "mode_selection": {
+    "comment": "v6.0 — Solo/Team 모드를 사용자가 아닌 Conductor 가 결정. progress.json.mode='auto' 일 때 Conductor 가 feature-list 의 ready_count + 의존성 깊이 + sprint feature 수를 보고 룰을 적용. 사용자는 /harness-solo 또는 /harness-team 으로 override 가능하며 그 결정은 progress.json.mode_decision.user_override 에 기록된다.",
+    "default_mode": "auto",
+    "owner": "conductor",
+    "rules": {
+      "force_team_when": {
+        "ready_at_start_gte": 3,
+        "feature_count_gte": 6,
+        "critical_path_depth_lte": 2,
+        "rationale": "ready≥3 + 작은 critical path = 3팀 동시 가동의 P4 Parallel Workstreams 효과 충족 (NEXUS 40~60% 단축)"
+      },
+      "force_solo_when": {
+        "ready_at_start_lte": 2,
+        "or_feature_count_lte": 3,
+        "or_critical_path_depth_gte": 4,
+        "rationale": "직렬 의존 우세 → Team 으로 띄워도 2팀이 유휴. tmux 운영 비용·토큰 3x 정당화 안 됨."
+      },
+      "tie_breaker": "solo",
+      "tie_breaker_rationale": "동률 시 비용 안전한 Solo 선호. 사용자가 명시적으로 team 선택 시만 force."
+    },
+    "user_override": {
+      "comment": "사용자가 명시적으로 모드 강제하면 Conductor 결정 무시. progress.json.mode_decision.user_override 에 기록.",
+      "channels": [
+        "/harness-solo (force solo)",
+        "/harness-team (force team)",
+        "사용자 발화: 'solo 로', 'team 으로', 'auto 다시' (auto 복귀)"
+      ]
+    }
+  },
   "paths": {
     "actions": ".harness/actions",
     "archive": ".harness/archive",

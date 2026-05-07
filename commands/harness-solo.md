@@ -4,15 +4,31 @@ docmeta:
   title: /harness-solo — Solo Mode 시작/전환
   type: input
   createdAt: 2026-04-20T00:00:00Z
-  updatedAt: 2026-04-27T00:00:00Z
+  updatedAt: 2026-05-07T00:00:00Z
   source:
     producer: user
     skillId: harness
-  inputs: []
-  tags: [harness, solo-mode, command]
+  inputs:
+    - documentId: skill-conductor
+      uri: ../skills/conductor/SKILL.md
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 115, endLine: 145 }   # §7.5 모드 결정 위임 룰 + user_override 채널
+          targetRange: { startLine: 17, endLine: 22 }     # 본 명령의 v6.0 override 안내 블록
+    - documentId: config-template
+      uri: ../assets/templates/config.json
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 345, endLine: 372 }   # mode_selection 룰 (force_solo_when 등)
+          targetRange: { startLine: 17, endLine: 22 }
+  tags: [harness, solo-mode, command, override, v6]
 ---
 
-# /harness-solo — Solo Mode 시작/전환
+# /harness-solo — Solo Mode 사용자 Override (v6.0+)
+
+> v6.0 부터 모드 결정은 **Conductor 가 자동**으로 합니다 (config.json `mode_selection.rules`). 본 명령은 Conductor 의 자동 결정을 사용자가 강제로 덮어쓰는 **override** 입니다.
+>
+> **효과**: `progress.json.mode = "solo"` 강제 + `mode_decision.user_override = "solo"` 기록. 현재 sprint 끝까지 유지. 다음 sprint 진입 시 Conductor 가 재자동결정. **Auto 복귀**: 사용자 발화 "auto 로 돌려" 또는 "Conductor 결정으로".
 
 프롬프트 기반으로 하네스 파이프라인을 순차 진행합니다.
 Team 모드에서 전환 시, 진행 중이던 피처의 상태를 보존하고 Solo로 이어갑니다.

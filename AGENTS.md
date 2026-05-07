@@ -19,7 +19,7 @@ docmeta:
 
 - **Name**: (Planner가 설정)
 - **Description**: (Planner가 설정)
-- **Phase**: INIT
+- **Phase**: C — Brick Office 대시보드 MVP (FULLSTACK, sprint 1/3)
 - **Harness**: `.harness/HARNESS.md` 참조
 
 ## Tech Stack
@@ -44,7 +44,13 @@ docmeta:
 │   ├── service-*/              # [BE] Microservice — 도메인 로직              → Generator-Backend
 │   ├── web/                    # [FE] Frontend — UI·상태·API                 → Generator-Frontend
 │   │   └── design/             # [DESIGN] 디자인 토큰·컴포넌트 spec·flows    → Generator-Designer
-│   └── harness-dashboard/      # [META] Brick Office 대시보드 (Phase C)      → Planner
+│   └── harness-dashboard/      # [FE+BE] Brick Office 대시보드 (Phase C)
+│       ├── app/                #   [FE] Next.js App Router · 페이지·UI       → Generator-Frontend
+│       ├── components/         #   [FE] BrickOfficeCanvas/Room/Minifig/Drawer → Generator-Frontend
+│       ├── hooks/              #   [FE] useHarnessStream (EventSource)       → Generator-Frontend
+│       ├── lib/                #   [BE] harness-state·safe-json·state-mapping → Generator-Backend
+│       ├── app/api/            #   [BE] /api/snapshot · /api/stream (SSE)    → Generator-Backend
+│       └── e2e/                #   [FE] Playwright 시나리오                  → Generator-Frontend
 ├── libs/
 │   ├── shared-dto/             # [BE] 공유 DTO — api-contract.json 파생      → Generator-Backend
 │   ├── database/               # [BE] DB 모듈                                → Generator-Backend
@@ -146,7 +152,9 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
 | .harness/ops/metrics.jsonl | 전체 | Generator-DevOps(append) / Service-Ops(read) |
 | .harness/baselines/ | 전체 | Evaluator-* (자기 baseline만) |
 | apps/web/design/ | 전체 | Generator-Designer만 |
-| apps/harness-dashboard/ | 전체 | Planner (대시보드 코드) |
+| apps/harness-dashboard/app/, components/, hooks/, e2e/, public/ | 전체 | Generator-Frontend |
+| apps/harness-dashboard/lib/, app/api/ | 전체 | Generator-Backend |
+| apps/harness-dashboard/{package.json, next.config.mjs, tsconfig.json, tailwind.config.ts} | 전체 | Generator-Backend (초기 scaffold) |
 | infra/ | 전체 | Generator-DevOps만 |
 | skills/ | 전체 | Planner(HR)만 |
 | gotchas/ | 전체 | Planner만 (verified 승격) / 각 부서 (자기 unverified 추가 가능) |

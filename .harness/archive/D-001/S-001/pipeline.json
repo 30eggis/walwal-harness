@@ -1,0 +1,61 @@
+{
+  "pipeline": "FULLSTACK",
+  "phase": "C",
+  "title": "Brick Office 대시보드 MVP",
+  "selected_at": "2026-05-07",
+  "selected_by": "dispatcher",
+  "fe_stack": "react",
+  "fe_target": "web",
+  "evaluator_chain": [
+    "evaluator-code-quality",
+    "evaluator-functional",
+    "evaluator-visual"
+  ],
+  "agents_active": [
+    "brainstorming",
+    "planner",
+    "generator-backend",
+    "generator-frontend",
+    "generator-designer",
+    "evaluator-code-quality",
+    "evaluator-functional",
+    "evaluator-visual"
+  ],
+  "agents_skipped": [],
+  "scope": {
+    "location": "apps/harness-dashboard/",
+    "stack": "Next.js + SVG 2.5D isometric",
+    "data_source": [
+      ".harness/progress.json",
+      ".harness/progress.log",
+      ".harness/actions/*"
+    ],
+    "data_pipeline": "chokidar watch → WS push",
+    "rooms": [
+      "CEO",
+      "COO",
+      "CTO팀(BE/FE/Designer/DevOps)",
+      "CQO팀(Func/Visual/CQ/Arch/Sec)",
+      "Service-Ops",
+      "회의실",
+      "아카이브"
+    ],
+    "minifig_states": ["idle", "typing", "talking", "red-alert"],
+    "interactions": [
+      "미니피규어 클릭 → 로그 패널",
+      "룸 클릭 → 부서 메트릭",
+      "GOAL 카드 = CEO실 벽"
+    ],
+    "branding": {
+      "wordmark_options": ["Brick Office", "Studio Office"],
+      "constraint": "LEGO 상표 회피"
+    },
+    "reference_docs": [
+      ".harness/agency-mapping.md",
+      ".harness/doctrine/nexus.md",
+      "skills/*/SKILL.md (신규 14개)",
+      "AGENTS.md"
+    ]
+  },
+  "notes": "Brainstormer 사용자 선택 (Y). 인계 메모 spec을 기반으로 룸 레이아웃·피규어 동작·WS 프로토콜 구체화 후 Planner."
+}

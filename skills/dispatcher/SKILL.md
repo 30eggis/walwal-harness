@@ -152,27 +152,20 @@ AGENTS.md 비하네스  → 기존 백업 + 리빌드
 
 `.harness/actions/pipeline.json` 생성 → 사용자 확인 → Session Boundary Protocol On Complete 실행
 
-### Mode Recommendation (v5.7.1+)
+### Mode 결정 위임 (v6.0+, Conductor 이양)
 
-⚠️ **Dispatcher → Planner 전환 시에는 mode 질문을 하지 않는다.** Planner 는 mode 와 무관한 단일 실행이다. 과거의 "harness-solo 를 입력하세요" 안내는 제거.
+⚠️ **Dispatcher 는 더 이상 Solo/Team 모드를 결정하지 않는다.** v6.0 부터 Conductor 가 Planner 의 `feature-list.json` 확정 직후 `config.json.mode_selection.rules` 를 적용해 자동 결정한다 (skills/conductor/SKILL.md §7.5 참조).
 
-파이프라인이 확정되면 (Planner 호출 직전) **단 한 문단** 으로 Mode 추천을 출력하되, 응답을 기다리지 않고 **default=solo 로 그대로 진행**한다. 사용자가 team 을 원하면 언제든 `/harness-team` 으로 전환 가능.
-
-추천 로직:
-- Planner 가 feature-list.json 을 확정한 뒤 `features.length >= 3` 이고 서로 의존성이 낮으면 → "Team 모드 권장" 안내
-- `features.length < 3` 또는 단일 feature 연속 작업 → "Solo 모드 권장" 안내
-- Dispatcher 단계에서는 feature 수를 모를 수 있으므로 **기본은 Solo 진행**, Planner 완료 후 자동으로 재평가
-
-출력 예:
-```
-Pipeline: FULLSTACK 확정. Solo 모드로 자동 진행합니다.
-(병렬 3팀 실행을 원하면 Planner 완료 후 /harness-team 입력)
-```
+Dispatcher 의 책임은 단지:
+1. **사용자 발화에 명시적 모드 신호 감지** ("solo 로", "team 으로", `/harness-solo`, `/harness-team`, "auto 로 돌려") → `progress.json.mode_decision.user_override` 에 기록.
+2. **그 외에는 mode 질문 X.** Planner 를 그대로 호출한다. mode 는 후속 Conductor 가 결정.
+3. 파이프라인 확정 안내 시 mode 단어 자체를 언급할 필요 없음. ("Pipeline: FULLSTACK 확정. 진행합니다." 면 충분.)
 
 **금지**:
-- "solo 입력하세요 / team 입력하세요" 식의 선택 강요
-- mode 결정을 기다리며 Planner 호출을 보류하는 것
-- 이미 mode 가 설정된 상태(`progress.json.mode` 존재)에서 재질문하는 것
+- "solo 로 갈까요 team 으로 갈까요" 식의 선택 강요 (이전 v5.x 의 잔재)
+- mode 결정을 기다리며 Planner 호출을 보류
+- `progress.json.mode = "auto"` 를 임의로 "solo" 또는 "team" 으로 미리 셋
+- 사용자가 명시적 user_override 한 후 Conductor 가 그것을 무시하도록 라우팅
 
 ### evaluator_chain 필드 (모든 파이프라인 필수)
 
