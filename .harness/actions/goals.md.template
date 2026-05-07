@@ -1,0 +1,55 @@
+---
+docmeta:
+  id: goals
+  title: Project GOALs (CEO-owned)
+  type: input
+  createdAt: <ISO>
+  updatedAt: <ISO>
+  source:
+    producer: user
+  tags: [goal, ceo, project-context]
+---
+
+<!--
+GOAL 작성 권한: CEO(Dispatcher)만.
+CTO는 .cto_feasibility 와 .cto_notes 필드로만 의견 첨부.
+COO(Planner)는 GOAL을 Sprint·AC로 분해하는 입력으로 사용 (수정 X).
+Service-Ops는 .kpis 를 측정 대상으로 사용.
+
+새 GOAL 발급: `bash scripts/harness-goal-init.sh "<title>"` (id 자동 발급)
+현재 GOAL 출력: `bash scripts/harness-goal-show.sh`
+-->
+
+# Project GOALs
+
+> Active GOAL의 ID는 `.harness/progress.json.goals.active_id` 와 일치해야 한다.
+
+## (예시 양식 — 첫 발화 시 CEO가 채움)
+
+```yaml
+goals:
+  - id: G-1
+    title: <text>
+    description: <text>
+    success_metrics:
+      - <명시적·측정 가능한 결과>
+    deadline: <YYYY-MM-DD>
+    kpis:
+      - name: <metric_name>
+        target: <value>
+        direction: higher-is-better | lower-is-better
+        weight: 0.0-1.0
+    runbook: startup-mvp | enterprise-feature | marketing | incident
+    owner_confirmed: false
+    cto_feasibility: feasible | feasible-with-recruit | infeasible
+    cto_notes: <text>
+    status: draft | active | achieved | abandoned
+```
+
+## Active GOAL
+
+(없음 — 첫 발화 시 CEO 채움)
+
+## Archived GOALs
+
+(없음)

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 6,
   "project_name": "",
   "pipeline": null,
   "sprint": {
@@ -18,11 +18,127 @@
     "retry_target": null
   },
   "artifacts": {
-    "plan.md": { "status": "pending", "updated_by": null, "updated_at": null },
-    "feature-list.json": { "status": "pending", "updated_by": null, "updated_at": null },
-    "api-contract.json": { "status": "pending", "updated_by": null, "updated_at": null },
-    "sprint-contract.md": { "status": "pending", "updated_by": null, "updated_at": null }
+    "plan.md": {
+      "status": "pending",
+      "updated_by": null,
+      "updated_at": null
+    },
+    "feature-list.json": {
+      "status": "pending",
+      "updated_by": null,
+      "updated_at": null
+    },
+    "api-contract.json": {
+      "status": "pending",
+      "updated_by": null,
+      "updated_at": null
+    },
+    "sprint-contract.md": {
+      "status": "pending",
+      "updated_by": null,
+      "updated_at": null
+    }
   },
   "updated_at": "2026-04-09",
-  "history": []
+  "history": [],
+  "phase": "init",
+  "org": {
+    "active": [
+      "dispatcher",
+      "planner"
+    ],
+    "inactive": [],
+    "recruiting": []
+  },
+  "goals": {
+    "active_id": null,
+    "list": [],
+    "current_adherence": null
+  },
+  "conductor": {
+    "state": "idle",
+    "last_tick": null,
+    "tick_count": 0,
+    "current_action": null,
+    "retries": {},
+    "escalation": null,
+    "mode": "chat"
+  },
+  "meetings": {
+    "cadence": "normal",
+    "last_standup": null,
+    "next_scheduled": null,
+    "active": [],
+    "open_action_items": 0,
+    "last_goal_adherence": null,
+    "manual_override": null
+  },
+  "cto": {
+    "last_review": null,
+    "open_arch_risks": 0,
+    "open_hotfixes": 0,
+    "fail_alerts": [],
+    "review_path": null
+  },
+  "cqo": {
+    "last_audit": null,
+    "sprint_verdict": "pending",
+    "open_regressions": 0,
+    "rubber_stamping_count": 0,
+    "axes_below_threshold": [],
+    "audit_path": null
+  },
+  "service_ops": {
+    "monitor": {
+      "last_check": null,
+      "cadence_decided": "normal",
+      "current_goal_adherence": null,
+      "warns_this_sprint": 0,
+      "alerts_this_sprint": 0
+    },
+    "incident": {
+      "open": [],
+      "last_incident": null,
+      "rca_pending": []
+    },
+    "auto_retro": {
+      "last_report": null,
+      "open_recommendations": 0,
+      "cto_handoff_state": null
+    }
+  },
+  "eval_security": {
+    "last_audit": null,
+    "open_high": 0,
+    "open_medium": 0,
+    "secrets_found": 0,
+    "threat_model_path": null,
+    "audit_path": null
+  },
+  "eval_architecture": {
+    "last_audit": null,
+    "open_violations": 0,
+    "new_cycles": 0,
+    "api_contract_mismatches": 0,
+    "graph_baseline_path": null,
+    "audit_path": null
+  },
+  "generator_designer": {
+    "last_handoff": null,
+    "tokens_version": null,
+    "components_count": 0,
+    "open_design_questions": 0,
+    "handoff_path": "apps/web/design/"
+  },
+  "generator_devops": {
+    "last_release": null,
+    "ci_status": {
+      "build": "unknown",
+      "deploy_staging": "unknown",
+      "deploy_prod": "unknown"
+    },
+    "open_iac_drift": 0,
+    "secret_rotations_due": [],
+    "rollback_ready": false
+  }
 }

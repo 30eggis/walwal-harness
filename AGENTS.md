@@ -1,3 +1,15 @@
+---
+docmeta:
+  id: AGENTS
+  title: Project Context for AI Agents (walwal-harness)
+  type: input
+  createdAt: 2026-04-09T00:00:00Z
+  updatedAt: 2026-05-07T00:00:00Z
+  source:
+    producer: user
+  tags: [project-context, ia-map, permissions, harness]
+---
+
 # AGENTS.md — Project Context for AI Agents
 
 > 이 파일은 모든 AI 에이전트(Claude, Cursor, Copilot, Windsurf 등)의 공통 진입점입니다.
@@ -28,23 +40,36 @@
 ```
 /
 ├── apps/
-│   ├── gateway/          # [BE] API Gateway — 라우팅, 인증, CORS       → Generator-Backend
-│   ├── service-*/        # [BE] Microservice — 도메인 비즈니스 로직     → Generator-Backend
-│   └── web/              # [FE] Frontend — UI, 상태관리, API 연동       → Generator-Frontend
+│   ├── gateway/                # [BE] API Gateway — 라우팅·인증·CORS         → Generator-Backend
+│   ├── service-*/              # [BE] Microservice — 도메인 로직              → Generator-Backend
+│   ├── web/                    # [FE] Frontend — UI·상태·API                 → Generator-Frontend
+│   │   └── design/             # [DESIGN] 디자인 토큰·컴포넌트 spec·flows    → Generator-Designer
+│   └── harness-dashboard/      # [META] Brick Office 대시보드 (Phase C)      → Planner
 ├── libs/
-│   ├── shared-dto/       # [BE] 공유 DTO — api-contract.json에서 파생   → Generator-Backend
-│   ├── database/         # [BE] DB 모듈 — TypeORM/Prisma 설정          → Generator-Backend
-│   └── common/           # [BE] 공통 유틸 — 필터, 인터셉터, 가드        → Generator-Backend
+│   ├── shared-dto/             # [BE] 공유 DTO — api-contract.json 파생      → Generator-Backend
+│   ├── database/               # [BE] DB 모듈                                → Generator-Backend
+│   └── common/                 # [BE] 공통 유틸                              → Generator-Backend
+├── infra/                      # [INFRA] CI/CD·IaC·시크릿·릴리스             → Generator-DevOps
 ├── .harness/
-│   ├── prompts/          # [HARNESS] 에이전트 프롬프트 정의             → Planner
-│   ├── actions/          # [HARNESS] 활성 스프린트 문서                 → 각 에이전트
-│   └── archive/          # [HARNESS] 완료 스프린트 보관 (불변)          → Evaluator
-├── AGENTS.md             # [META] 이 파일 — 프로젝트 컨텍스트           → Planner
-├── CLAUDE.md             # [META] → AGENTS.md 심볼릭 링크
-├── init.sh               # [HARNESS] 환경 초기화 + 통합 러너
-├── nest-cli.json         # [BE] NestJS 모노레포 설정                    → Generator-Backend
-├── package.json          # [ROOT] 워크스페이스 + 통합 스크립트           → Generator-Backend
-└── docker-compose.yml    # [INFRA] 개발용 서비스 오케스트레이션          → Generator-Backend
+│   ├── doctrine/               # [HARNESS] 운영 도큐트린 (NEXUS)             → Planner (Owner 승인)
+│   ├── ref/                    # [HARNESS] 스택별 best-practice 참조본       → Planner
+│   ├── prompts/                # [HARNESS] 에이전트 프롬프트                 → Planner
+│   ├── actions/                # [HARNESS] 활성 스프린트 문서                → 각 에이전트
+│   │   ├── meetings/           # [HARNESS] 회의록·prep                       → Meeting-Manager
+│   │   ├── incidents/          # [HARNESS] 사고 타임라인·RCA                 → Service-Ops
+│   │   ├── escalations/        # [HARNESS] Owner 보고용                      → Conductor
+│   │   └── onboarding/         # [HARNESS] 부서 온보딩 패키지                → Planner(HR)
+│   ├── ops/                    # [HARNESS] 운영 메트릭 적재                  → Generator-DevOps(append) / Service-Ops(read)
+│   ├── baselines/              # [HARNESS] Eval baseline (의존 그래프 등)    → Evaluator-*
+│   └── archive/                # [HARNESS] 완료 스프린트 (불변)              → Evaluator
+├── gotchas/                    # [HARNESS] 부서별 가드                       → Planner
+├── skills/                     # [HARNESS] 부서 스킬 정의                    → Planner(HR)
+├── AGENTS.md                   # [META] 프로젝트 컨텍스트                    → Planner
+├── CLAUDE.md                   # [META] → AGENTS.md 심볼릭 링크
+├── init.sh                     # [HARNESS] 환경 초기화 + 통합 러너
+├── nest-cli.json               # [BE] NestJS 모노레포 설정                   → Generator-Backend
+├── package.json                # [ROOT] 워크스페이스                         → Generator-Backend
+└── docker-compose.yml          # [INFRA] 개발용 오케스트레이션               → Generator-DevOps
 ```
 
 ### IA-MAP 범례
@@ -53,10 +78,41 @@
 |------|------|--------------|
 | `[BE]` | Backend 영역 | Generator-Backend |
 | `[FE]` | Frontend 영역 | Generator-Frontend |
-| `[HARNESS]` | 하네스 시스템 | Planner / Evaluator |
+| `[DESIGN]` | 디자인 토큰·컴포넌트 | Generator-Designer |
+| `[INFRA]` | 인프라·CI/CD·시크릿 | Generator-DevOps |
+| `[HARNESS]` | 하네스 시스템 | Planner / Evaluator / 부서별 (권한 매트릭스 참조) |
 | `[META]` | 프로젝트 메타 문서 | Planner |
-| `[INFRA]` | 인프라/배포 설정 | Planner |
 | `[ROOT]` | 루트 설정 | Generator-Backend (초기), Planner (구조 변경) |
+
+## Organization (v6 — NEXUS-Adapted)
+
+> 하네스는 하나의 회사. 사용자(Owner)는 Dispatcher(CEO)와만 대화한다.
+> 상세 도큐트린: `.harness/doctrine/nexus.md`
+
+```
+Owner (사용자)
+  ↕ (단일 대화 창구)
+Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
+  ├─ Conductor          (자율 실행 엔진: Gen↔Eval↔Ops 루프)
+  └─ Meeting-Manager    (동기화 엔진: 5종 회의 · 적응형 cadence)
+        ↓
+   Planner = COO + HR   (Sprint·AC·인선·온보딩)
+        ↓
+  ┌─────┴────────┬──────────────┐
+  CTO            CQO            Service-Ops
+  (Gen 총괄)    (Eval 총괄)     (운용·모니터·인시던트·자율회고)
+  ├ Gen-BE      ├ Eval-Functional
+  ├ Gen-FE      ├ Eval-Visual
+  ├ Designer    ├ Eval-CodeQuality
+  └ DevOps      ├ Eval-Architecture
+                └ Eval-Security
+```
+
+### 단일 대화 창구 룰
+
+- **Owner ↔ Dispatcher만** 직접 대화. 다른 부서는 Owner와 직접 대화 X.
+- 모든 escalation은 Dispatcher 경유.
+- GOAL 작성은 CEO 전용 (CTO와 협의로 구체화).
 
 ## Rules (모든 에이전트 공통)
 
@@ -75,6 +131,25 @@
 | apps/web/ | 전체 | Generator-Frontend만 |
 | libs/ | 전체 | Generator-Backend만 |
 | .harness/archive/ | 전체 | 쓰기 금지 (불변) |
+| .harness/doctrine/ | 전체 | Planner만 (Owner 승인 시) |
+| .harness/ref/ | 전체 | Planner만 |
+| .harness/actions/goals.md | 전체 | **CEO(Dispatcher)만** |
+| .harness/actions/meetings/ | 전체 | Meeting-Manager만 |
+| .harness/actions/incidents/ | 전체 | Service-Ops만 |
+| .harness/actions/escalations/ | 전체 | Conductor만 |
+| .harness/actions/onboarding/ | 전체 | Planner(HR)만 |
+| .harness/actions/cto-review-*.md | 전체 | CTO만 |
+| .harness/actions/cqo-audit-*.md | 전체 | CQO만 |
+| .harness/actions/ops-report-*.md | 전체 | Service-Ops만 |
+| .harness/actions/hr-roster.md | 전체 | Planner(HR)만 |
+| .harness/actions/org-chart-*.json | 전체 | Dispatcher(CEO)만 |
+| .harness/ops/metrics.jsonl | 전체 | Generator-DevOps(append) / Service-Ops(read) |
+| .harness/baselines/ | 전체 | Evaluator-* (자기 baseline만) |
+| apps/web/design/ | 전체 | Generator-Designer만 |
+| apps/harness-dashboard/ | 전체 | Planner (대시보드 코드) |
+| infra/ | 전체 | Generator-DevOps만 |
+| skills/ | 전체 | Planner(HR)만 |
+| gotchas/ | 전체 | Planner만 (verified 승격) / 각 부서 (자기 unverified 추가 가능) |
 
 ### 변경 요청 프로토콜
 
