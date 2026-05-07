@@ -29,6 +29,27 @@ docmeta:
 
 # Changelog
 
+## 6.0.5 — migrate 가 gotcha entry / bundle version 까지 sync (2026-05-07)
+
+### Why
+Owner 보고 — `npm install @walwal-harness/cli@latest && npx walwal-harness migrate` 가 "이미 최신 버전입니다" 로 종료. 그러나 v6.0.4 에서 새로 추가된 `gotchas/conductor.md` 의 [G-005], [G-006], `gotchas/service-ops.md`, `gotchas/generator-frontend.md [G-001]` 가 사용자 프로젝트에 merge 되지 않음. **존재 여부 (3 항목 — progress v4 / config.mode_selection / M-NEXUS-P3) 만 확인하고 콘텐츠는 비교 안 함** → 본질적 버그.
+
+### Changes
+- **bin/init.js `detectMigrationNeeded`** — 두 신규 시그널 추가:
+  - `gotchaMissingEntries`: `gotchas/*.md` 별로 패키지 → 사용자 [G-NNN] entry 차이 산출 (memory.md 패턴과 동일)
+  - `bundleVersionStale`: `.harness/.bundle-version` 스탬프와 패키지 버전 비교
+- **bin/init.js `runMigrate`** — gotcha entry append + bundle stamp 갱신 단계 추가. 사용자가 직접 추가한 [G-NNN] entry 는 절대 건드리지 않으며, 패키지의 신규 시스템 entry 만 끝에 추가.
+- **bin/init.js `extractGotchaEntryBlock` / `extractEntryBlock`** — JS 정규식 `\Z` 미지원 fix. 마지막 entry 가 추출 누락되던 버그 동시 해결 (v6.0.2 부터 잠재).
+- **bin/init.js main flow** — 콘텐츠 드리프트 없이 stamp 만 누락된 경우 init 종료 시 자동 갱신. stamp 만으로 매번 migrate 권유 알림이 뜨는 것 방지.
+
+### Migration
+```bash
+npm install @walwal-harness/cli@latest
+npx walwal-harness migrate     # gotchas/conductor.md G-005/G-006, gotchas/service-ops.md, gotchas/generator-frontend.md G-001 자동 append + stamp 갱신
+npx walwal-harness verify
+```
+사용자 [G-NNN] entry 는 보존되고 시스템 entry 만 끝에 append. 변경 전 `.harness/archive/migration-<ts>/gotchas-<file>` 백업.
+
 ## 6.0.4 — Sub-skill 협업 + Service-Ops 상시 + Team 병렬 spawn (2026-05-07)
 
 ### Why

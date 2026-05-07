@@ -988,7 +988,41 @@ function detectMigrationNeeded() {
     progressV3toV4: false,
     configMissingModeSelection: false,
     memoryMissingSystemEntries: [],
+    gotchaMissingEntries: {},   // { "<filename>": [G-IDs...] }
+    bundleVersionStale: null,    // { current, installed }
   };
+
+  // Gotcha entry-level diff: for each bundled gotcha file, compare entry IDs.
+  // 사용자가 직접 추가한 [G-NNN] 은 절대 건드리지 않으며, 패키지에서 새로
+  // 도입된 시스템 entry 만 append 대상.
+  const gotchasSrc = path.join(PKG_ROOT, 'gotchas');
+  const gotchasDest = path.join(HARNESS_DIR, 'gotchas');
+  if (fs.existsSync(gotchasSrc) && fs.existsSync(gotchasDest)) {
+    const files = fs.readdirSync(gotchasSrc).filter((f) => f.endsWith('.md') && f !== 'README.md');
+    for (const file of files) {
+      const srcPath = path.join(gotchasSrc, file);
+      const destPath = path.join(gotchasDest, file);
+      if (!fs.existsSync(destPath)) continue;  // installSkills/init 이 처리
+      try {
+        const srcIds = extractGotchaEntryIds(fs.readFileSync(srcPath, 'utf8'));
+        const dstIds = new Set(extractGotchaEntryIds(fs.readFileSync(destPath, 'utf8')));
+        const missing = srcIds.filter((id) => !dstIds.has(id));
+        if (missing.length) flags.gotchaMissingEntries[file] = missing;
+      } catch {}
+    }
+  }
+
+  // Bundle version stamp: detects fresh package vs. last-applied bundle.
+  // Even if the 3 schema flags pass, a newer bundle may have introduced new
+  // gotcha/SKILL/template content the user hasn't seen yet.
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8'));
+    const stampPath = path.join(HARNESS_DIR, '.bundle-version');
+    const installed = fs.existsSync(stampPath) ? fs.readFileSync(stampPath, 'utf8').trim() : null;
+    if (installed !== pkg.version) {
+      flags.bundleVersionStale = { current: pkg.version, installed };
+    }
+  } catch {}
   if (fs.existsSync(progressPath)) {
     try {
       const p = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
@@ -1025,7 +1059,29 @@ function extractEntryIds(md) {
 // Extracts a single entry block (heading + body until next ### or EOF) from the template.
 function extractEntryBlock(md, id) {
   const escId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`(^### \\[${escId}\\][\\s\\S]*?)(?=^### \\[|\\Z)`, 'm');
+  const re = new RegExp(`(^### \\[${escId}\\][\\s\\S]*?)(?=^### \\[|$(?![\\s\\S]))`, 'm');
+  const m = md.match(re);
+  return m ? m[1].trimEnd() : null;
+}
+
+// Returns gotcha entry IDs ("[G-001]", "[G-NEXUS-P3]" etc.) found in a markdown body.
+// Supports both `### [G-NNN]` and `## [G-NNN] ...` heading levels.
+function extractGotchaEntryIds(md) {
+  const re = /^#{2,3}\s+\[(G-[A-Z0-9_-]+)\]/gm;
+  const ids = [];
+  let m;
+  while ((m = re.exec(md)) !== null) ids.push(m[1]);
+  return ids;
+}
+
+// Extracts a single gotcha entry block from a markdown body.
+function extractGotchaEntryBlock(md, id) {
+  const escId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // JS lacks \Z; emulate end-of-string via (?![\s\S]) negative lookahead.
+  const re = new RegExp(
+    `(^#{2,3}\\s+\\[${escId}\\][\\s\\S]*?)(?=^#{2,3}\\s+\\[G-|$(?![\\s\\S]))`,
+    'm',
+  );
   const m = md.match(re);
   return m ? m[1].trimEnd() : null;
 }
@@ -1048,6 +1104,17 @@ function showMigrationProposal(flags) {
     console.log('    [' + flags.memoryMissingSystemEntries.join(', ') + ']');
     console.log('    사용자 [M-NNN] entry 는 보존, 시스템 entry 만 끝에 추가.');
   }
+  const gotchaSummary = Object.entries(flags.gotchaMissingEntries || {});
+  if (gotchaSummary.length) {
+    console.log('  • gotchas/: 시스템 entry 누락 — entry-level append 가능 (사용자 [G-NNN] 보존)');
+    for (const [file, ids] of gotchaSummary) {
+      console.log(`    ${file}: [${ids.join(', ')}]`);
+    }
+  }
+  if (flags.bundleVersionStale) {
+    const { current, installed } = flags.bundleVersionStale;
+    console.log(`  • bundle: ${installed ?? '(없음)'} → ${current} 스탬프 갱신 필요`);
+  }
   console.log('');
   console.log('  적용:  npx walwal-harness migrate');
   console.log('  미리보기:  npx walwal-harness migrate --dry-run');
@@ -1060,13 +1127,18 @@ function showMigrationProposal(flags) {
 function runMigrate(opts = {}) {
   const dryRun = opts.dryRun || false;
   const flags = detectMigrationNeeded();
+  const gotchaMissingTotal = Object.values(flags.gotchaMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   if (
     !flags.progressV3toV4 &&
     !flags.configMissingModeSelection &&
-    (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0)
+    (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
+    gotchaMissingTotal === 0 &&
+    !flags.bundleVersionStale
   ) {
     console.log('');
-    log('이미 최신 버전입니다 (progress v' + TARGET_PROGRESS_VERSION + ' + config.mode_selection + memory 시스템 entry 모두 존재).');
+    let pkgVer = 'unknown';
+    try { pkgVer = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version; } catch {}
+    log(`이미 최신 — bundle v${pkgVer} 일치, progress v${TARGET_PROGRESS_VERSION}, config.mode_selection, memory 시스템 entry, gotcha entry 모두 sync.`);
     return;
   }
 
@@ -1138,6 +1210,39 @@ function runMigrate(opts = {}) {
         const sep = original.endsWith('\n') ? '\n' : '\n\n';
         fs.writeFileSync(memoryPath, original + sep + blocks.join('\n\n') + '\n');
       }
+    }
+  }
+
+  // 4. gotcha entry merge — for each bundled gotcha file, append missing
+  //    [G-NNN] entries while preserving everything the user already has.
+  const gotchaMissing = flags.gotchaMissingEntries || {};
+  for (const [file, missingIds] of Object.entries(gotchaMissing)) {
+    if (!missingIds.length) continue;
+    const srcPath = path.join(PKG_ROOT, 'gotchas', file);
+    const destPath = path.join(HARNESS_DIR, 'gotchas', file);
+    if (!fs.existsSync(srcPath) || !fs.existsSync(destPath)) continue;
+    const original = fs.readFileSync(destPath, 'utf8');
+    const tpl = fs.readFileSync(srcPath, 'utf8');
+    const blocks = [];
+    for (const id of missingIds) {
+      const block = extractGotchaEntryBlock(tpl, id);
+      if (block) blocks.push(block);
+    }
+    if (!blocks.length) continue;
+    log(`  gotchas/${file}: 시스템 entry ${blocks.length}개 append (${missingIds.join(', ')})`);
+    if (!dryRun) {
+      fs.writeFileSync(path.join(backupDir, `gotchas-${file}`), original);
+      const sep = original.endsWith('\n') ? '\n' : '\n\n';
+      fs.writeFileSync(destPath, original + sep + blocks.join('\n\n') + '\n');
+    }
+  }
+
+  // 5. Bundle version stamp — record which package version was last applied.
+  if (flags.bundleVersionStale) {
+    const { current, installed } = flags.bundleVersionStale;
+    log(`  .bundle-version: ${installed ?? '(none)'} → ${current}`);
+    if (!dryRun) {
+      fs.writeFileSync(path.join(HARNESS_DIR, '.bundle-version'), current + '\n');
     }
   }
 
@@ -1320,8 +1425,20 @@ function main() {
 
   // v6.0 — propose migration if existing project is on v3
   const migFlags = detectMigrationNeeded();
-  if (migFlags.progressV3toV4 || migFlags.configMissingModeSelection) {
+  const gotchaMissing = Object.keys(migFlags.gotchaMissingEntries || {}).length > 0;
+  const hasContentDrift =
+    migFlags.progressV3toV4 ||
+    migFlags.configMissingModeSelection ||
+    (migFlags.memoryMissingSystemEntries && migFlags.memoryMissingSystemEntries.length) ||
+    gotchaMissing;
+  if (hasContentDrift) {
     showMigrationProposal(migFlags);
+  } else if (migFlags.bundleVersionStale) {
+    // 콘텐츠 드리프트 없이 stamp 만 누락/오래됨 → 정합성 차원에서 직접 갱신.
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8'));
+      fs.writeFileSync(path.join(HARNESS_DIR, '.bundle-version'), pkg.version + '\n');
+    } catch {}
   }
 
   // v6.0 — Brick Office dashboard one-liner
