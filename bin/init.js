@@ -1152,6 +1152,121 @@ function runMigrate(opts = {}) {
   console.log('');
 }
 
+// ─────────────────────────────────────────
+// Verify — 14 SKILL invariants + spawn whitelist + progress schema
+// ─────────────────────────────────────────
+function runVerify() {
+  const expectedSkills = [
+    'dispatcher', 'conductor', 'meeting-manager', 'planner',
+    'cto', 'cqo', 'service-ops',
+    'generator-backend', 'generator-frontend', 'generator-designer', 'generator-devops',
+    'evaluator-code-quality', 'evaluator-functional', 'evaluator-visual',
+    'evaluator-architecture', 'evaluator-security',
+    'brainstorming',
+  ];
+  const requiredFrontmatter = ['name', 'description'];
+
+  console.log('');
+  log('=== Verify: skill invariants + spawn whitelist + progress schema ===');
+  let pass = 0;
+  let fail = 0;
+  const issues = [];
+
+  // 1) skill files
+  for (const s of expectedSkills) {
+    const local = path.join(CLAUDE_SKILLS_DIR, `harness-${s}`, 'SKILL.md');
+    const exists = fs.existsSync(local);
+    if (!exists) {
+      issues.push(`  ✗ skills/harness-${s}/SKILL.md MISSING`);
+      fail++;
+      continue;
+    }
+    const body = fs.readFileSync(local, 'utf8');
+    const fmMatch = body.match(/^---\n([\s\S]*?)\n---/);
+    if (!fmMatch) {
+      issues.push(`  ✗ harness-${s}: frontmatter 누락`);
+      fail++;
+      continue;
+    }
+    const missing = requiredFrontmatter.filter((k) => !new RegExp(`^${k}:`, 'm').test(fmMatch[1]));
+    if (missing.length) {
+      issues.push(`  ✗ harness-${s}: frontmatter [${missing.join(',')}] 누락`);
+      fail++;
+      continue;
+    }
+    pass++;
+  }
+  log(`  skills: ${pass}/${expectedSkills.length} OK`);
+
+  // 2) progress.json schema (v6 = version 4 + mode_decision)
+  const progressPath = path.join(HARNESS_DIR, 'progress.json');
+  if (fs.existsSync(progressPath)) {
+    try {
+      const p = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+      const schemaIssues = [];
+      if ((p.version ?? 0) < 4) schemaIssues.push(`version=${p.version} (<4)`);
+      if (!p.mode_decision) schemaIssues.push('mode_decision 누락');
+      if (!p.dispatch) schemaIssues.push('dispatch 누락');
+      if (schemaIssues.length) {
+        issues.push(`  ✗ progress.json schema: ${schemaIssues.join(', ')} → npx walwal-harness migrate`);
+        fail++;
+      } else {
+        pass++;
+        log(`  progress.json: schema v${p.version} OK`);
+      }
+    } catch (e) {
+      issues.push(`  ✗ progress.json parse: ${e.message}`);
+      fail++;
+    }
+  }
+
+  // 3) config.json mode_selection
+  const configPath = path.join(HARNESS_DIR, 'config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      const c = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (!c.mode_selection) {
+        issues.push('  ✗ config.json: mode_selection 누락 → npx walwal-harness migrate');
+        fail++;
+      } else {
+        pass++;
+        log(`  config.json: mode_selection.owner=${c.mode_selection.owner} OK`);
+      }
+    } catch {}
+  }
+
+  // 4) memory.md system entries
+  const memoryPath = path.join(HARNESS_DIR, 'memory.md');
+  if (fs.existsSync(memoryPath)) {
+    const userMem = fs.readFileSync(memoryPath, 'utf8');
+    const userIds = new Set(extractEntryIds(userMem));
+    const required = ['M-NEXUS-P3'];
+    const missing = required.filter((id) => !userIds.has(id));
+    if (missing.length) {
+      issues.push(`  ✗ memory.md: 시스템 entry [${missing.join(',')}] 누락 → npx walwal-harness migrate`);
+      fail++;
+    } else {
+      pass++;
+      log('  memory.md: 시스템 entry OK');
+    }
+  }
+
+  // 5) deprecated user-facing slash commands
+  const deprecated = path.join(PROJECT_ROOT, '.claude', 'commands', 'harness-next.md');
+  if (fs.existsSync(deprecated)) {
+    issues.push('  ⚠ .claude/commands/harness-next.md 존재 — v6.0.3 부터 회사 내부 도구로 전환됨. `npx walwal-harness --force` 또는 직접 삭제 권장');
+  }
+
+  console.log('');
+  if (fail === 0) {
+    log(`✓ Verify PASS — ${pass} 개 invariant 통과.`);
+  } else {
+    log(`✖ Verify FAIL — ${fail} 개 issue 발견:`);
+    for (const i of issues) console.log(i);
+  }
+  console.log('');
+}
+
 function main() {
   if (isHelp) {
     showHelp();
@@ -1165,6 +1280,11 @@ function main() {
 
   if (subcommand === 'migrate') {
     runMigrate({ dryRun: args.includes('--dry-run') });
+    return;
+  }
+
+  if (subcommand === 'verify') {
+    runVerify();
     return;
   }
 

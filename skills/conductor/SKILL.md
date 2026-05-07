@@ -28,6 +28,51 @@ Conductor 는 다음 시점에 **자동 시동**한다. 사용자 펌프 없이.
 
 자세한 anti-pattern → `.harness/gotchas/dispatcher.md` 의 [G-002] 자율 실행 위반.
 
+## 0.5 Visibility Checklist (Inviolable, 매 tick 의무)
+
+Brick Office dashboard 가 회사의 활동을 정확히 비추려면 매 tick 의 4 시점에 progress.json partial update 가 누락 없이 발생해야 한다. Owner 의 "잘 워킹하고 있다는 느낌" 은 이 4 시점 update 의 누적이다.
+
+### 4 시점 의무
+
+```bash
+# ① tick 시작 시점 — Conductor 자신을 typing 으로 표시
+bash scripts/harness-progress-set.sh . \
+  ".current_agent = \"conductor\" | .agent_status = \"running\" |
+   .conductor.last_tick = \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\" |
+   .conductor.tick_count = ((.conductor.tick_count // 0) + 1)"
+
+# ② spawn 직전 — 회의실로 from/to 텔레포트 (~1.5s 시각화)
+bash scripts/harness-progress-set.sh . \
+  ".meetings.active = [\"conductor\",\"<spawn-target>\"] | .meetings.cadence = \"handoff\""
+sleep 1.5
+
+# ③ spawn 직후 — 회의 종료, spawned agent 가 현장 작업
+bash scripts/harness-progress-set.sh . \
+  ".meetings.active = [] | .current_agent = \"<spawn-target>\" | .agent_status = \"running\""
+
+# ④ tick 완료 — spawned agent 가 자체 SKILL 의 Session Boundary 따름
+#    Conductor 는 다음 tick 에서 ① 부터 다시 시작
+```
+
+### Spawn 사전 검증 (G-001)
+
+spawn 결정 트리 §5 직전에 SKILL 존재 검사를 수행한다:
+
+```bash
+TARGET="<spawn-candidate>"
+if [ ! -f ".claude/skills/harness-${TARGET}/SKILL.md" ]; then
+  bash scripts/harness-progress-set.sh . \
+    ".failure = {\"agent\":\"conductor\",\"location\":\"spawn\",\"message\":\"unknown agent: ${TARGET}\",\"retry_target\":null} |
+     .next_agent = \"dispatcher\" | .agent_status = \"blocked\""
+  # Dispatcher 가 받아 Owner 에게 escalation
+  exit 0
+fi
+```
+
+**금지** — inline fallback ("SKILL 이 없으므로 Conductor 가 직접 검증") 으로 우회. M-001 의 "유령 스킬" 패턴 재발.
+
+자세한 anti-pattern → `.harness/gotchas/conductor.md` [G-001] ~ [G-004].
+
 ## 1. 정체성
 
 - **위치**: Dispatcher(CEO) 직속, Planner와 평행

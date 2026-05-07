@@ -1,8 +1,8 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AgentId, AgentState, HarnessSnapshot, RoomId, RoomState } from "@/lib/types";
-import { useHarnessStream } from "@/hooks/useHarnessStream";
+import { useHarnessStream, type ConnectionState } from "@/hooks/useHarnessStream";
 import { Drawer, type DrawerTab } from "./Drawer";
 import { AgentLogTab } from "./drawer/AgentLogTab";
 import { RoomMetricsTab } from "./drawer/RoomMetricsTab";
@@ -76,22 +76,9 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         />
       </div>
 
-      {/* Connection state pill */}
-      <div
-        data-testid="connection-state"
-        data-state={connectionState}
-        className={`mt-2 inline-block rounded px-2 py-0.5 text-[10px] font-mono ${
-          connectionState === "open"
-            ? "bg-aura-typing/20 text-aura-typing"
-            : connectionState === "stale"
-            ? "bg-aura-talking/20 text-aura-talking"
-            : connectionState === "failed"
-            ? "bg-aura-alert/20 text-aura-alert"
-            : "bg-gray-500/20 text-gray-400"
-        }`}
-      >
-        SSE: {connectionState}
-      </div>
+      {/* Connection state pill + last_activity freshness */}
+      <ActivityIndicator snapshot={snapshot} connectionState={connectionState} />
+
 
       {/* Hidden DOM index for E2E + a11y */}
       <ul className="sr-only" data-testid="scene-index">
@@ -142,6 +129,62 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
           <ArchiveList snapshot={snapshot} />
         )}
       </Drawer>
+    </div>
+  );
+}
+
+function ActivityIndicator({
+  snapshot,
+  connectionState,
+}: {
+  snapshot: HarnessSnapshot;
+  connectionState: ConnectionState;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
+  const ts = Date.parse(snapshot.ts);
+  const ageSec = Number.isFinite(ts) ? Math.max(0, Math.floor((now - ts) / 1000)) : null;
+  const isStale = ageSec !== null && ageSec > 30;
+  return (
+    <div className="mt-2 flex items-center gap-2 text-[10px] font-mono">
+      <span
+        data-testid="connection-state"
+        data-state={connectionState}
+        className={`inline-block rounded px-2 py-0.5 ${
+          connectionState === "open"
+            ? "bg-aura-typing/20 text-aura-typing"
+            : connectionState === "stale"
+            ? "bg-aura-talking/20 text-aura-talking"
+            : connectionState === "failed"
+            ? "bg-aura-alert/20 text-aura-alert"
+            : "bg-gray-500/20 text-gray-400"
+        }`}
+      >
+        SSE: {connectionState}
+      </span>
+      <span
+        data-testid="activity-age"
+        data-stale={isStale}
+        className={`inline-block rounded px-2 py-0.5 ${
+          isStale
+            ? "bg-aura-alert/20 text-aura-alert"
+            : "bg-aura-typing/20 text-aura-typing"
+        }`}
+      >
+        {ageSec === null
+          ? "—"
+          : isStale
+          ? `stale ${ageSec}s — 회사가 멈춰 보입니다`
+          : `live ${ageSec}s ago`}
+      </span>
+      {snapshot.errorBanner && (
+        <span className="inline-block rounded bg-aura-alert/20 px-2 py-0.5 text-aura-alert">
+          banner: {snapshot.errorBanner.level}
+        </span>
+      )}
     </div>
   );
 }

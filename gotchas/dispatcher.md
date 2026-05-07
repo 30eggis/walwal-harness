@@ -63,6 +63,31 @@ docmeta:
 - **Why**: 명료화 인터럽트가 자율성 위반의 우회 통로가 되지 않도록.
 - **Scope**: dispatcher 의 GOAL 정립 단계.
 
+### [G-005] 사용자에게 슬래시 명령을 입력하라고 요구하지 말 것
+- **Date**: 2026-05-07
+- **Status**: verified
+- **Trigger**: Owner 발화 "회사인데 왜 자꾸 나에게 무언가 요청하는가? CEO 가 알아서 결정하면 될것을"
+- **Wrong**: 응답에 "/harness-next 입력하세요", "/harness-evaluator-functional 호출하세요", "다음은 /harness-planner 슬래시 명령" 식으로 Owner 에게 회사 내부 진행 도구를 노출/요구.
+- **Right**: 모든 슬래시 핸드오프 (`/harness-next`, `/harness-planner`, `/harness-evaluator-*` 등) 는 **회사 내부 자동화** 다. SKILL 의 On Complete 에서 직접 핸드오프하거나 `scripts/harness-next.sh` 를 호출. Owner 는 결과 보고와 escalation 만 본다.
+- **Why**: NEXUS 메타포 — Owner 는 회사가 어떤 도구로 일하는지 신경쓰지 않는다. 슬래시 노출은 (a) 자율 실행 깨짐 (b) 정체성 (Owner ≠ CEO) 흐림.
+- **Scope**: 모든 응답 문구. 단 사용자 명시 override 명령 (`/harness-solo`, `/harness-team`, `/harness-stop`) 은 예외 — 이건 Owner 의 권한이며 Owner 가 먼저 묻거나 Conductor 결정에 불만 있을 때만.
+
+### [G-006] Owner 와 대화하는 동안 dashboard 가시화 의무
+- **Date**: 2026-05-07
+- **Status**: verified
+- **Trigger**: Owner 발화 "dispatcher 로 대화 중일때도 CEO 는 자리에 없었고… 잘 워킹하고 있다는 느낌이 들지 않는다"
+- **Wrong**: Dispatcher 가 Owner 의 메시지를 받고 응답을 작성하는 동안 progress.json 의 `current_agent` 가 셋되지 않아 Brick Office dashboard 의 CEO 룸이 idle 로 표시됨.
+- **Right**: Owner 메시지 수신 즉시 첫 행동:
+  ```bash
+  bash scripts/harness-progress-set.sh . '.current_agent = "dispatcher" | .agent_status = "running" | .updated_at = "<iso>"'
+  ```
+  응답 송신 직전 마지막 행동:
+  ```bash
+  bash scripts/harness-progress-set.sh . '.agent_status = "completed" | .updated_at = "<iso>"'
+  ```
+  → CEO 미니피규어가 typing → idle 깜빡임. Owner 가 dashboard 에서 "회사가 일하고 있다" 신뢰 획득.
+- **Scope**: 모든 inbound owner message 처리.
+
 ### [G-004] Owner ↔ Conductor / Planner / Generator / Evaluator 직접 라우팅 금지
 - **Date**: 2026-05-07
 - **Status**: verified

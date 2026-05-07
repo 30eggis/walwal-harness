@@ -69,8 +69,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
    - `completed_agents` 에 `"brainstormer"` 추가
    - `next_agent` → `"planner"`
 3. `.harness/progress.log` 에 요약 추가: `Brainstormer → Planner (spec: <경로>)`
-4. 출력: `"✓ Brainstormer 완료. brainstorm-spec.md 검토 후 승인 신호를 주세요. 승인 시 /harness-next 자동 진행 (Planner)."`
-5. **사용자 승인 게이트**: 사용자의 명시적 승인 ("이 디자인 승인한다", "ok", "다음", "Planner 가자" 등) 을 기다린 후, **`/harness-next` 슬래시 명령을 호출하여 Planner 로 자동 핸드오프**.
+4. 출력: `"✓ Brainstormer 완료. brainstorm-spec.md 검토 후 승인 신호를 주세요. 승인 시 자동 핸드오프 (Conductor 자율 시동) (Planner)."`
+5. **사용자 승인 게이트**: 사용자의 명시적 승인 ("이 디자인 승인한다", "ok", "다음", "Planner 가자" 등) 을 기다린 후, **내부 핸드오프 (scripts/harness-next.sh) 를 호출하여 Planner 로 자동 핸드오프**.
 6. 사용자가 피드백/수정 요청을 하면 brainstorm-spec.md 를 갱신하고 다시 승인 요청. 승인 없이는 `/harness-next` 호출 금지 (HARD-GATE 준수).
 
 ### On Fail / Abort

@@ -29,6 +29,41 @@ docmeta:
 
 # Changelog
 
+## 6.0.3 — Visibility + Spawn 검증 + 사용자 슬래시 노출 제거 (2026-05-07)
+
+Owner 의 두 지적을 동시 해결:
+1. "Dispatcher 와 대화 중인데 CEO 가 자리에 없다 / 회의실에 모이지도 않는다" — visibility 의무 부재
+2. "회사인데 왜 자꾸 나에게 명령을 요구하는가" — 사용자 facing 슬래시 잔재
+
+### Added
+- `gotchas/dispatcher.md` [G-005] [G-006] — 사용자 슬래시 명령 요구 금지 + Owner 대화 중 dashboard 가시화 의무
+- `gotchas/conductor.md` (신규) — [G-001] inline fallback 금지 (M-001 의 Conductor 적용) / [G-002] spawn 핸드오프 시 회의실 활용 / [G-003] Visibility Checklist 4 시점 / [G-004] Owner 진행 동의 묻지 말 것
+- `skills/conductor/SKILL.md` §0.5 "Visibility Checklist (Inviolable)" 신설 — 매 tick 의 4 시점 progress.json partial update 의무 + spawn 사전 검증 (SKILL 존재 검사 → 없으면 escalate, inline fallback 금지)
+- 신규 명령 `walwal-harness verify` — 17 SKILL invariants + progress schema + config mode_selection + memory 시스템 entry + deprecated commands 검사. 한 줄로 통합 점검.
+- `apps/harness-dashboard` 의 `ActivityIndicator` 컴포넌트 — `last_activity` age 표시. 30 초 이상 정적 → "stale — 회사가 멈춰 보입니다" 빨간 표시.
+
+### Changed
+- `commands/harness-next.md` **삭제** — 사용자 슬래시 노출 제거. v6 자율 회사에서 Owner 가 입력할 일 없음. `scripts/harness-next.sh` 는 회사 내부 도구로 유지 (Conductor 자율 호출).
+- 9 개 SKILL 본문의 "/harness-next 자동 진행" 안내 → "자동 핸드오프 (Conductor 자율 시동)" 로 일괄 치환.
+- `bin/init.js` install 의 commands cleanup 로직이 자동으로 deprecated `harness-next.md` 를 사용자 환경에서 제거 (기존 동작이 모든 `harness-*` 를 갱신하므로).
+
+### Removed
+- `commands/harness-next.md` — 사용자 facing 슬래시 (자율 위반)
+
+### Migration (one-liner)
+```bash
+npm install @walwal-harness/cli@latest
+npx walwal-harness migrate    # 이전 버전 사용자
+npx walwal-harness verify     # 설치 무결성 점검
+```
+
+`verify` 가 점검하는 것:
+- 17 개 SKILL 의 frontmatter (name, description) + 파일 존재
+- progress.json schema (version ≥ 4, mode_decision, dispatch)
+- config.json mode_selection 존재
+- memory.md 시스템 entry (M-NEXUS-P3)
+- deprecated 사용자 슬래시 (`.claude/commands/harness-next.md`) 잔존 여부
+
 ## 6.0.2 — `migrate` 가 memory 시스템 entry 까지 자동 처리 (2026-05-07)
 
 v6.0.1 patch 적용을 위해 사용자가 memory.md 의 [M-NEXUS-P3] 를 수동 추가해야 했던 불편을 제거. `npx walwal-harness migrate` 한 줄로 모두 처리됩니다.
