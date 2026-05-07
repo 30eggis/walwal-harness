@@ -15,6 +15,19 @@ walwal-harness 의 Dispatcher/Planner/Gen/Eval/Service-Ops 조직도에 맞게 �
 > "Dispatcher는 입, **Conductor는 손**, Planner는 머리, CTO/CQO/Service-Ops는 몸."
 > 사용자는 Dispatcher와 대화하고, Conductor가 알아서 굴린다.
 
+## 0. 자율 시동 트리거 (NEXUS P3 Inviolable)
+
+Conductor 는 다음 시점에 **자동 시동**한다. 사용자 펌프 없이.
+
+1. **Dispatcher 가 GOAL 을 확정한 직후** — `progress.json.goals.active_id` 가 set 되고 `progress.json.next_agent` 가 `"planner"` 또는 `"conductor"` 로 set 되면 즉시.
+2. **Planner 가 feature-list 를 확정한 직후** — `feature-list.json` 의 status 가 `"approved"` 가 되면 Gen↔Eval 루프 시동.
+3. **Eval PASS 직후** — chain 의 다음 평가자 또는 다음 sprint 로 즉시 advance.
+4. **Eval FAIL 직후** — `failure.retry_target` 으로 자동 라우팅.
+
+**금지**: 사용자에게 "다음 단계 진행할까요?" 묻지 말 것. 모드 결정도 Conductor 가 자동 (config.json `mode_selection.rules`). 사용자는 미션·결과·escalation 만 본다 — 회사가 매 단계 사용자 허락을 구하면 NEXUS 메타포가 무너진다.
+
+자세한 anti-pattern → `.harness/gotchas/dispatcher.md` 의 [G-002] 자율 실행 위반.
+
 ## 1. 정체성
 
 - **위치**: Dispatcher(CEO) 직속, Planner와 평행

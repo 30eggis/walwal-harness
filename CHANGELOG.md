@@ -29,6 +29,41 @@ docmeta:
 
 # Changelog
 
+## 6.0.1 — Owner ↔ CEO 정체성 + 자율 실행 룰 강화 (2026-05-07)
+
+v6.0.0 publish 직후 Owner 의 명시적 교정으로 발견된 두 가지 inviolable 룰 위반 패턴을 패키지에 정식 등재한 patch.
+
+### 발견된 위반 패턴
+- Dispatcher 응답이 사용자를 "CEO 직접 리뷰…" 로 호명 — 정체성 혼선
+- "/harness-next 자동 진행하시겠습니까?" 식의 사용자 펌프 — NEXUS P3 자율 실행 위반
+
+### Added
+- `gotchas/dispatcher.md` — 신규 4개 entry ([G-001]~[G-004]) 정식 등재. install 시 사용자 `.harness/gotchas/dispatcher.md` 로 자동 복사.
+  - [G-001] 사용자를 CEO 로 다루지 말 것 (Owner ↔ CEO 정체성)
+  - [G-002] 사용자에게 진행 여부 묻지 말 것 (NEXUS P3 자율 실행)
+  - [G-003] GOAL 모호성 명료화는 짧게 한 번만
+  - [G-004] Owner ↔ Conductor/Planner/Generator/Evaluator 직접 라우팅 금지
+- `assets/templates/memory.md` — 신규 [M-NEXUS-P3] 항목. 모든 신규 install 의 시작 memory 에 포함.
+
+### Changed
+- `skills/dispatcher/SKILL.md` 상단에 두 inviolable 섹션 신설:
+  - "정체성 — Owner ↔ CEO (NEXUS, Inviolable)"
+  - "자율 실행 원칙 (NEXUS P3, Inviolable)"
+- `skills/conductor/SKILL.md` §0 "자율 시동 트리거" 신설 — Dispatcher GOAL 확정 / Planner feature-list 확정 / Eval PASS / Eval FAIL 4 시점에 자동 시동 명시.
+
+### Why a patch (not a feature)
+이 룰들은 v6.0.0 의 NEXUS 도큐트린에 이미 존재했지만 SKILL 본문에서 충분히 강제되지 않아 대화에서 위반이 발생. 룰 자체는 변경 없음, **명시화/강제력 강화** 만.
+
+### Migration
+이전 사용자 (v6.0.0 install 자) 가 patch 적용:
+```bash
+npm install @walwal-harness/cli@latest    # 6.0.1 설치
+# .claude/skills/ 와 .harness/gotchas/dispatcher.md 가 자동 갱신됨.
+# .harness/memory.md 는 [G-NNN] entry 가 있으면 보존되므로
+# [M-NEXUS-P3] 항목을 수동으로 메모에 추가하거나
+# memory.md 백업 후 walwal-harness --force 로 template 재적용.
+```
+
 ## 6.0.0 — NEXUS-Adapted Company Metaphor (2026-05-07)
 
 회사 메타포로의 전면 전환. 기존 단일 dispatcher/planner/generator/evaluator 라인업을 NEXUS 도큐트린에 따라 7부서 + 14 에이전트 조직도로 재해석했습니다.
