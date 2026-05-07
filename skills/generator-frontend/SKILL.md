@@ -86,9 +86,29 @@ Team Mode 에서 Team Worker 가 호출할 때, 프롬프트에 `FEATURE_ID` 가
 ## Sprint Workflow
 
 1. **Sprint Contract FE 섹션 추가** — 컴포넌트 / API 연동 / 성공 기준
-2. **구현** — 아래 "스택 치환 규칙" 엄수
-3. **Self-Verification** — `ref.validation.pre_eval_gate` 에 나열된 명령 전부 실행
-4. **Handoff** → Evaluator-Functional
+2. **Sub-skill 협업 (Inviolable, gotcha G-001)** — 본 구현 전, 흡수된 agency-agents (MIT) sub-skill 결과를 순차 반영. 누락 시 Eval FAIL.
+3. **구현** — 아래 "스택 치환 규칙" 엄수, sub-skill findings 를 sprint-contract.md FE 섹션 `## Sub-skill Findings` 블록에 인용
+4. **Self-Verification** — `ref.validation.pre_eval_gate` 에 나열된 명령 전부 실행
+5. **Handoff** → Evaluator-Functional
+
+### 2.1 Sub-skill 호출 시퀀스 (필수)
+
+각 sub-skill 호출 직전 visibility partial update:
+```bash
+bash scripts/harness-progress-set.sh . \
+  '.meetings.active = ["generator-frontend","<sub-skill>"] | .meetings.cadence = "sub-skill"'
+```
+호출 후 `meetings.active = []` 복귀.
+
+| # | Sub-skill (agency-agents 흡수처) | 산출물 (FE 섹션 인용) |
+|---|----------------------------------|------------------------|
+| 1 | `engineering-{react,flutter}-developer` (CTO 흡수) | 컴포넌트 골격 + state 관리 결정 |
+| 2 | `design/ux-strategy` (Generator-Designer 흡수) | 사용자 흐름 / 정보 구조 검증 |
+| 3 | `design/ui-component-spec` (Generator-Designer 흡수) | 토큰 / variant / state 매핑 |
+| 4 | `engineering-accessibility-reviewer` (CTO 흡수) | WCAG AA + 키보드 네비 체크 |
+| 5 | `engineering-performance-engineer` (CTO 흡수) | RSC / hydration / observer 결정 |
+
+빈 `## Sub-skill Findings` = Eval FAIL 으로 처리됨 (Evaluator-Code-Quality 게이트).
 
 ## 스택 치환 규칙 (Adaptive Core)
 

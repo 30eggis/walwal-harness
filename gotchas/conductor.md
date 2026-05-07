@@ -68,6 +68,21 @@ docmeta:
   4. **tick 완료**: `current_agent` 그대로 (다음 에이전트 작업 중) 또는 `null` + `agent_status="completed"`
 - **Scope**: 모든 tick 사이클. 1~3 시점 누락 시 dashboard 의 회의실 텔레포트 / 미니피규어 활동 시각화 깨짐.
 
+### [G-005] Team mode 직렬 회귀 금지 — ready ≥ 2 면 병렬 spawn (status: verified)
+- **Date**: 2026-05-07
+- **Trigger**: Owner 보고 "솔로모드로 만 동작하는것처럼 다중 에이전트 상태가 아님" (moon_web 2026-05-07). progress.json.mode="team" 인데도 Conductor 가 한 번에 한 generator 만 spawn 하고 evaluator 핸드오프도 직렬.
+- **Wrong**: Tick 마다 ready 목록에서 1개만 골라 spawn. tmux 의 T1/T2/T3 패널이 비어있어도 무시.
+- **Right**: 매 tick 시작 시 ready 목록 (depends_on 충족 + agent_status≠running) 을 계산. mode="team" 이면 **min(ready, 3)** 만큼 동시 spawn — 각 팀 슬롯 (T1/T2/T3) 에 배정 + progress.json.team_state.team_<n>.assigned_feature, .assigned_agent 갱신. 동시 spawn 직전 meetings.active=["t1-lead","t2-lead","t3-lead"] 로 짧은 standup 시각화.
+- **Scope**: §4 Tick Loop, §5 Spawn 결정 트리. Solo 모드는 1개 spawn 유지.
+- **Why**: Team 자동 결정 룰 (ready≥3, features≥6, depth≤2) 을 만족시켜놓고 직렬로 돌리면 Team mode 가 형식상 활성이지만 실효 없음. 비용 + 시각적 신뢰 모두 낭비.
+
+### [G-006] Build/Deploy 실행 중 service-ops/monitor 동반 spawn (status: verified)
+- **Date**: 2026-05-07
+- **Trigger**: Owner 보고 "Service ops 는 build/배포 환경 로그 모니터링하면서 에러 캐치해야 하는데 공석". moon_web 빌드 중 `flutter test --platform chrome` 의 WebSocketChannelException 이 stderr 에 흘렀지만 service-ops 룸은 빈 채.
+- **Wrong**: generator-frontend / evaluator-functional 이 build·test 명령을 단독 실행. cron 사이 공백 동안 stderr 무감시.
+- **Right**: build/test/deploy 를 트리거하는 spawn 직전, 동일 tick 에 service-ops/monitor 를 stream-mode 로 함께 spawn (handoff-bridge). 자식 프로세스 종료 시까지 stream_active=true. 스트림 매칭 정규식 (error|exception|TestFailure|Cannot find|Failed to compile) 시 즉시 red-alert.
+- **Scope**: §5 Spawn 결정 트리에 "[generator-* or evaluator-functional spawn 직전] → service-ops/monitor stream-mode 동시 spawn" 라인 추가.
+
 ### [G-004] Owner 에게 진행 동의 묻지 말 것 (Dispatcher [G-002] 의 Conductor 적용)
 - **Date**: 2026-05-07
 - **Status**: verified

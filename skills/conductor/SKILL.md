@@ -142,7 +142,35 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
 [all features PASS]                → Phase Gate Meeting
 [Service-Ops cron due]             → spawn service-ops monitor
 [ops-report ready]                 → handoff to CTO (spawn cto-review)
+[generator-* / eval-functional spawn 직전] → 동시 spawn service-ops/monitor (stream-mode, G-006)
+[mode=team & ready ≥ 2]            → 동시 spawn min(ready,3) generator/evaluator (G-005)
 ```
+
+### 5.1 Team mode 병렬 spawn (G-005)
+
+`progress.json.mode == "team"` 이면 매 tick 시작 시 ready 목록을 계산하여 **동시 다발 spawn**:
+
+```bash
+# ready = depends_on 충족 + agent_status != "running" 인 feature 의 다음 에이전트 목록
+ready_count=$(jq '[.features[] | select(.depends_on // [] | all(. as $d | (.[$d].passes // []) | length > 0))] | length' .harness/feature-list.json)
+slots=$(( ready_count < 3 ? ready_count : 3 ))
+# slots 만큼 team_state.team_<n>.assigned_feature/assigned_agent 갱신 후 동시 Agent 호출
+```
+
+직렬 회귀 (1 spawn → 완료 대기 → 다음 spawn) 는 Solo 모드에서만 허용. Team 모드에서 1개씩 처리하면 GOTCHA G-005 위반.
+
+### 5.2 Service-Ops monitor 동반 spawn (G-006)
+
+generator-{backend,frontend,frontend-flutter,devops} 또는 evaluator-functional* 을 spawn 하기 직전, **동일 tick 에서** service-ops/monitor 를 stream-mode 로 함께 spawn:
+
+```bash
+bash scripts/harness-progress-set.sh . \
+  '.service_ops.monitor.stream_active = true |
+   .service_ops.monitor.stream_target = "generator-frontend" |
+   .agents += [{"id":"service-ops","room":"service-ops","minifigState":"watching"}]'
+```
+
+자식 프로세스 종료 시 stream_active=false + ops-report append. 빌드 stderr 의 (error|exception|TestFailure|Cannot find|Failed to compile) 매칭 → 즉시 red-alert.
 
 ## 6. Escalation 트리거 & 양식
 

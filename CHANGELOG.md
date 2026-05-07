@@ -29,6 +29,28 @@ docmeta:
 
 # Changelog
 
+## 6.0.4 — Sub-skill 협업 + Service-Ops 상시 + Team 병렬 spawn (2026-05-07)
+
+### Why
+moon_web 사용자 보고 — v6.0.3 이후에도 (a) CTO-Frontend 가 흡수된 agency-agents sub-skill (UX/UI/A11y/Perf) 을 호출하지 않고 단독 작업, (b) build/test 중 Service-Ops 자리 비움 → stderr 의 컴파일/테스트 에러 무감시, (c) `mode=team` 인데도 Conductor 가 직렬로 1개씩 spawn 하여 Team 자동 결정 룰 (ready≥3, features≥6, depth≤2) 만족이 무의미해짐. 세 가지는 형식상 v6 였지만 실효는 6.0 이전 수준.
+
+### Changes
+- **gotchas/generator-frontend.md [G-001]** — Sprint Workflow Step 2 에 5개 sub-skill 순차 호출 의무 (engineering-{react,flutter}-developer / design/ux-strategy / design/ui-component-spec / engineering-accessibility-reviewer / engineering-performance-engineer). 결과는 sprint-contract.md FE 섹션 `## Sub-skill Findings` 에 인용. 빈 블록 = Evaluator-Code-Quality FAIL.
+- **gotchas/service-ops.md [G-001]** (신규) — build/test/deploy spawn 직전 동일 tick 에서 monitor stream-mode 동반 활성. 정규식 `(error|exception|TestFailure|Cannot find|Failed to compile)` 매칭 시 즉시 red-alert.
+- **gotchas/conductor.md [G-005]** — Team mode 직렬 회귀 금지. 매 tick 시작 시 ready 목록 계산 → `min(ready, 3)` 동시 spawn + `team_state.team_<n>.assigned_feature/assigned_agent` 갱신 + `meetings.active=["t1-lead","t2-lead","t3-lead"]` standup 시각화.
+- **gotchas/conductor.md [G-006]** — Service-Ops monitor 동반 spawn 룰을 Conductor SKILL §5 spawn 결정 트리에 명시.
+- **skills/generator-frontend/SKILL.md** — Sprint Workflow §2.1 sub-skill 호출 시퀀스 표 + visibility partial update 패턴.
+- **skills/conductor/SKILL.md** — §5 spawn 결정 트리에 두 라인 추가 + §5.1 Team mode 병렬 알고리즘 + §5.2 Service-Ops 동반 spawn 의사코드.
+
+### Migration
+기존 사용자:
+```bash
+npm install @walwal-harness/cli@latest
+npx walwal-harness migrate     # gotchas/service-ops.md 자동 추가
+npx walwal-harness verify
+```
+sub-skill 호출은 generator-frontend SKILL.md 가 갱신되면 다음 sprint 부터 자동 적용. 진행 중 sprint 의 FE 섹션은 Eval-Code-Quality 가 빈 `## Sub-skill Findings` 를 잡아내며 retry 유도.
+
 ## 6.0.3 — Visibility + Spawn 검증 + 사용자 슬래시 노출 제거 (2026-05-07)
 
 Owner 의 두 지적을 동시 해결:

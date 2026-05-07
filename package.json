@@ -1,6 +1,6 @@
 {
   "name": "@walwal-harness/cli",
-  "version": "6.0.3",
+  "version": "6.0.4",
   "description": "Production harness for AI agent engineering — NEXUS-adapted company metaphor (Dispatcher/CEO + Conductor + Meeting-Manager + COO/Planner + CTO + CQO + Service-Ops). Solo/Team mode, Brainstormer, Planner, Generator(BE/FE/Designer/DevOps), Evaluator chain (Code-Quality → Functional → Visual + Architecture/Security). Supports React, Next.js, and Flutter FE stacks.",
   "bin": {
     "walwal-harness": "bin/init.js"
