@@ -28,6 +28,19 @@
     "message": null,
     "retry_target": null
   },
+  "task_stop": {
+    "active": false,
+    "reason": null,
+    "stopped_at": null,
+    "resume_after": null,
+    "resume_ready": false,
+    "resume_notified_at": null,
+    "wake_target": null,
+    "stopped_agent": null,
+    "stopped_next_agent": null,
+    "task_session_path": null,
+    "hold_count": 0
+  },
   "artifacts": {
     "plan.md": { "status": "pending", "updated_by": null, "updated_at": null },
     "feature-list.json": { "status": "pending", "updated_by": null, "updated_at": null },

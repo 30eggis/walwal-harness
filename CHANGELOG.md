@@ -29,6 +29,14 @@ docmeta:
 
 # Changelog
 
+## 6.1.2 — TokenLimit hold/resume checker (2026-05-08)
+
+### Added
+- `TaskStopReason: TokenLimit` 기반의 저비용 작업 재개 플로우 추가
+- `scripts/harness-token-limit.sh mark|resume-probe` 도입
+- SessionStart / UserPromptSubmit 가 TokenLimit hold 를 감지해 전체 작업 중지 및 재개 타이밍을 안내
+- `progress.json.task_stop` 과 `config.token_limit` 필드 추가
+
 ## 6.1.1 — COO hypothesis routing activation (2026-05-08)
 
 ### Why

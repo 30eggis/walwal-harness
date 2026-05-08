@@ -147,6 +147,19 @@
     },
     "history": []
   },
+  "task_stop": {
+    "active": false,
+    "reason": null,
+    "stopped_at": null,
+    "resume_after": null,
+    "resume_ready": false,
+    "resume_notified_at": null,
+    "wake_target": null,
+    "stopped_agent": null,
+    "stopped_next_agent": null,
+    "task_session_path": null,
+    "hold_count": 0
+  },
   "org": {
     "active": [
       "dispatcher",

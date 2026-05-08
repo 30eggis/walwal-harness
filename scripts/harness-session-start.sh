@@ -27,6 +27,23 @@ next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 mode=$(jq -r '.mode // "team"' "$PROGRESS" 2>/dev/null)
 conductor_state=$(jq -r '.conductor.state // "idle"' "$PROGRESS" 2>/dev/null)
+task_stop_active=$(jq -r '.task_stop.active // false' "$PROGRESS" 2>/dev/null)
+task_stop_reason=$(jq -r '.task_stop.reason // "null"' "$PROGRESS" 2>/dev/null)
+task_stop_resume_after=$(jq -r '.task_stop.resume_after // "null"' "$PROGRESS" 2>/dev/null)
+task_stop_notified_at=$(jq -r '.task_stop.resume_notified_at // "null"' "$PROGRESS" 2>/dev/null)
+task_stop_wake_target=$(jq -r '.task_stop.wake_target // .next_agent // "none"' "$PROGRESS" 2>/dev/null)
+task_stop_task_session=$(jq -r '.task_stop.task_session_path // "null"' "$PROGRESS" 2>/dev/null)
+
+parse_iso_epoch() {
+  local iso="${1:-}"
+  [ -n "$iso" ] && [ "$iso" != "null" ] || return 1
+  date -u -j -f "%Y-%m-%dT%H:%M:%SZ" "$iso" "+%s" 2>/dev/null \
+    || date -u -d "$iso" "+%s" 2>/dev/null
+}
+
+now_epoch() {
+  date -u "+%s"
+}
 
 # ─────────────────────────────────────────
 # Auto-heal mode drift — Team 상태 유실 복구
@@ -77,6 +94,43 @@ fi
 if [ "$mode" = "paused" ]; then
   echo "# Harness paused — resume with /harness-team"
   exit 0
+fi
+
+# ─────────────────────────────────────────
+# TokenLimit hold — zero-token resume reminder
+# ─────────────────────────────────────────
+if [ "$task_stop_active" = "true" ] && [ "$task_stop_reason" = "TokenLimit" ]; then
+  retry_interval=$(jq -r '.token_limit.re_notify_every_seconds // 3600' "$CONFIG" 2>/dev/null || echo 3600)
+  resume_after_epoch=$(parse_iso_epoch "$task_stop_resume_after" || echo 0)
+  now_ts=$(now_epoch)
+  notified_epoch=$(parse_iso_epoch "$task_stop_notified_at" || echo 0)
+
+  if [ "$now_ts" -lt "$resume_after_epoch" ]; then
+    echo "# Harness paused — TokenLimit hold"
+    echo "# Wake target: /harness-${task_stop_wake_target}"
+    echo "# Retry after: ${task_stop_resume_after}"
+    if [ "$task_stop_task_session" != "null" ] && [ -n "$task_stop_task_session" ]; then
+      echo "# Task session: ${task_stop_task_session}"
+    fi
+    exit 0
+  fi
+
+  if [ "$notified_epoch" -eq 0 ] || [ $((now_ts - notified_epoch)) -ge "$retry_interval" ]; then
+    bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
+      ".agent_status = \"pending\" |
+       .current_agent = null |
+       .next_agent = \"${task_stop_wake_target}\" |
+       .task_stop.active = false |
+       .task_stop.resume_ready = true |
+       .task_stop.resume_notified_at = (now | todate)" \
+      >/dev/null 2>&1 || true
+    echo "# Harness resume ready — TokenLimit hold expired"
+    echo "# Resume target: /harness-${task_stop_wake_target}"
+    if [ "$task_stop_task_session" != "null" ] && [ -n "$task_stop_task_session" ]; then
+      echo "# Resume with task session: ${task_stop_task_session}"
+    fi
+    exit 0
+  fi
 fi
 
 # ─────────────────────────────────────────

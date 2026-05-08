@@ -42,6 +42,17 @@ if [ -f "$CWD/.harness/progress.json" ] && command -v jq >/dev/null 2>&1; then
   AGENT_STATUS=$(jq -r '.agent_status // "pending"' "$CWD/.harness/progress.json" 2>/dev/null || echo "pending")
 fi
 
+TASK_STOP_ACTIVE="false"
+TASK_STOP_REASON="null"
+TASK_STOP_RESUME_AFTER="null"
+TASK_STOP_WAKE_TARGET="none"
+if [ -f "$CWD/.harness/progress.json" ] && command -v jq >/dev/null 2>&1; then
+  TASK_STOP_ACTIVE=$(jq -r '.task_stop.active // false' "$CWD/.harness/progress.json" 2>/dev/null || echo "false")
+  TASK_STOP_REASON=$(jq -r '.task_stop.reason // "null"' "$CWD/.harness/progress.json" 2>/dev/null || echo "null")
+  TASK_STOP_RESUME_AFTER=$(jq -r '.task_stop.resume_after // "null"' "$CWD/.harness/progress.json" 2>/dev/null || echo "null")
+  TASK_STOP_WAKE_TARGET=$(jq -r '.task_stop.wake_target // .next_agent // "none"' "$CWD/.harness/progress.json" 2>/dev/null || echo "none")
+fi
+
 # ── 명령 히스토리 기록 (모든 모드 공통) ──
 PROGRESS_LOG="$CWD/.harness/progress.log"
 if [ -n "$PROMPT" ] && [ -d "$CWD/.harness" ]; then
@@ -75,6 +86,18 @@ if [ -n "$CONTEXT_BLOCK" ]; then
   cat <<EOF
 [harness] blocked | current=${CURRENT_AGENT} | requested=${REQUESTED_SKILL}
 ${CONTEXT_BLOCK}
+EOF
+  exit 0
+fi
+
+if [ "$TASK_STOP_ACTIVE" = "true" ] && [ "$TASK_STOP_REASON" = "TokenLimit" ]; then
+  cat <<EOF
+[harness] token-limit hold | wake_target=${TASK_STOP_WAKE_TARGET}
+## TokenLimit Hold
+- 모든 작업은 일시중지 상태입니다.
+- 재개 대상: /harness-${TASK_STOP_WAKE_TARGET}
+- retry_after: ${TASK_STOP_RESUME_AFTER}
+- 이 상태는 문서 기반으로만 복구되며, 별도 모델 probe는 수행하지 않습니다.
 EOF
   exit 0
 fi

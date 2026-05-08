@@ -605,6 +605,13 @@
     "auto_route_dispatcher": true,
     "auto_route_dispatcher_description": "true 이면 사용자의 모든 프롬프트가 harness-dispatcher 경유로 분류/라우팅 된다. 사용자가 'harness skip' 등을 말하면 단일 메시지 한정으로 건너뛴다."
   },
+  "token_limit": {
+    "comment": "모델 토큰 제한으로 작업이 중단됐을 때의 저비용 재개 정책. 별도 probe 호출 없이 시간 기반으로만 재개 알림을 계산한다.",
+    "stop_reason_flag": "TokenLimit",
+    "retry_after_seconds": 3600,
+    "re_notify_every_seconds": 3600,
+    "owner": "session-start"
+  },
   "mode_selection": {
     "comment": "v6.0 — 기본 운영은 회사형 team/company 루프다. Conductor 가 progress.json.mode='auto' 일 때 team 을 기본으로 선택하며, /harness-solo 는 비상용 단일 에이전트 override 로만 남긴다.",
     "default_mode": "auto",
