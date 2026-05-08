@@ -136,13 +136,13 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
 
 ```
 [Planner missing or sprint=0]      → spawn planner
-[generator pending in feature row] → spawn generator-{be|fe|designer|devops}
-[generator done, eval pending]     → spawn evaluator-{func|visual|cq|arch|sec}
+[generator pending in feature row] → spawn generator-backend | generator-frontend | generator-designer | generator-devops
+[generator done, eval pending]     → spawn evaluator-code-quality | evaluator-functional | evaluator-visual | evaluator-architecture | evaluator-security
 [all eval PASS for feature]        → next feature
 [all features PASS]                → Phase Gate Meeting
-[Service-Ops cron due]             → spawn service-ops monitor
-[ops-report ready]                 → handoff to CTO (spawn cto-review)
-[generator-* / eval-functional spawn 직전] → 동시 spawn service-ops/monitor (stream-mode, G-006)
+[Service-Ops cron due]             → spawn service-ops (requested_mode=monitor)
+[ops-report ready]                 → handoff to CTO (spawn cto)
+[generator-* / eval-functional spawn 직전] → 동시 spawn service-ops (requested_mode=monitor, stream-mode, G-006)
 [mode=team & ready ≥ 2]            → 동시 spawn min(ready,3) generator/evaluator (G-005)
 ```
 
@@ -161,11 +161,12 @@ slots=$(( ready_count < 3 ? ready_count : 3 ))
 
 ### 5.2 Service-Ops monitor 동반 spawn (G-006)
 
-generator-{backend,frontend,frontend-flutter,devops} 또는 evaluator-functional* 을 spawn 하기 직전, **동일 tick 에서** service-ops/monitor 를 stream-mode 로 함께 spawn:
+generator-backend / generator-frontend / generator-devops 또는 evaluator-functional 을 spawn 하기 직전, **동일 tick 에서** `service-ops` 를 `requested_mode=monitor` 로 함께 spawn:
 
 ```bash
 bash scripts/harness-progress-set.sh . \
-  '.service_ops.monitor.stream_active = true |
+  '.service_ops.requested_mode = "monitor" |
+   .service_ops.monitor.stream_active = true |
    .service_ops.monitor.stream_target = "generator-frontend" |
    .agents += [{"id":"service-ops","room":"service-ops","minifigState":"watching"}]'
 ```
@@ -200,7 +201,7 @@ bash scripts/harness-progress-set.sh . \
 
 ## 7.5 모드 결정 (v6.0+, 사용자에서 이양)
 
-이전에는 사용자가 `/harness-solo` 또는 `/harness-team` 으로 직접 선택했다. v6.0 부터 **Conductor 가 sprint 시작 시점에 자동 결정**한다. 사용자 override 는 가능하지만 디폴트는 자동.
+이전에는 사용자가 `/harness-solo` 또는 `/harness-team` 으로 직접 선택했다. v6.0 부터 **Conductor 가 sprint 시작 시점에 자동 결정**하며, 정상 경로는 회사형 team/company 루프다. `solo` 는 사용자 명시 시에만 들어가는 비상용 fallback 이다.
 
 ### 7.5.1 결정 시점
 
@@ -216,12 +217,7 @@ ready_at_start ≥ 3
 feature_count ≥ 6
 critical_path_depth ≤ 2
 
-# Solo 강제 조건 (어느 하나라도)
-ready_at_start ≤ 2
-또는 feature_count ≤ 3
-또는 critical_path_depth ≥ 4
-
-# 동률 → solo (비용 안전)
+# Solo 관련 threshold 는 문서상 fallback 참고치일 뿐, auto 기본 경로는 team 유지
 ```
 
 `critical_path_depth` = feature 의존성 그래프에서 가장 긴 체인의 길이. `feature-list.json` 의 `depends_on` 으로 계산.
@@ -230,7 +226,7 @@ ready_at_start ≤ 2
 
 1. 결정 후 `progress.json` partial update:
    ```json
-   "mode": "solo" 또는 "team",
+  "mode": "team" 기본, 필요 시 "solo",
    "mode_decision": {
      "owner": "conductor",
      "decided_at": "<iso>",
@@ -247,7 +243,7 @@ ready_at_start ≤ 2
 
 | 발화/명령 | 효과 |
 |---|---|
-| `/harness-solo` 또는 "solo 로" | mode=solo 강제, mode_decision.user_override="solo" |
+| `/harness-solo` 또는 "solo 로" | mode=solo 강제, mode_decision.user_override="solo" (비상용 fallback) |
 | `/harness-team` 또는 "team 으로" | mode=team 강제, user_override="team" |
 | "auto 다시" / "Conductor 결정으로" | user_override=null, 다음 sprint 시작 시 재자동결정 |
 

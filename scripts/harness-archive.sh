@@ -89,7 +89,21 @@ jq --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
   | .agent_status = "pending"
   | .completed_agents = []
   | .next_agent = "dispatcher"
+  | .workflow = { stage: "goal-intake", last_transition: null, loop_count: 0, last_reason: null }
+  | .task_sessions.current = { agent: null, id: null, path: null, source: null }
   | .failure = { agent: null, location: null, message: null, retry_target: null }
+  | .meetings.active = []
+  | .meetings.current_id = null
+  | .meetings.current_record_path = null
+  | .meetings.requested_type = null
+  | .meetings.requested_reason = null
+  | .meetings.last_type = null
+  | .meetings.last_reason = null
+  | .meetings.last_decision = null
+  | .meetings.decision = { owner: null, action_type: null, rationale: null, evidence: [], drift_classification: null, source_path: null }
+  | .service_ops.requested_mode = null
+  | .service_ops.drift_classification = null
+  | .service_ops.evidence = []
   | (.artifacts // {}) as $a
   | .artifacts = ($a | with_entries(
       if (.value | type) == "object"

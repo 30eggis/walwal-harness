@@ -90,13 +90,6 @@ CQO는 다음 짝의 평가가 일치하는지 확인:
 docmeta: { ... }
 cqo_audit:
   sprint: <n>
-  decision:
-    owner: cqo
-    action_type: re-evaluate | reject
-    rationale: <why CQO passed or rejected the build>
-    evidence:
-      - source: <artifact path>
-        kind: evaluation | regression | security | architecture
   per_axis_scores:
     functional: 2.85
     visual: 2.92

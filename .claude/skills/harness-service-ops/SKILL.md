@@ -90,17 +90,6 @@ Standup 종료 직후 호출됨. 직전 3회 standup의:
 - `goal_adherence < 0.5` 24h 이상 → Spec Review (긴급) 소집
 - warn 누적 ≥ 5건/Sprint → 다음 Standup에서 보고
 
-### 3.7 Drift Classification
-
-Service-Ops는 `goal_adherence` 하락을 감지했을 때 원인 분류 없이 Planner로 넘기면 안 된다. 먼저 아래 분류를 시도한다.
-
-- `implementation_drift`: CQO FAIL / regression / 품질 축 미달이 직접 원인
-- `planning_drift`: 구현/품질은 통과했지만 Goal 달성 가설이 어긋남
-- `ops_drift`: 운영 환경, 배포, 로그, incident, KPI 이상이 원인
-- `goal_drift`: Goal/KPI 정의 자체가 흔들리거나 Owner intent와 괴리
-
-이 분류는 `progress.json.service_ops.drift_classification` 과 ops-report evidence에 기록되어야 한다.
-
 ---
 
 ## 4. Incident 모듈
@@ -187,10 +176,6 @@ CTO가 수신 → Hotfix/Backlog Feature로 변환 → Planner 등록.
 
 ```json
 "service_ops": {
-  "drift_classification": "planning_drift",
-  "evidence": [
-    { "source": ".harness/actions/ops-report-3.md", "kind": "ops-report" }
-  ],
   "monitor": {
     "last_check": "<iso>",
     "cadence_decided": "normal",

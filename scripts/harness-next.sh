@@ -190,6 +190,21 @@ run_pre_eval_gate() {
 }
 
 # ─────────────────────────────────────────
+# Conductor Tick — lightweight 6.0 routing bridge
+#   next_agent 계산 후, Company loop가 개입해야 하면 next_agent를 재작성.
+# ─────────────────────────────────────────
+run_conductor_tick() {
+  local candidate="$1"
+  local owner
+  owner=$(jq -r '.mode_selection.owner // empty' "$CONFIG" 2>/dev/null || true)
+  if [ "$owner" != "conductor" ]; then return 0; fi
+  if [ ! -x "$SCRIPT_DIR/conductor-tick.sh" ]; then return 0; fi
+
+  HARNESS_CONDUCTOR_CANDIDATE="$candidate" bash "$SCRIPT_DIR/conductor-tick.sh" "$PROJECT_ROOT" >/dev/null 2>&1 || true
+  next_agent=$(jq -r '.next_agent // "null"' "$PROGRESS" 2>/dev/null || echo "$candidate")
+}
+
+# ─────────────────────────────────────────
 # Determine next agent
 # ─────────────────────────────────────────
 compute_next_agent() {
@@ -351,6 +366,13 @@ if [ "$agent_status" = "completed" ]; then
 fi
 
 # ─────────────────────────────────────────
+# Company routing bridge — handoff 직전 conductor 가 next_agent 조정
+# ─────────────────────────────────────────
+if [ "$next_agent" != "null" ] && [ "$agent_status" != "blocked" ]; then
+  run_conductor_tick "$next_agent"
+fi
+
+# ─────────────────────────────────────────
 # Render progress
 # ─────────────────────────────────────────
 render_progress "$PROJECT_ROOT"
@@ -376,6 +398,10 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   # ── Read model & thinking mode for next agent ──
   agent_model=$(jq -r ".agents[\"${next_agent}\"].model // \"opus\"" "$CONFIG" 2>/dev/null || echo "opus")
   agent_thinking=$(jq -r ".agents[\"${next_agent}\"].thinking_mode // \"null\"" "$CONFIG" 2>/dev/null || echo "null")
+  task_session_path=""
+  if [ -x "$SCRIPT_DIR/harness-task-session.sh" ]; then
+    task_session_path=$(bash "$SCRIPT_DIR/harness-task-session.sh" "$PROJECT_ROOT" "$next_agent" "${current_agent:-dispatcher}" 2>/dev/null || true)
+  fi
 
   # ── Build prompt text (embedded in handoff.json) ──
   prompt="/harness-${next_agent} 를 실행하세요."
@@ -389,6 +415,9 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
   fi
 
   prompt+=$'\n'".harness/handoff.json을 읽고 컨텍스트를 확인하세요."
+  if [ -n "$task_session_path" ]; then
+    prompt+=$'\n'"${task_session_path} 를 현재 task session의 단일 기준 문서로 사용하세요."
+  fi
 
   # Inject thinking mode instruction
   if [ "$agent_thinking" != "null" ]; then
@@ -492,6 +521,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
     --argjson eval_config "$eval_config" \
     --argjson cross_val "$cross_validation_data" \
     --argjson cross_val_cq "$cross_validation_from_code_quality" \
+    --arg task_session_path "$task_session_path" \
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     '{
       from: $from,
@@ -509,6 +539,7 @@ if [ "$next_agent" != "null" ] && [ "$next_agent" != "archive" ] && [ "$agent_st
       eval_config: $eval_config,
       cross_validation_from_functional: $cross_val,
       cross_validation_from_code_quality: $cross_val_cq,
+      task_session_path: (if $task_session_path == "" then null else $task_session_path end),
       warnings: [],
       timestamp: $timestamp
     }' > "$HANDOFF"

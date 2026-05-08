@@ -93,13 +93,6 @@ CTO 판단 옵션:
 docmeta: { ... }
 cto_review:
   sprint: <n>
-  decision:
-    owner: cto
-    action_type: implement | replan
-    rationale: <fact-based conclusion>
-    evidence:
-      - source: <artifact path>
-        kind: ops-report | meeting-record | cqo-audit
   goal_feasibility: feasible | feasible-with-recruit | infeasible
   recommended_recruits: [generator-designer, eval-security]
   arch_risks: [...]

@@ -1,8 +1,8 @@
 {
   "harness": {
-    "name": "6-Agent Production Harness",
+    "name": "7-Agent Production Harness",
     "version": "5.6.0",
-    "description": "Dispatcher + 3-Evaluator Chain (Code-Quality → Functional → Visual) + NestJS MSA + React/Next.js + Playwright 기반 실무 하네스",
+    "description": "회사형 자율 하네스 — Dispatcher/CEO + Meeting + Conductor + Gen/Eval + Service-Ops 루프 기반. solo는 비상용 override.",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
   "agents": {
@@ -58,8 +58,8 @@
         "actions/api-contract.json"
       ],
       "model": "opus",
-      "thinking_mode": "ultraplan",
-      "thinking_mode_description": "최고 수준의 계획 모드. 아키텍처 결정, API 설계, 서비스 분할에 깊은 사고 필요."
+      "thinking_mode": null,
+      "thinking_mode_description": null
     },
     "generator-backend": {
       "role": "NestJS MSA 서비스 구현, API 엔드포인트, DB 스키마",
@@ -215,18 +215,111 @@
           "스크린샷 없이 '확인했다'고 주장하는 행위"
         ]
       }
+    },
+    "conductor": {
+      "role": "6.0 자율 실행 엔진. Goal 기반으로 next_agent, mode_selection, Service-Ops/Meeting escalation을 오케스트레이션.",
+      "skill": "harness-conductor",
+      "model": "opus",
+      "thinking_mode": "ultrathink",
+      "runtime_status": "partially_connected"
+    },
+    "meeting-manager": {
+      "role": "회의 notice/prep/minutes/decision 관리. 참석자별 질문을 배포하고, decision.owner/action_type/rationale/evidence를 구조적으로 기록한다.",
+      "skill": "harness-meeting-manager",
+      "model": "opus",
+      "thinking_mode": null,
+      "runtime_status": "partially_connected"
+    },
+    "service-ops": {
+      "role": "운영 모니터링, incident, auto-retro. canonical agent id는 service-ops 하나이며 세부 모드는 progress.service_ops.requested_mode로 전달.",
+      "skill": "harness-service-ops",
+      "model": "opus",
+      "thinking_mode": null,
+      "runtime_status": "partially_connected"
+    },
+    "cto": {
+      "role": "기술 총괄. Goal feasibility, hotfix routing, Gen 충돌 조정.",
+      "skill": "harness-cto",
+      "model": "opus",
+      "thinking_mode": null,
+      "runtime_status": "partially_connected"
+    },
+    "cqo": {
+      "role": "품질 총괄. cross-validation, regression, rubber-stamping audit.",
+      "skill": "harness-cqo",
+      "model": "opus",
+      "thinking_mode": null,
+      "runtime_status": "partially_connected"
+    },
+    "generator-designer": {
+      "role": "FE 선행 디자인 패키지 생산.",
+      "skill": "harness-generator-designer",
+      "model": "sonnet",
+      "thinking_mode": null,
+      "runtime_status": "documented_only"
+    },
+    "generator-devops": {
+      "role": "CI/CD, release, infra drift 대응.",
+      "skill": "harness-generator-devops",
+      "model": "sonnet",
+      "thinking_mode": null,
+      "runtime_status": "documented_only"
+    },
+    "evaluator-architecture": {
+      "role": "의존성 그래프, IA-MAP, contract drift 점검.",
+      "skill": "harness-evaluator-architecture",
+      "model": "opus",
+      "thinking_mode": "ultrathink",
+      "runtime_status": "documented_only"
+    },
+    "evaluator-security": {
+      "role": "SAST/DAST, secrets, OWASP audit.",
+      "skill": "harness-evaluator-security",
+      "model": "opus",
+      "thinking_mode": "ultrathink",
+      "runtime_status": "documented_only"
     }
   },
   "flow": {
     "sequence": [
       "dispatcher",
+      "meeting-manager",
       "planner",
+      "cto",
       "generator-backend",
       "generator-frontend",
       "evaluator-code-quality",
       "evaluator-functional",
-      "evaluator-visual"
+      "evaluator-visual",
+      "cqo",
+      "service-ops"
     ],
+    "company_loop": {
+      "comment": "회사 운영 기본 루프. dispatcher(CEO)가 meeting-manager로 회의를 소집하고, planner(COO) / cto / cqo / service-ops가 Goal 기준으로 반복 운영한다.",
+      "primary_path": [
+        "dispatcher",
+        "meeting-manager",
+        "planner",
+        "cto",
+        "generator-backend",
+        "generator-frontend",
+        "evaluator-code-quality",
+        "evaluator-functional",
+        "evaluator-visual",
+        "cqo",
+        "service-ops",
+        "meeting-manager"
+      ],
+      "fallback_path": [
+        "dispatcher",
+        "planner",
+        "generator-backend",
+        "generator-frontend",
+        "evaluator-code-quality",
+        "evaluator-functional",
+        "evaluator-visual"
+      ]
+    },
     "evaluator_chain": {
       "comment": "Generator 완료 후 실행되는 평가자 체인. 직렬 실행 + 조기 종료 — 앞단 FAIL 시 이후 평가자는 생략하고 Generator 로 리라우팅. 모두 PASS 여야 다음 스프린트로 이동.",
       "execution": "serial_with_early_exit",
@@ -235,7 +328,7 @@
       "on_all_pass": "advance_sprint"
     },
     "pipeline_selection": {
-      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정. fe_stack 필드로 React/Flutter를 구분. harness-next.sh가 pipeline.json.fe_stack 을 읽어 generator-frontend/evaluator-functional 을 Flutter 변형으로 치환한다. evaluator_chain 은 파이프라인별로 포함되는 평가자 조합.",
+      "comment": "Dispatcher가 pipeline.json으로 활성 에이전트를 결정.",
       "pipelines": {
         "FULLSTACK": [
           "planner",
@@ -260,7 +353,7 @@
         ]
       },
       "evaluator_chains": {
-        "comment": "파이프라인별 평가자 체인. Dispatcher가 pipeline.json.evaluator_chain 으로 기록. harness-next.sh 가 PASS 시 체인상 다음 평가자로 next_agent 설정, 단독 or 마지막이면 archive 로 이동.",
+        "comment": "파이프라인별 평가자 체인. Dispatcher가 pipeline.json.evaluator_chain 으로 기록.",
         "FULLSTACK": [
           "evaluator-code-quality",
           "evaluator-functional",
@@ -287,20 +380,42 @@
     "escalate_to_planner_after": 3,
     "archive_on_sprint_complete": true,
     "pre_eval_gate": {
-      "comment": "v5.2 — 스택별 명령은 .harness/ref/<role>-<stack>.md 의 validation.pre_eval_gate 에서 조회. Evaluator-Functional 이 On Start 시 파싱·실행.",
+      "comment": "Generator → Evaluator 전환 전 결정론적 검증. 실패 시 Evaluator 세션을 열지 않고 Generator로 자동 리라우팅.",
       "enabled": true,
-      "source": "ref-docs",
-      "ref_path_template": ".harness/ref/<role>-<stack>.md",
-      "ref_field": "validation.pre_eval_gate",
+      "backend_checks": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npx jest --bail --passWithNoTests"
+      ],
+      "backend_cwd": "",
+      "frontend_checks": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npx vitest run --bail 1"
+      ],
+      "frontend_cwd": "",
       "timeout_seconds": 120,
       "on_fail": "reroute_to_generator"
+    },
+    "team": {
+      "comment": "Team Mode 설정. 회사 전체 부서 수가 아니라 generator/evaluator worker pool 한도다. control-plane(CEO/Meeting/CTO/CQO/Service-Ops)는 이 상한에 포함하지 않는다.",
+      "concurrency": 3,
+      "scope": "worker_pool_only",
+      "max_retries_per_feature": 5,
+      "escalate_after": 3,
+      "auto_dequeue": true,
+      "gen_model": "sonnet",
+      "eval_model": "opus",
+      "branch_strategy": "feature-branch",
+      "merge_on_pass": true,
+      "rebase_on_conflict": true
     }
   },
   "evaluation": {
     "comment": "Evaluator 공통 설정",
     "scoring": {
       "scale": 3,
-      "pass_threshold": 2.80,
+      "pass_threshold": 2.8,
       "fail_threshold": 2.79,
       "verdict_rules": [
         "Weighted Score < 2.80 → FAIL",
@@ -318,7 +433,7 @@
     },
     "cross_validation": {
       "enabled": true,
-      "comment": "evaluator-code-quality / evaluator-functional / evaluator-visual 세 평가자의 결과를 상호 참조하여 불일치를 감지. evaluation-*.md의 Cross-Validation Data JSON 블록을 기계적으로 파싱. 예: code-quality에서 감지한 contract_divergence 를 functional 이 재확인."
+      "comment": "evaluator-code-quality / evaluator-functional / evaluator-visual 세 평가자의 결과를 상호 참조하여 불일치를 감지. evaluation-*.md의 Cross-Validation Data JSON 블록을 기계적으로 파싱."
     },
     "acceptance_criteria_schema": {
       "comment": "Planner가 feature-list.json에 기능 정의 시 반드시 작성해야 하는 실행 가능한 검증 조건 스키마. Evaluator는 이 조건을 기계적으로 실행한다.",
@@ -476,6 +591,35 @@
     "auto_route_dispatcher": true,
     "auto_route_dispatcher_description": "true 이면 사용자의 모든 프롬프트가 harness-dispatcher 경유로 분류/라우팅 된다. 사용자가 'harness skip' 등을 말하면 단일 메시지 한정으로 건너뛴다."
   },
+  "mode_selection": {
+    "comment": "v6.0 — 기본 운영은 회사형 team/company 루프다. Conductor 가 progress.json.mode='auto' 일 때 team 을 기본으로 선택하며, /harness-solo 는 비상용 단일 에이전트 override 로만 남긴다.",
+    "default_mode": "auto",
+    "owner": "conductor",
+    "rules": {
+      "force_team_when": {
+        "ready_at_start_gte": 3,
+        "feature_count_gte": 6,
+        "critical_path_depth_lte": 2,
+        "rationale": "ready≥3 + 작은 critical path = 3팀 동시 가동의 P4 Parallel Workstreams 효과 충족 (NEXUS 40~60% 단축)"
+      },
+      "force_solo_when": {
+        "ready_at_start_lte": 2,
+        "or_feature_count_lte": 3,
+        "or_critical_path_depth_gte": 4,
+        "rationale": "문서상 비상용 fallback 기준. auto mode의 기본 선택에는 직접 사용하지 않는다."
+      },
+      "tie_breaker": "team",
+      "tie_breaker_rationale": "동률이면 회사 루프를 유지한다. 단일 에이전트 운용은 Owner가 명시적으로 /harness-solo 를 요청한 경우에만."
+    },
+    "user_override": {
+      "comment": "사용자가 명시적으로 모드 강제하면 Conductor 결정 무시. progress.json.mode_decision.user_override 에 기록.",
+      "channels": [
+        "/harness-solo (emergency fallback)",
+        "/harness-team (force company/team)",
+        "사용자 발화: 'solo 로', 'team 으로', 'auto 다시' (auto 복귀)"
+      ]
+    }
+  },
   "paths": {
     "actions": ".harness/actions",
     "archive": ".harness/archive",
@@ -483,6 +627,57 @@
     "conventions": "CONVENTIONS.md",
     "progress_state": ".harness/progress.json",
     "progress_log": ".harness/progress.log"
+  },
+  "runtime_surfaces": {
+    "comment": "2026-05-07 기준 연결 상태 요약. 6.0 도구가 config/skills에 등록됐더라도 스크립트/훅/상태필드가 없으면 documented_only 로 본다.",
+    "active": [
+      "dispatcher",
+      "brainstorming",
+      "planner",
+      "generator-backend",
+      "generator-frontend",
+      "evaluator-code-quality",
+      "evaluator-functional",
+      "evaluator-visual",
+      "harness-solo",
+      "harness-team",
+      "harness-stop"
+    ],
+    "partial": [
+      "conductor",
+      "meeting-manager",
+      "service-ops",
+      "cto",
+      "cqo"
+    ],
+    "documented_only": [
+      "generator-designer",
+      "generator-devops",
+      "evaluator-architecture",
+      "evaluator-security"
+    ]
+  },
+  "decision_protocol": {
+    "comment": "Company loop 의 공식 의사결정 스키마. conductor는 reason 문자열보다 decision document를 우선 읽어 라우팅한다.",
+    "meeting_decision_required_fields": [
+      "decision.owner",
+      "decision.action_type",
+      "decision.rationale",
+      "decision.evidence",
+      "decision.drift_classification"
+    ],
+    "drift_classifications": [
+      "implementation_drift",
+      "planning_drift",
+      "ops_drift",
+      "goal_drift"
+    ],
+    "routing": {
+      "implementation_drift": "cto",
+      "planning_drift": "planner",
+      "ops_drift": "service-ops",
+      "goal_drift": "dispatcher"
+    }
   },
   "audit": {
     "comment": "Audit log — 1 sprint cycle 단위의 실행 추적. Planner/Dispatcher 시작 시 리셋.",

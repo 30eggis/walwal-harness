@@ -29,6 +29,48 @@ docmeta:
 
 # Changelog
 
+## 6.1.0 — document-driven company loop + task-session isolation (2026-05-08)
+
+### Why
+v6.0.x 는 회사형 조직 비유와 Cxx 라우팅을 문서로는 설명했지만, 실제 런타임은 여전히 얕았다. 특히 다음 두 결함이 컸다.
+
+- 회의 결과가 `누가 다음 owner 인가` 를 구조적으로 기록하지 않음
+- `goal_adherence` 하락 시 원인 분류 없이 Planner로 보내는 경향이 있음
+
+또한 agent 간 자기강화 편향을 줄이기 위한 문서 중심 task session 분리도 충분히 강제되지 않았다.
+
+### Changes
+- **document-driven meeting decision**
+  - `meeting-manager` 가 `notice.md`, `prep-*.md`, `meeting-<id>.md` skeleton 을 자동 생성
+  - 회의 기록에 `decision.owner`, `action_type`, `rationale`, `evidence`, `drift_classification` JSON 블록 추가
+  - `conductor-tick` 은 더 이상 `meeting_reason` 문자열만 보지 않고 회의 decision 문서를 우선 읽어 다음 owner 를 결정
+- **goal drift classification**
+  - `implementation_drift | planning_drift | ops_drift | goal_drift` 분류 추가
+  - 분류별 기본 라우팅:
+    - `implementation_drift -> cto`
+    - `planning_drift -> planner`
+    - `ops_drift -> service-ops`
+    - `goal_drift -> dispatcher`
+- **task-session isolation**
+  - `harness-next` 가 다음 agent 마다 `.harness/actions/task-sessions/<agent>/<id>.md` 생성
+  - `handoff.json` 에 `task_session_path` 추가
+  - `UserPromptSubmit` 가 running agent 와 다른 `/harness-*` 호출을 경고가 아니라 **hard block**
+- **direct invocation policy**
+  - 모든 harness skill 의 `disable-model-invocation` 을 `false` 로 통일
+  - orchestration/control-plane 과 worker/evaluator 모두 직접 호출 가능 상태로 정리
+- **archive reset hardening**
+  - archive 시 `workflow`, `meetings.decision`, `service_ops.drift_classification`, `task_sessions.current` 초기화
+
+### Validation
+- `bash -n` 으로 주요 스크립트 문법 검증
+- `jq empty` 로 `config.json`, `progress.json` 검증
+- `/private/tmp` 샌드박스에서:
+  - `dispatcher -> meeting-manager` 시 회의 문서 자동 생성 확인
+  - 회의 decision 편집 후 `dispatcher / planner / cto` 로 문서 기반 재라우팅 확인
+  - `goal_adherence` 하락 시 drift classification 반영 확인
+  - context isolation hard block 확인
+  - `task_session_path` 생성 확인
+
 ## 6.0.5 — migrate 가 gotcha entry / bundle version 까지 sync (2026-05-07)
 
 ### Why

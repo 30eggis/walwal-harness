@@ -2,6 +2,30 @@
   "version": 6,
   "project_name": "",
   "pipeline": null,
+  "mode": "auto",
+  "mode_decision": {
+    "owner": "conductor",
+    "decided_at": null,
+    "rationale": null,
+    "user_override": null
+  },
+  "team_state": {
+    "active_teams": 0,
+    "paused_at": null,
+    "resume_from": null,
+    "team_1": {
+      "assigned_feature": null,
+      "assigned_agent": null
+    },
+    "team_2": {
+      "assigned_feature": null,
+      "assigned_agent": null
+    },
+    "team_3": {
+      "assigned_feature": null,
+      "assigned_agent": null
+    }
+  },
   "sprint": {
     "number": 0,
     "status": "init",
@@ -39,7 +63,7 @@
       "updated_at": null
     }
   },
-  "updated_at": "2026-05-07T05:35:09Z",
+  "updated_at": "2026-05-08T00:30:00Z",
   "history": [
     {
       "ts": "2026-05-07",
@@ -108,6 +132,21 @@
     }
   ],
   "phase": "C",
+  "workflow": {
+    "stage": "goal-intake",
+    "last_transition": null,
+    "loop_count": 0,
+    "last_reason": null
+  },
+  "task_sessions": {
+    "current": {
+      "agent": null,
+      "id": null,
+      "path": null,
+      "source": null
+    },
+    "history": []
+  },
   "org": {
     "active": [
       "dispatcher",
@@ -135,9 +174,29 @@
     "last_standup": null,
     "next_scheduled": null,
     "active": [],
+    "current_id": null,
+    "current_record_path": null,
+    "requested_type": null,
+    "requested_reason": null,
+    "last_type": null,
+    "last_reason": null,
+    "last_decision": null,
+    "decision": {
+      "owner": null,
+      "action_type": null,
+      "rationale": null,
+      "evidence": [],
+      "drift_classification": null,
+      "source_path": null
+    },
     "open_action_items": 0,
     "last_goal_adherence": null,
     "manual_override": null
+  },
+  "planner": {
+    "requested_mode": null,
+    "last_plan_path": null,
+    "last_brief": null
   },
   "cto": {
     "last_review": null,
@@ -155,6 +214,9 @@
     "audit_path": null
   },
   "service_ops": {
+    "requested_mode": null,
+    "drift_classification": null,
+    "evidence": [],
     "monitor": {
       "last_check": null,
       "cadence_decided": "normal",

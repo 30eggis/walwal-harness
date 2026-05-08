@@ -25,7 +25,8 @@ sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
 current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
 next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
-mode=$(jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null)
+mode=$(jq -r '.mode // "team"' "$PROGRESS" 2>/dev/null)
+conductor_state=$(jq -r '.conductor.state // "idle"' "$PROGRESS" 2>/dev/null)
 
 # ─────────────────────────────────────────
 # Auto-heal mode drift — Team 상태 유실 복구
@@ -65,8 +66,8 @@ if [ "$mode" = "team" ]; then
 
   echo "# Harness Team Mode active"
   echo "# Queue: ${passed}/${total} passed, ${in_prog} in progress, ${failed} failed"
-  echo "# Teams run autonomously (Gen-Eval loop, max 5 retries)."
-  echo "# Stop: /harness-stop | Switch to solo: /harness-solo"
+  echo "# Worker pool runs autonomously (Gen-Eval loop, max 5 retries). Control-plane Cxx agents are outside this limit."
+  echo "# Stop: /harness-stop | Emergency fallback: /harness-solo"
   exit 0
 fi
 
@@ -74,7 +75,7 @@ fi
 # Paused Mode — 중단 상태 안내
 # ─────────────────────────────────────────
 if [ "$mode" = "paused" ]; then
-  echo "# Harness paused — resume with /harness-team or /harness-solo"
+  echo "# Harness paused — resume with /harness-team"
   exit 0
 fi
 
@@ -83,7 +84,7 @@ fi
 # ─────────────────────────────────────────
 if [ "$sprint_status" = "init" ]; then
   echo "# Harness ready — say \"하네스 엔지니어링 시작\" or /harness-dispatcher"
-  echo "# 기본은 Solo 모드. 병렬 3팀 실행을 원하면 Planner 완료 후 /harness-team."
+  echo "# 기본 경로는 회사 루프입니다: dispatch -> CEO meeting -> COO/CTO 분배 -> gen/eval -> CQO -> service-ops -> batch meeting."
   exit 0
 fi
 
@@ -105,6 +106,16 @@ if [ "$agent_status" = "completed" ] || [ "$agent_status" = "failed" ]; then
 
   next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
   agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
+fi
+
+# ─────────────────────────────────────────
+# Conductor running/queued → refresh routing once on session start
+# ─────────────────────────────────────────
+if [ "$conductor_state" = "running" ] || [ "$next_agent" = "conductor" ]; then
+  if [ -x "$SCRIPT_DIR/conductor-tick.sh" ]; then
+    bash "$SCRIPT_DIR/conductor-tick.sh" "$PROJECT_ROOT" >/dev/null 2>&1 || true
+    next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
+  fi
 fi
 
 # ─────────────────────────────────────────

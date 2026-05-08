@@ -54,7 +54,7 @@ Planner가 완료한 feature-list.json의 피처들을 최대 3개 팀이 병렬
 
 ```bash
 # progress.json에 mode=team 설정
-jq '.mode = "team" | .team_state.active_teams = 3 | .team_state.paused_at = null' .harness/progress.json > /tmp/progress_tmp.json && mv /tmp/progress_tmp.json .harness/progress.json
+jq '.mode = "team" | .mode_decision.user_override = "team" | .team_state.active_teams = 3 | .team_state.paused_at = null' .harness/progress.json > /tmp/progress_tmp.json && mv /tmp/progress_tmp.json .harness/progress.json
 
 # Queue 초기화 또는 복구
 if [ ! -f .harness/actions/feature-queue.json ]; then

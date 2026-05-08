@@ -97,14 +97,6 @@ meeting:
     - id: D-1
       text: <decision>
       vote: { agree: 0.71, override: false }
-  decision:
-    owner: planner | cto | cqo | service-ops | dispatcher
-    action_type: goal-alignment | replan | implement | re-evaluate | monitor | escalate-owner
-    rationale: <fact-based why this owner must act next>
-    evidence:
-      - source: <artifact path>
-        kind: ops-report | cqo-audit | cto-review | meeting-prep
-    drift_classification: implementation_drift | planning_drift | ops_drift | goal_drift
   action_items:
     - id: AI-1
       owner: generator-backend
@@ -127,36 +119,16 @@ meeting:
 ## 7. progress.json 추가
 
 ```json
-  "meetings": {
+"meetings": {
   "cadence": "light|normal|heavy",
   "last_standup": "<iso>",
   "next_scheduled": "<iso>",
   "active": [ { "id": "...", "type": "...", "status": "..." } ],
   "open_action_items": 0,
   "last_goal_adherence": 0.92,
-  "decision": {
-    "owner": "planner",
-    "action_type": "goal-alignment",
-    "rationale": "...",
-    "evidence": [],
-    "drift_classification": "planning_drift",
-    "source_path": ".harness/actions/meetings/M-.../meeting-M-....md"
-  },
   "manual_override": null
 }
 ```
-
-## 7.1 회의 진행 방식
-
-Meeting-Manager는 단순히 "토론해 주세요"라고 말하지 않는다. 각 참석자에게 역할별 prep를 요청한다.
-
-- `Dispatcher/CEO`: Goal 자체가 흔들렸는가, Owner escalation 이 필요한가
-- `Planner/COO`: 기획/가설/웹리서치/레퍼런스 재검토가 필요한가
-- `CTO`: 구현/아키텍처/기술선택 문제가 원인인가
-- `CQO`: 품질/회귀/검증 부족이 원인인가
-- `Service-Ops`: KPI/로그/incident 기준으로 어떤 drift 가 발생했는가
-
-회의 종료 시 `decision.owner`, `action_type`, `rationale`, `evidence`, `drift_classification` 이 비어 있으면 회의는 미완료로 본다.
 
 ## 8. Cron 통합 (Service-Ops 위임)
 

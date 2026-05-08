@@ -1,6 +1,6 @@
 #!/bin/bash
 # harness-user-prompt-submit.sh — UserPromptSubmit hook (v5 unified)
-# 핵심 상태 + 라우팅 지시만 주입. Solo/Team 통합.
+# 핵심 상태 + 라우팅 지시만 주입. 회사 루프 기본, solo는 비상용 override.
 set -e
 
 INPUT=$(cat)
@@ -9,6 +9,7 @@ if [ -z "$CWD" ]; then CWD="$PWD"; fi
 
 # 조건 1: 하네스 초기화 확인
 if [ ! -f "$CWD/.harness/config.json" ]; then exit 0; fi
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # 조건 2: opt-out 플래그 확인
 AUTO_ROUTE="true"
@@ -28,6 +29,11 @@ PIPELINE="none"; CURRENT_AGENT="none"; NEXT_AGENT="none"
 SPRINT_NUM="0"; SPRINT_STATUS="init"; AGENT_STATUS="pending"
 
 if [ -f "$CWD/.harness/progress.json" ] && command -v jq >/dev/null 2>&1; then
+  conductor_state=$(jq -r '.conductor.state // "idle"' "$CWD/.harness/progress.json" 2>/dev/null || echo "idle")
+  pending_next=$(jq -r '.next_agent // "none"' "$CWD/.harness/progress.json" 2>/dev/null || echo "none")
+  if [ -x "$SCRIPT_DIR/conductor-tick.sh" ] && { [ "$conductor_state" = "running" ] || [ "$pending_next" = "conductor" ]; }; then
+    bash "$SCRIPT_DIR/conductor-tick.sh" "$CWD" >/dev/null 2>&1 || true
+  fi
   PIPELINE=$(jq -r '.pipeline // "none"' "$CWD/.harness/progress.json" 2>/dev/null || echo "none")
   CURRENT_AGENT=$(jq -r '.current_agent // "none"' "$CWD/.harness/progress.json" 2>/dev/null || echo "none")
   NEXT_AGENT=$(jq -r '.next_agent // "none"' "$CWD/.harness/progress.json" 2>/dev/null || echo "none")
@@ -52,22 +58,31 @@ fi
 # ── 컨텍스트 분리 가드레일 ──
 # 현재 에이전트가 활성인데 다른 에이전트 스킬을 호출하려는 경우 경고
 CONTEXT_WARNING=""
+CONTEXT_BLOCK=""
 if [ "$CURRENT_AGENT" != "none" ] && [ "$CURRENT_AGENT" != "null" ] && [ "$AGENT_STATUS" = "running" ]; then
   # 프롬프트에서 /harness-* 패턴 추출
   REQUESTED_SKILL=$(echo "$PROMPT" | grep -oE '/harness-[a-z-]+' | head -1 | sed 's|/harness-||')
   if [ -n "$REQUESTED_SKILL" ] && [ "$REQUESTED_SKILL" != "$CURRENT_AGENT" ]; then
-    CONTEXT_WARNING="
-## !! Context Isolation Warning !!
+    CONTEXT_BLOCK="
+## Context Isolation Block
 current_agent=${CURRENT_AGENT} (running) 인데 /harness-${REQUESTED_SKILL} 호출 감지.
-한 세션에서 다른 에이전트를 실행하면 컨텍스트가 오염됩니다.
+문서 기반 task session 분리를 강제하기 위해 이 호출은 차단됩니다.
 현재 에이전트를 먼저 완료(completed)하거나, 새 세션을 시작하세요."
   fi
 fi
 
+if [ -n "$CONTEXT_BLOCK" ]; then
+  cat <<EOF
+[harness] blocked | current=${CURRENT_AGENT} | requested=${REQUESTED_SKILL}
+${CONTEXT_BLOCK}
+EOF
+  exit 0
+fi
+
 # ── Mode 기반 분기 ──
-MODE="solo"
+MODE="team"
 if [ -f "$CWD/.harness/progress.json" ] && command -v jq >/dev/null 2>&1; then
-  MODE=$(jq -r '.mode // "solo"' "$CWD/.harness/progress.json" 2>/dev/null || echo "solo")
+  MODE=$(jq -r '.mode // "team"' "$CWD/.harness/progress.json" 2>/dev/null || echo "team")
 fi
 
 if [ "$MODE" = "team" ]; then
@@ -83,9 +98,10 @@ if [ "$MODE" = "team" ]; then
 [harness] team | ${T_PASSED}/${T_TOTAL} passed | ${T_FAILED} failed
 
 ## Team Mode Active
-- 3 Agent Teams이 자율적으로 Gen→Eval 루프 실행 중 (max 5 retries)
-- 역할: 모니터링, 실패 대응, 수동 개입
-- /harness-stop → 중단 | /harness-solo → Solo 전환
+- worker pool(기본 3)이 자율적으로 Gen→Eval 루프 실행 중 (max 5 retries)
+- CEO/Meeting/CTO/CQO/Service-Ops control-plane은 이 상한에 포함되지 않음
+- 역할: 모니터링, 실패 대응, Goal 점검
+- /harness-stop → 중단 | /harness-solo → 비상용 단일 에이전트 fallback
 - skip: "harness skip" 시 일반 대화
 EOF
   exit 0
@@ -97,6 +113,8 @@ cat <<EOF
 ${CONTEXT_WARNING}
 ## Route
 - pipeline=none/dispatcher 미실행 → harness-dispatcher 스킬 호출
+- 기본 경로는 conductor 중심 회사 루프다: dispatch -> CEO meeting -> planner(COO) -> cto -> gen/eval -> cqo -> service-ops -> batch meeting
+- conductor 는 Planner 직행 대신 meeting-manager / cto / cqo / service-ops 로 next_agent를 재작성할 수 있다
 - 기능 요청 → pipeline flow | 실수 지적 → gotcha flow | 메타 질문 → 짧게 응답 (skip)
 - 활성 pipeline → next_agent/current_agent 컨텍스트로 계속
 - skip: "harness skip", "just answer" 등 명시 시 단일 메시지 건너뜀
