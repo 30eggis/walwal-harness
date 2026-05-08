@@ -9,8 +9,8 @@ disable-model-invocation: false
 ## progress.json 업데이트 규칙 (v5.6.3+)
 
 ⚠️ **절대로 progress.json 을 통째로 재작성하지 마라**. `Write` 도구로 전체 파일을
-덮어쓰면 `mode` / `team_state` / 기타 top-level 필드가 누락되어 Team Mode 가 Solo 로
-되돌아가는 등 런타임 오류가 발생한다.
+덮어쓰면 `mode` / `company_state` / 기타 top-level 필드가 누락되어 회사모드 병렬 루프가
+끊기는 등 런타임 오류가 발생한다.
 
 **올바른 방법** — 반드시 partial update 로 갱신:
 
@@ -44,7 +44,7 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 3. `feature-list.json`의 통과 feature `passes`에 `"evaluator-functional"` 추가
 4. `.harness/progress.log`에 PASS 요약 추가
 5. 출력: `"✓ Evaluator-Functional PASS. 자동 핸드오프 (Conductor 자율 시동)."`
-6. **즉시 내부 핸드오프 (scripts/harness-next.sh) 를 호출하여 다음 에이전트로 자동 핸드오프** (Solo 모드. Team 모드는 Lead가 별도 오케스트레이션).
+6. **즉시 내부 핸드오프 (scripts/harness-next.sh) 를 호출하여 다음 에이전트로 자동 핸드오프** (회사모드 내부 핸드오프).
 
 ### On Fail
 1. **Screenshot Cleanup** — PASS 와 동일하게 스크린샷 파일 삭제 (FAIL 시에도 정리 필수).
@@ -59,7 +59,7 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 3. `sprint.retry_count >= 10`이면 `agent_status` → `"blocked"`, 사용자 개입 요청
 4. `.harness/progress.log`에 FAIL 요약 추가
 5. 출력: `"✖ Evaluator-Functional FAIL. 자동 핸드오프 (Conductor 자율 시동) (재작업 대상으로 라우팅)."`
-6. **즉시 내부 핸드오프 (scripts/harness-next.sh) 를 호출하여 `failure.retry_target` 으로 자동 핸드오프** (Solo 모드).
+6. **즉시 내부 핸드오프 (scripts/harness-next.sh) 를 호출하여 `failure.retry_target` 으로 자동 핸드오프** (회사모드 내부 핸드오프).
 
 ## Critical Mindset
 
@@ -90,9 +90,9 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 8. `actions/api-contract.json` — 기대 API 동작
 9. `.harness/progress.json`
 
-## Feature-Level Mode (Team Mode)
+## Feature-Level Company Worker
 
-Team Mode에서 Team Worker가 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
+Company worker가 호출할 때, 프롬프트에 `FEATURE_ID`가 지정된다.
 
 ### Feature-Level Rules
 - `feature-list.json`에서 **지정된 FEATURE_ID의 AC만** 검증

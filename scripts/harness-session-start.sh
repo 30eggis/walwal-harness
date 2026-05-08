@@ -32,7 +32,7 @@ sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
 current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
 next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
-mode=$(jq -r '.mode // "team"' "$PROGRESS" 2>/dev/null)
+mode=$(jq -r '.mode // "company"' "$PROGRESS" 2>/dev/null)
 conductor_state=$(jq -r '.conductor.state // "idle"' "$PROGRESS" 2>/dev/null)
 task_stop_active=$(jq -r '.task_stop.active // false' "$PROGRESS" 2>/dev/null)
 task_stop_reason=$(jq -r '.task_stop.reason // "null"' "$PROGRESS" 2>/dev/null)
@@ -53,32 +53,65 @@ now_epoch() {
 }
 
 # ─────────────────────────────────────────
-# Auto-heal mode drift — Team 상태 유실 복구
-#   feature-queue.json 에 활성 작업(in_progress)이 있는데 mode 가 solo/paused 면
-#   누군가 progress.json 을 통째로 덮어써서 team_state 를 날린 것. mode=team 으로
-#   자동 복원하고 경고 로그 남김.
+# Normalize legacy mode drift — v6.3+ always runs company mode.
 # ─────────────────────────────────────────
 FEATURE_QUEUE_HEAL="$PROJECT_ROOT/.harness/actions/feature-queue.json"
-if [ -f "$FEATURE_QUEUE_HEAL" ] && [ "$mode" != "team" ]; then
-  active_count=$(jq -r '(.queue.in_progress | length) // 0' "$FEATURE_QUEUE_HEAL" 2>/dev/null || echo 0)
-  if [ "${active_count:-0}" -gt 0 ]; then
-    heal_teams=$active_count
-    [ "$heal_teams" -gt 3 ] && heal_teams=3
-    bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
-      ".mode = \"team\" | .team_state.active_teams = ${heal_teams} | .team_state.paused_at = null" \
-      2>/dev/null
-    mode="team"
-    echo "# Harness: mode auto-healed to 'team' (feature-queue has ${active_count} active, but mode was drifted)" >&2
-    if [ -f "$PROJECT_ROOT/.harness/progress.log" ]; then
-      echo "$(date +'%Y-%m-%d %H:%M') | system | heal | mode | reset solo→team (queue had ${active_count} in_progress)" >> "$PROJECT_ROOT/.harness/progress.log"
-    fi
+if [ "$mode" != "company" ]; then
+  bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
+    '.mode = "company" |
+     .mode_decision.owner = "conductor" |
+     .mode_decision.policy = "always_company_parallel" |
+     .mode_decision.user_override = null |
+     .mode_decision.decided_at = (now | todate) |
+     .mode_decision.rationale = "legacy mode normalized to always-on company mode"' \
+    2>/dev/null || true
+  mode="company"
+  [ -f "$PROJECT_ROOT/.harness/progress.log" ] && echo "$(date +'%Y-%m-%d %H:%M') | system | heal | mode | normalized legacy mode to company" >> "$PROJECT_ROOT/.harness/progress.log"
+fi
+
+# ─────────────────────────────────────────
+# Truthful Logging Heal — strip future-dated progress.log entries
+# ─────────────────────────────────────────
+PROGRESS_LOG="$PROJECT_ROOT/.harness/progress.log"
+if [ -f "$PROGRESS_LOG" ]; then
+  NOW_KST=$(date "+%Y-%m-%d %H:%M")
+  NOW_UTC_MIN=$(date -u "+%Y-%m-%d %H:%M")
+  QUARANTINE_FILE="$PROGRESS_LOG.future-quarantine.$(date +%s)"
+  KEEP_FILE="$PROGRESS_LOG.tmp.$$"
+
+  # 미래 시각으로 시작하는 라인 격리. KST(YYYY-MM-DD HH:MM) 와 ISO(YYYY-MM-DDTHH:MM:SSZ) 둘 다 처리.
+  awk -v now_kst="$NOW_KST" -v now_utc="$NOW_UTC_MIN" -v qfile="$QUARANTINE_FILE" '
+    function iso_to_minute(s) {
+      gsub("\\[", "", s); gsub("T", " ", s); gsub("Z", "", s)
+      return substr(s, 1, 16)
+    }
+    {
+      future=0
+      if (match($0, /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}/)) {
+        ts = substr($0, RSTART, RLENGTH)
+        if (ts > now_kst) future=1
+      } else if (match($0, /^\[?[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}/)) {
+        ts_min = iso_to_minute(substr($0, RSTART, RLENGTH+5))
+        if (ts_min > now_utc) future=1
+      }
+      if (future) print >> qfile
+      else print
+    }
+  ' "$PROGRESS_LOG" > "$KEEP_FILE"
+
+  if [ -f "$QUARANTINE_FILE" ] && [ -s "$QUARANTINE_FILE" ]; then
+    QCOUNT=$(wc -l < "$QUARANTINE_FILE" | tr -d ' ')
+    mv "$KEEP_FILE" "$PROGRESS_LOG"
+    echo "$(date +'%Y-%m-%d %H:%M') | system | heal | log | quarantined ${QCOUNT} future-dated lines → $(basename "$QUARANTINE_FILE")" >> "$PROGRESS_LOG"
+  else
+    rm -f "$KEEP_FILE" "$QUARANTINE_FILE" 2>/dev/null
   fi
 fi
 
 # ─────────────────────────────────────────
-# Team Mode — 팀이 자율 실행 중이면 오케스트레이터 안내
+# Company Mode — autonomous parallel company loop
 # ─────────────────────────────────────────
-if [ "$mode" = "team" ]; then
+if [ "$mode" = "company" ]; then
   FEATURE_QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
   passed=0; total=0; in_prog=0; failed=0
   if [ -f "$FEATURE_QUEUE" ]; then
@@ -88,18 +121,9 @@ if [ "$mode" = "team" ]; then
     failed=$(jq '.queue.failed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
   fi
 
-  echo "# Harness Team Mode active"
+  echo "# Harness Company Mode active"
   echo "# Queue: ${passed}/${total} passed, ${in_prog} in progress, ${failed} failed"
-  echo "# Worker pool runs autonomously (Gen-Eval loop, max 5 retries). Control-plane Cxx agents are outside this limit."
-  echo "# Stop: /harness-stop | Emergency fallback: /harness-solo"
-  exit 0
-fi
-
-# ─────────────────────────────────────────
-# Paused Mode — 중단 상태 안내
-# ─────────────────────────────────────────
-if [ "$mode" = "paused" ]; then
-  echo "# Harness paused — resume with /harness-team"
+  echo "# Company loop runs autonomously with parallel workers. Owner input is only needed for GOAL ambiguity, escalation, or result review."
   exit 0
 fi
 

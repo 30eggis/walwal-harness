@@ -1,8 +1,7 @@
 #!/bin/bash
 # harness-statusline.sh — Claude Code statusline hook (v5 unified)
 # 터미널 하단에 항상 고정되는 1줄 compact 상태 표시.
-# Solo: [S1] FULL | solo | >backend | sonnet | 2/5 feat | ctx 45% | $1.23
-# Team: [S1] FULL | team | T1:gen T2:eval T3:idle | 2/5 feat | ctx 45% | $1.23
+# Company: [C1] FULL | company | T1:gen T2:eval T3:idle | 2/5 work | ctx 45% | $1.23
 
 # Read Claude Code session data from stdin
 input=$(cat)
@@ -32,14 +31,13 @@ if [ ! -f "$PROGRESS" ]; then
 fi
 
 # Read harness state
-sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)
-sprint_status=$(jq -r '.sprint.status // "init"' "$PROGRESS" 2>/dev/null)
+cycle_num=$(jq -r '.sprint.number // .cycle.number // 0' "$PROGRESS" 2>/dev/null)
 pipeline=$(jq -r '.pipeline // "?"' "$PROGRESS" 2>/dev/null)
 current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null)
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null)
 next_agent=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null)
 retry_count=$(jq -r '.sprint.retry_count // 0' "$PROGRESS" 2>/dev/null)
-harness_mode=$(jq -r '.mode // "solo"' "$PROGRESS" 2>/dev/null)
+harness_mode="company"
 
 # Pipeline short name
 case "$pipeline" in
@@ -111,8 +109,8 @@ fi
 # Build compact status line based on mode
 FEATURE_QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
 
-if [ "$harness_mode" = "team" ] && [ -f "$FEATURE_QUEUE" ]; then
-  # Team mode: show team status instead of single agent
+if [ -f "$FEATURE_QUEUE" ]; then
+  # Company mode: show worker status instead of single agent
   team_info=""
   for i in 1 2 3; do
     t_status=$(jq -r ".teams[\"$i\"].status // \"idle\"" "$FEATURE_QUEUE" 2>/dev/null)
@@ -127,13 +125,11 @@ if [ "$harness_mode" = "team" ] && [ -f "$FEATURE_QUEUE" ]; then
   t_passed=$(jq '.queue.passed | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
   t_total=$(jq '[.queue.ready, (.queue.blocked | keys), (.queue.in_progress | keys), .queue.passed, .queue.failed] | flatten | length' "$FEATURE_QUEUE" 2>/dev/null || echo 0)
 
-  echo "[S${sprint_num}] ${pl} | team | ${team_info}| ${t_passed}/${t_total} feat | ctx ${context_pct}% | \$${cost}"
+  echo "[C${cycle_num}] ${pl} | company | ${team_info}| ${t_passed}/${t_total} work | ctx ${context_pct}% | \$${cost}"
 else
-  # Solo/paused mode: show single agent status
-  mode_tag="${harness_mode}"
   if [ -n "$model_short" ]; then
-    echo "[S${sprint_num}] ${pl} | ${mode_tag} | ${status_icon}${agent_short}${retry_str} | ${model_short} | ${completed_features}/${total_features} feat | ctx ${context_pct}% | \$${cost}"
+    echo "[C${cycle_num}] ${pl} | company | ${status_icon}${agent_short}${retry_str} | ${model_short} | ${completed_features}/${total_features} work | ctx ${context_pct}% | \$${cost}"
   else
-    echo "[S${sprint_num}] ${pl} | ${mode_tag} | ${status_icon}${agent_short}${retry_str} | ${completed_features}/${total_features} feat | ctx ${context_pct}% | \$${cost}"
+    echo "[C${cycle_num}] ${pl} | company | ${status_icon}${agent_short}${retry_str} | ${completed_features}/${total_features} work | ctx ${context_pct}% | \$${cost}"
   fi
 fi

@@ -92,7 +92,7 @@ scripts/            # 하네스 스크립트 (init.js 가 동기화)
 ```
 .harness/
 ├── HARNESS.md              # 이 파일
-├── config.json             # 하네스 설정 (mode_selection, behavior, flow gates)
+├── config.json             # 하네스 설정 (company_mode, behavior, flow gates)
 ├── progress.json           # 기계 판독 상태 (세션 오케스트레이션 SoT)
 ├── progress.log            # 사람 판독 히스토리 (append-only)
 ├── handoff.json            # 세션 전환 문서 (prompt, model, artifacts, regression)
@@ -143,7 +143,7 @@ Planner ─ ┐
    ▼
 CTO ── 실행 분할 ── ┐
    ▼              ▼
-Gen-BE ⇄ Gen-FE  (병렬 / Team 모드)
+Gen-BE ⇄ Gen-FE  (회사모드 병렬 worker pool)
    │
    ▼
 CQO 적대적 검증 (early-exit chain)
@@ -183,12 +183,11 @@ Archive  (sprint advance)
 - followup-review 자체에서 또 fork 금지 (무한 fork 방지).
 - 한 sprint 내 parallel fork ≥ 3 회면 다음 fork 는 single 강제.
 
-## Solo / Team / Hypothesis 모드
+## Company / Hypothesis 실행
 
-| 모드 | 트리거 | 실행 |
+| 실행 | 트리거 | 동작 |
 |------|--------|------|
-| **Solo** | 기본 | 한 번에 한 에이전트 spawn (1개 슬롯 유지) |
-| **Team** | `progress.json.mode = "team"` (Owner 또는 Conductor 결정) | 매 tick `min(ready, 3)` 동시 spawn, parallel evaluator |
+| **Company** | 기본값 | Conductor 가 매 tick `min(ready, 3)` 병렬 worker 를 자동 배정 |
 | **Hypothesis** | Planner `requested_mode = "hypothesis"` | `documentationer → coo-developer → documentationer → planner` 가설 검증 루프 |
 
 ## 품질 게이트
@@ -215,9 +214,10 @@ Archive  (sprint advance)
 | `npx walwal-harness` | 첫 설치 / 안전 init (G-NNN, C-NNN 보존) |
 | `npx walwal-harness --force` | 시스템 파일 강제 갱신 (G/C entry 는 여전히 보존) |
 | `npx walwal-harness migrate` | 구버전 progress.json / config.json schema 정상화 |
-| `npx walwal-harness team` | tmux/iTerm Team 스튜디오 기동 |
+| `npx walwal-harness verify` | 설치 정합성 검증 |
 | `bash scripts/harness-dashboard-up.sh` | Brick Office 라이브 대시보드 (http://localhost:3001) |
-| `bash scripts/harness-session-start.sh` | SessionStart 훅 (자동 호출) |
+| `bash scripts/harness-wake-install.sh install .` | 1시간 안전망 wake 등록 (launchd) |
+| `bash scripts/harness-wake-install.sh status` | wake 상태 / 등록 프로젝트 확인 |
 
 ## 다음 단계
 

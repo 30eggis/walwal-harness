@@ -7,19 +7,22 @@ export interface RosterEntry {
   room: RoomId;
 }
 
-// SoT for the office roster. Derived once from .harness/agency-mapping.md §"조직 구성".
-// If the harness re-organizes, update both this file and the mapping doc.
+// SoT for the office roster. Mirrors v6 NEXUS organization in CLAUDE.md.
+// Order within a room dictates desk assignment (see lib/furniture.ts).
 export const AGENT_ROSTER: RosterEntry[] = [
   { id: "dispatcher", name: "CEO (Dispatcher)", dept: "CEO", room: "ceo" },
+  { id: "brainstormer", name: "Brainstormer", dept: "CEO", room: "ceo" },
   { id: "meeting-manager", name: "Meeting Manager", dept: "Meeting", room: "meeting" },
   { id: "planner", name: "COO (Planner)", dept: "Planner", room: "coo" },
-  { id: "coo-developer", name: "Developer 1", dept: "Planner", room: "coo" },
-  { id: "documentationer", name: "Documentationer 1", dept: "Planner", room: "coo" },
+  { id: "coo-developer", name: "Developer 1 (Hypothesis Cell)", dept: "Planner", room: "coo" },
+  { id: "documentationer", name: "Documentationer 1 (Hypothesis Cell)", dept: "Planner", room: "coo" },
+  { id: "cto", name: "CTO (Gen 총괄)", dept: "CTO", room: "cto-team" },
   { id: "conductor", name: "Conductor", dept: "CTO", room: "cto-team" },
-  { id: "generator-backend", name: "CTO Lead — Backend", dept: "CTO", room: "cto-team" },
-  { id: "generator-frontend", name: "CTO Lead — Frontend", dept: "CTO", room: "cto-team" },
+  { id: "generator-backend", name: "Generator — Backend", dept: "CTO", room: "cto-team" },
+  { id: "generator-frontend", name: "Generator — Frontend", dept: "CTO", room: "cto-team" },
   { id: "generator-designer", name: "Designer", dept: "CTO", room: "cto-team" },
   { id: "generator-devops", name: "DevOps", dept: "CTO", room: "cto-team" },
+  { id: "cqo", name: "CQO (Eval 총괄)", dept: "CQO", room: "cqo-team" },
   { id: "evaluator-functional", name: "Eval — Functional", dept: "CQO", room: "cqo-team" },
   { id: "evaluator-visual", name: "Eval — Visual", dept: "CQO", room: "cqo-team" },
   { id: "evaluator-code-quality", name: "Eval — Code Quality", dept: "CQO", room: "cqo-team" },

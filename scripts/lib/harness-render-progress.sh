@@ -57,12 +57,12 @@ render_progress() {
   fi
 
   # Read progress.json
-  local pipeline sprint_num sprint_status retry_count
+  local pipeline cycle_num sprint_status retry_count
   local current_agent agent_status next_agent
   local failure_agent failure_location failure_message
 
   pipeline=$(jq -r '.pipeline // "unknown"' "$PROGRESS")
-  sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS")
+  cycle_num=$(jq -r '.sprint.number // .cycle.number // 0' "$PROGRESS")
   sprint_status=$(jq -r '.sprint.status // "init"' "$PROGRESS")
   retry_count=$(jq -r '.sprint.retry_count // 0' "$PROGRESS")
   current_agent=$(jq -r '.current_agent // "none"' "$PROGRESS")
@@ -85,7 +85,7 @@ render_progress() {
   fi
 
   # ── Header ──
-  local header="Sprint ${sprint_num} / ${pipeline}"
+  local header="Cycle ${cycle_num} / ${pipeline}"
   local pad_len=$(( 40 - ${#header} ))
   local padding=""
   for ((i=0; i<pad_len; i++)); do padding+="═"; done

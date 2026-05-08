@@ -1,7 +1,13 @@
 "use client";
 import { useEffect } from "react";
 
-export type DrawerTab = "agent-log" | "room-metrics" | "archive-list";
+export type DrawerTab =
+  | "agent-log"
+  | "room-metrics"
+  | "archive-list"
+  | "incidents"
+  | "hypothesis"
+  | "tracks";
 
 interface DrawerProps {
   open: boolean;
@@ -15,6 +21,9 @@ interface DrawerProps {
 const TABS: Array<{ id: DrawerTab; label: string }> = [
   { id: "agent-log", label: "Agent Log" },
   { id: "room-metrics", label: "Room Metrics" },
+  { id: "incidents", label: "Incidents" },
+  { id: "hypothesis", label: "Hypothesis" },
+  { id: "tracks", label: "Tracks" },
   { id: "archive-list", label: "Archive" },
 ];
 
@@ -63,7 +72,7 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children }: Dra
             ✕
           </button>
         </header>
-        <nav className="flex border-b border-brick-wall text-xs font-mono">
+        <nav className="flex flex-wrap border-b border-brick-wall text-[11px] font-mono">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -71,7 +80,7 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children }: Dra
               data-testid={`drawer-tab-${t.id}`}
               data-active={t.id === tab}
               onClick={() => onTabChange(t.id)}
-              className={`flex-1 px-3 py-2 transition-colors ${
+              className={`min-w-[33%] flex-1 px-2 py-2 transition-colors ${
                 t.id === tab
                   ? "bg-brick-wall/50 text-gray-100 border-b-2 border-aura-typing"
                   : "text-gray-500 hover:text-gray-200"

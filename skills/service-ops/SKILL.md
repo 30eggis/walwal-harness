@@ -55,6 +55,30 @@ service-ops/
 - GOAL 적합도(`goal_adherence`) 계산
 - 임계 초과 시 event trigger 발신
 
+### 3.1.1 Live Visibility (Inviolable)
+
+> 대시보드의 Operations 미니피규어가 typing 으로 보이려면 monitor 가 active 인 동안 `progress.service_ops.monitor.stream_active = true` 가 유지되어야 한다 (`state-mapping.ts:103` 의 G-006 조건).
+
+**On Start (monitor 한 바퀴 시작 시)**
+```bash
+bash scripts/harness-progress-set.sh . \
+  '.service_ops.monitor.stream_active = true |
+   .service_ops.monitor.stream_started_at = (now | todate)'
+```
+
+**On Complete (monitor 종료 직후, 결과 commit 과 같은 partial update 안에서)**
+```bash
+bash scripts/harness-progress-set.sh . \
+  '.service_ops.monitor.stream_active = false |
+   .service_ops.monitor.last_check = (now | todate) |
+   .service_ops.monitor.cadence_decided = "<light|normal|heavy>" |
+   .service_ops.monitor.current_goal_adherence = <0..1> |
+   .service_ops.monitor.warns_this_sprint = ((.service_ops.monitor.warns_this_sprint // 0) + <Δwarn>) |
+   .service_ops.monitor.alerts_this_sprint = ((.service_ops.monitor.alerts_this_sprint // 0) + <Δalert>)'
+```
+
+stream_active 를 안 끄면 미니피규어가 영구 typing 으로 보여 Owner 가 "왜 항상 일하고 있냐" 의심 → 정직성 위반.
+
 ### 3.2 입력
 - `.harness/actions/goals.md` (KPI·success_metrics)
 - 운영 메트릭 소스: `.harness/ops/metrics.jsonl` (DevOps가 적재) 또는 외부 stack(Grafana·Sentry — 옵트인)

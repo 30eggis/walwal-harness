@@ -4,7 +4,10 @@
 
 html,
 body {
-  background: theme(colors.brick-bg);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.08), transparent 26rem),
+    radial-gradient(circle at 88% 6%, rgba(251, 191, 36, 0.06), transparent 24rem),
+    #101216;
   color: #e5e7eb;
 }
 

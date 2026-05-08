@@ -10,6 +10,7 @@ import { planPath } from "@/lib/path-planning";
 
 const AURA: Record<MinifigState, { color: string; emissive: number }> = {
   idle: { color: "#8696b8", emissive: 0.0 },
+  queued: { color: "#60a5fa", emissive: 0.25 },
   typing: { color: "#22d3ee", emissive: 0.5 },
   talking: { color: "#fbbf24", emissive: 0.4 },
   "red-alert": { color: "#ef4444", emissive: 0.7 },
@@ -95,7 +96,7 @@ function Minifig({ agent, index, deskTarget, talkingTarget, phase, spawn, onClic
     let targetYaw = lastPos.current.yaw;
     let isMoving = false;
 
-    if (agent.minifigState === "typing" && deskTarget) {
+    if ((agent.minifigState === "typing" || agent.minifigState === "queued") && deskTarget) {
       // Route to the desk through doors if we're currently outside the home room.
       const desiredX = deskTarget.pos[0];
       const desiredZ = deskTarget.pos[2];
@@ -190,6 +191,7 @@ function Minifig({ agent, index, deskTarget, talkingTarget, phase, spawn, onClic
         if (
           roam.current.path.length === 0 &&
           agent.minifigState !== "typing" &&
+          agent.minifigState !== "queued" &&
           agent.minifigState !== "talking"
         ) {
           roam.current.dwellUntil = state.clock.elapsedTime + 0.4 + rng() * 1.4;

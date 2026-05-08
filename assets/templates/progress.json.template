@@ -1,11 +1,11 @@
 {
   "version": 4,
-  "mode": "auto",
+  "mode": "company",
   "mode_decision": {
     "owner": "conductor",
     "decided_at": null,
-    "rationale": null,
-    "user_override": null
+    "rationale": "company mode is always-on",
+    "policy": "always_company_parallel"
   },
   "project_name": "",
   "pipeline": null,
@@ -47,8 +47,9 @@
     "api-contract.json": { "status": "pending", "updated_by": null, "updated_at": null },
     "sprint-contract.md": { "status": "pending", "updated_by": null, "updated_at": null }
   },
-  "team_state": {
-    "active_teams": 0,
+  "company_state": {
+    "active_workers": 0,
+    "concurrency": 3,
     "paused_at": null,
     "resume_from": null
   },

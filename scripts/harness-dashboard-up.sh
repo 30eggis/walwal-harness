@@ -4,7 +4,7 @@
 # 처음 쓰는 사용자도 한 줄로 대시보드를 띄워볼 수 있게 만든 helper.
 # walwal-harness CLI 패키지에는 R3F + Next.js 무게 때문에 dashboard 가 미포함이고,
 # 본 스크립트가 git sparse-checkout 으로 apps/harness-dashboard/ 만 가져와서
-# 사용자 프로젝트 외부 (~/.walwal-harness/dashboard) 에 격리 설치 후 dev 실행한다.
+# 사용자 프로젝트 외부 (~/.walwal-harness/dashboard/<project-key>) 에 격리 설치 후 dev 실행한다.
 #
 # Usage:
 #   bash scripts/harness-dashboard-up.sh                 # install + dev (port 3001)
@@ -14,13 +14,13 @@ set -euo pipefail
 
 REPO_URL="${WALWAL_HARNESS_REPO:-https://github.com/30eggis/walwal-harness.git}"
 DASHBOARD_PATH="apps/harness-dashboard"
-LOCAL_DIR="${HOME}/.walwal-harness/dashboard"
 PORT="${PORT:-3001}"
+REINSTALL=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port) PORT="$2"; shift 2 ;;
-    --reinstall) rm -rf "$LOCAL_DIR"; shift ;;
+    --reinstall) REINSTALL=true; shift ;;
     --help|-h)
       sed -n '2,16p' "$0"
       exit 0 ;;
@@ -35,6 +35,14 @@ if [[ ! -d "${HARNESS_ROOT}/.harness" ]]; then
   echo "[brick-office] FAIL: ${HARNESS_ROOT} 에 .harness/ 가 없습니다."
   echo "                먼저 'npx walwal-harness' 로 초기화하세요."
   exit 3
+fi
+
+PROJECT_KEY="$(printf '%s' "${HARNESS_ROOT}" | shasum -a 1 | awk '{print substr($1,1,12)}')"
+PROJECT_NAME="$(basename "${HARNESS_ROOT}")"
+LOCAL_DIR="${HOME}/.walwal-harness/dashboard/${PROJECT_NAME}-${PROJECT_KEY}"
+
+if [[ "$REINSTALL" == "true" ]]; then
+  rm -rf "$LOCAL_DIR"
 fi
 
 echo "[brick-office] HARNESS_ROOT = ${HARNESS_ROOT}"

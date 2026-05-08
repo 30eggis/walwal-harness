@@ -41,11 +41,12 @@ test.describe("Brick Office — full E2E", () => {
     expect(await banner.count()).toBeGreaterThanOrEqual(0);
   });
 
-  test("scenario 2: valid harness state renders 7 rooms and 14 minifigs", async ({ page }) => {
+  test("scenario 2: valid harness state renders 7 rooms and 17 minifigs", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByTestId("brick-office-stage")).toBeVisible();
     expect(await page.locator("[data-testid^='room-']").count()).toBe(7);
-    expect(await page.locator("[data-testid^='minifig-']").count()).toBe(14);
+    // v6 NEXUS roster: 14 prior + cto + cqo + brainstormer = 17.
+    expect(await page.locator("[data-testid^='minifig-']").count()).toBe(17);
   });
 
   test("scenario 3: SSE flips minifigState after progress.json change", async ({ page }) => {

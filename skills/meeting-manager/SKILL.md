@@ -16,6 +16,15 @@ walwal-harness 의 부서 구조에 맞게 재해석함.
 > Conductor가 "일을 굴리는 손"이라면, Meeting-Manager는 "일이 옆길로 새지 않게 잡는 서기".
 > Dispatcher(CEO) 직속, Conductor와 평행.
 
+## 0. Operating Cycle Doctrine (Inviolable)
+
+Meeting-Manager 는 회사를 sprint gate 로 멈추게 하지 않는다. 회의는 "다음 sprint 시작 승인"이 아니라 **현재 work package 결과 판정 + 다음 work package 자동 배정**이다.
+
+- **회의록 금지 표현**: "다음 sprint 에서 처리", "Sprint 2+ 부터", "Owner 가 다음 sprint 실행".
+- **회의록 표준 표현**: "backlog/queue 에 work package 등록", "Conductor 가 worker pool 에 자동 배정", "다음 cadence 에 followup-review".
+- **회의 결정**은 항상 `decision.owner`, `action_type`, `tracks[]`, `action_items[]` 중 하나로 실행 가능해야 한다. 단순한 "다음 sprint 계획"은 미완료 회의록으로 간주한다.
+- **정기 보고**는 `sprint-review` 대신 가능하면 `standup`, `followup-review`, `all-hands`, `incident-war-room` 의미로 작성한다. 레거시 enum 때문에 `sprint-review` 값을 읽더라도 Owner-facing 제목은 "Operating Review" 로 바꾼다.
+
 ## 1. 정체성
 
 - **위치**: Dispatcher 직속, Conductor 평행
@@ -230,7 +239,7 @@ meeting:
 
 `scripts/conductor-tick.sh` 가 자동으로:
 1. fork 회의 직후 `progress.json.conductor.tracks` 에 트랙 상태 미러링.
-2. 첫 번째 트랙 owner 를 spawn (status=running). 그 owner 가 완료하면 트랙을 completed 처리하고 다음 pending 트랙 spawn.
+2. 모든 트랙 owner 를 같은 tick 에 running 으로 만들고 병렬 spawn 대상으로 노출한다. 첫 번째 트랙만 spawn 하고 나머지를 pending 으로 남기는 구현은 parallel fork 가 아니라 sequence 이므로 금지.
 3. 모든 트랙이 completed 되면 `meetings.requested_type=<rendezvous.type>` + `meetings.requested_reason=rendezvous` 로 followup-review 를 자동 소집.
 4. fork 회의 id 는 `progress.json.meetings.fork_meeting_id` 로 followup 회의에 전달된다.
 
@@ -244,7 +253,7 @@ Meeting-Manager 는 트랙 dispatch 자체에 관여하지 않는다. fork 회�
 2. **결정자 지정**: 기본 결정자 = CTO (운영 적용 여부). 단 fork 회의가 `goal-intake` 또는 `goal-drift` 였으면 CEO(Dispatcher) 로 escalate.
 3. **세 가지 통합 결정 중 하나**:
    - `apply-now` — 두 산출물을 즉시 정규 sprint artifact 로 승격. 다음 owner = planner (sprint-contract 갱신).
-   - `backlog` — 백로그 등록 후 다음 sprint 에서 다룸. 다음 owner = planner (feature-list append).
+   - `backlog` — 백로그/queue 에 work package 등록. 다음 owner = planner (feature-list append) 이며 Conductor 가 가능한 시점에 자동 배정.
    - `more-validation` — 추가 검증 필요. 다시 parallel fork 또는 단일 spec-review.
 4. 결정은 **single mode** 로 작성한다 (followup 자체에서 또 fork 하지 말 것 — 무한 fork 방지).
 
@@ -308,30 +317,69 @@ bash scripts/queue-enqueue.sh   --owner generator-backend   --feature <feature-i
 
 ## 12. Session Boundary Protocol
 
+> **데이터 계약 (Inviolable):** `progress.json.meetings.active` 는 **현재 회의 중인 에이전트 ID 들의 평탄 배열** 이다 (예: `["dispatcher","planner","cto"]`). 대시보드 `state-mapping.ts` 가 이 배열을 `Array.includes(agentId)` 로 검사해 미니피규어를 회의실로 텔레포트시킨다 (`talking` 상태). 객체 배열을 넣으면 회의실에 아무도 모이지 않는다.
+>
+> 회의별 메타데이터(상태/참석자/타입)는 `meetings.tracking[]` 에 별도 보관한다.
+
 ### On Start (소집 1회)
-1. `.harness/progress.json` 읽기 → 현재 active meetings 확인 (중복 방지)
+1. `.harness/progress.json` 읽기 → 현재 `meetings.tracking[]` 확인 (중복 방지)
 2. meeting-id 발급 (`M-YYYY-MM-DD-NNNN`)
 3. `.harness/actions/meetings/<id>/notice.md` 작성
-4. partial update: `meetings.active[+].status = "notice"`
+4. partial update — 메타 등록만, active 는 아직 비움:
+   ```bash
+   bash scripts/harness-progress-set.sh . \
+     '.meetings.tracking = (.meetings.tracking // []) + [
+        {"id": "<meeting-id>", "type": "<type>", "participants": ["<id1>","<id2>",...], "status": "notice"}
+      ] |
+      .meetings.current_id = "<meeting-id>" |
+      .meetings.requested_type = "<type>"'
+   ```
 
-### On Prep Collected
+### On Prep Collected (회의 시작 — 미니피규어 회의실 모음)
 1. 모든 참석자 prep-*.md 존재 확인 (timeout: standup 5min, 그 외 30min)
 2. timeout 시 결석 처리 + 회의록에 명시
-3. partial update: `meetings.active[i].status = "convened"`
+3. partial update — **참석자 ID 들을 `meetings.active` 평탄 배열에 그대로 넣는다**:
+   ```bash
+   bash scripts/harness-progress-set.sh . \
+     '.meetings.active = ["<id1>","<id2>","<id3>"] |
+      .meetings.cadence = "<cadence>" |
+      .meetings.tracking |= map(if .id == "<meeting-id>" then .status = "convened" else . end)'
+   ```
+4. 회의 본 진행 (의제·발언·결정) — 이 시간 동안 대시보드에서 미니피규어가 회의실에 모여 있는 상태로 보임.
 
-### On Decided
+### On Decided (회의 종료 — 미니피규어 desk 복귀)
 1. 회의록 finalize → `meeting-<id>.md`
 2. Action Items → queue enqueue
-3. partial update: `status = "dispatched"`, `open_action_items += N`
+3. partial update — **`meetings.active` 를 빈 배열로 즉시 비운다** (미니피규어 desk 복귀):
+   ```bash
+   bash scripts/harness-progress-set.sh . \
+     '.meetings.active = [] |
+      .meetings.tracking |= map(if .id == "<meeting-id>" then .status = "dispatched" else . end) |
+      .meetings.open_action_items = ((.meetings.open_action_items // 0) + <N>) |
+      .meetings.last_type = "<type>" |
+      .meetings.last_reason = "<reason>" |
+      .meetings.last_decision = "<owner>:<action_type>"'
+   ```
 4. cadence 재계산 요청 (Service-Ops에 위임)
 5. 기본 handoff 규칙:
    - `goal-intake` / `goal-drift` / `spec-review` / `incident-followup` → `planner(COO)`
-   - `ops-batch` / `sprint-review` / `quality-fail` → `cto`
+   - `ops-batch` / `operating-review` / `quality-fail` → `cto`
    - `rendezvous` (followup-review 결정 시) → 결정자 = `cto` 기본, 단 fork 회의가 `goal-intake|goal-drift` 였으면 `dispatcher` 로 escalate
 
 ### On Archived
 1. `.harness/archive/meetings/<id>/` 로 이동
-2. partial update: active에서 제거
+2. partial update — `meetings.tracking` 에서 해당 항목 제거:
+   ```bash
+   bash scripts/harness-progress-set.sh . \
+     '.meetings.tracking |= map(select(.id != "<meeting-id>"))'
+   ```
+
+### 회의 가시성 자가검증 (turn 종료 직전)
+
+- [ ] 내가 "회의 했다" 라고 보고하려는 모든 회의에 대해 `.harness/actions/meetings/<id>/meeting-<id>.md` 가 디스크에 존재하는가?
+- [ ] convened 상태일 동안 `meetings.active` 에 모든 참석자 ID 가 들어 있었는가? (대시보드에서 회의실에 모이는 모습이 안 보였다면 이 단계가 누락된 것)
+- [ ] dispatched 직후 `meetings.active = []` 로 비웠는가? (안 비우면 미니피규어가 회의실에 영구 갇힘)
+- 하나라도 No → 이번 회의는 "보고만 했고 보여주지 못함" 이므로 자기 진행 보고에서 제외하고 정정.
 
 ## 13. 안전 가드
 

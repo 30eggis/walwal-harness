@@ -29,6 +29,34 @@ docmeta:
 
 # Changelog
 
+## 6.2.0 — Always-on company runtime + legacy purge (2026-05-08)
+
+### Why
+회사모드 only 정렬. 솔로/팀 모드의 잔재 스크립트와 분기 로직이 SKILL/문서 곳곳에 남아 있어 Owner 가 "지금 어떤 모드인지" 혼동하고, 한 시간이 지나도 자율 활동이 일어나지 않는 (스케줄러 부재) 문제 발생. 추가로 Claude 가 미래 시각으로 progress.log 라인을 미리 적어 가짜 진행을 보고하는 환각이 관찰됨.
+
+### Added
+- **Stop 훅** (`scripts/harness-stop.sh`) — Claude turn 종료 시 conductor 가 running 이면 자동으로 다음 tick 으로 연쇄. `behavior.auto_chain_on_stop=false` 로 비활성, `behavior.auto_chain_max_per_sprint` 로 상한 (기본 200).
+- **launchd hourly wake** (`scripts/harness-wake.sh`, `scripts/harness-wake-install.sh`, `assets/launchd/com.walwal.harness-wake.plist.template`) — 1시간마다 idle ≥ 55분 프로젝트의 tmux 에 wake prompt 송출.
+- **Truthful Logging Heal** — `harness-session-start.sh` 가 `progress.log` 의 미래 시각 라인을 자동으로 `progress.log.future-quarantine.<ts>` 로 격리 + 메인 로그에서 제거.
+- **conductor / dispatcher SKILL 의 정직성 룰** — "미래 시각 progress.log 항목 금지" Inviolable 섹션 추가, Owner "최근 1시간 뭐 했냐" 질문 시 디스크 mtime 으로 정직 답변하도록 명시.
+- **meeting-manager SKILL 의 라이브 가시화 계약** — `meetings.active` 가 평탄한 agent ID 배열이라는 데이터 계약을 명시. convene 시 active=[참석자], dispatch 시 active=[] 로 갱신해야 미니피규어가 회의실로 텔레포트.
+
+### Removed (legacy purge)
+- `scripts/harness-dashboard.sh` — tmux ASCII 대시보드 pane (3D Brick Office 가 대체).
+- `scripts/harness-monitor.sh` — 3-team worker pane (회사모드는 동적 worker pool).
+- `scripts/harness-prompt-history.sh` — tmux Studio 전용 pane.
+- `scripts/harness-gotcha-memory.sh` — tmux Studio 전용 pane.
+- `scripts/harness-tmux.sh` — tmux Studio launcher (회사모드는 단일 Claude CLI + 브라우저 대시보드).
+- `scripts/harness-goal-init.sh`, `scripts/harness-goal-show.sh` — 외부 호출 0 건의 고아.
+- `commands/harness-company.md` — Studio launch 명령 (런타임 자동화로 불필요).
+- `bin/init.js`: `runTeamStudio()` + `company` / `studio` / `studio-v4` / `v4` subcommand 제거.
+
+### Migration
+기존 프로젝트는 `npx walwal-harness --force` 또는 다음만 수동 적용:
+1. `.claude/settings.json` 에 Stop 훅 추가 (matcher: "", command: `bash scripts/harness-stop.sh`).
+2. `bash scripts/harness-wake-install.sh install <project-root>` 로 1시간 안전망 등록 (선택).
+3. `~/<project>/scripts/` 에서 위 7개 legacy 스크립트 제거.
+
 ## 6.1.4 — Template + package files alignment with v6 NEXUS (2026-05-08)
 
 ### Why

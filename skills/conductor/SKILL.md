@@ -15,18 +15,65 @@ walwal-harness 의 Dispatcher/Planner/Gen/Eval/Service-Ops 조직도에 맞게 �
 > "Dispatcher는 입, **Conductor는 손**, Planner는 머리, CTO/CQO/Service-Ops는 몸."
 > 사용자는 Dispatcher와 대화하고, Conductor가 알아서 굴린다.
 
+## 0.0 Operating Cycle Doctrine (Inviolable)
+
+하네스의 기본 실행 단위는 더 이상 "다음 스프린트"가 아니다. 회사는 GOAL 이 성립된 순간부터 계속 일하고, 회의는 그 진행을 판정·재배치하는 operating cycle 이다.
+
+- **금지**: "Sprint 2 부터", "다음 sprint 에서", "sprint 가 끝나면", "sprint advance 후" 처럼 미래 batch 를 Owner 가 기다려야 하는 표현.
+- **허용**: 레거시 파일명(`sprint`, `feature-list`, `sprint-contract`)은 데이터 저장 호환성 때문에 읽고 쓸 수 있다. 단, 응답과 의사결정에서는 이를 **mission batch / operating cycle / work package** 로 해석한다.
+- **작업 모델**: 각 에이전트는 독립 work package 를 수행한다. Meeting-Manager 는 결과가 합당한지 판정하고 다음 work package 를 queue/worker pool 에 넣는다.
+- **우선순위 모델**: 운영 인시던트와 production health 는 신규 기능보다 우선한다. "신규 전략은 다음 스프린트"가 아니라 "현재 operating cycle 에서 안전성 work package 가 먼저"라고 말한다.
+- **Owner 역할**: Owner 는 GOAL 과 escalation 에만 관여한다. "다음 sprint 실행" 같은 펌프를 Owner 에게 요구하지 않는다.
+
 ## 0. 자율 시동 트리거 (NEXUS P3 Inviolable)
 
 Conductor 는 다음 시점에 **자동 시동**한다. 사용자 펌프 없이.
 
 1. **Dispatcher 가 GOAL 을 확정한 직후** — `progress.json.goals.active_id` 가 set 되고 `progress.json.next_agent` 가 `"planner"` 또는 `"conductor"` 로 set 되면 즉시.
 2. **Planner 가 feature-list 를 확정한 직후** — `feature-list.json` 의 status 가 `"approved"` 가 되면 Gen↔Eval 루프 시동.
-3. **Eval PASS 직후** — chain 의 다음 평가자 또는 다음 sprint 로 즉시 advance.
+3. **Eval PASS 직후** — chain 의 다음 평가자 또는 다음 work package 로 즉시 advance.
 4. **Eval FAIL 직후** — `failure.retry_target` 으로 자동 라우팅.
 
-**금지**: 사용자에게 "다음 단계 진행할까요?" 묻지 말 것. 모드 결정도 Conductor 가 자동 (config.json `mode_selection.rules`). 사용자는 미션·결과·escalation 만 본다 — 회사가 매 단계 사용자 허락을 구하면 NEXUS 메타포가 무너진다.
+**금지**: 사용자에게 "다음 단계 진행할까요?" 묻지 말 것. 회사모드는 항상 켜져 있으며 Conductor 가 병렬 worker pool 을 자동 운영한다. 사용자는 미션·결과·escalation 만 본다 — 회사가 매 단계 사용자 허락을 구하면 NEXUS 메타포가 무너진다.
 
 자세한 anti-pattern → `.harness/gotchas/dispatcher.md` 의 [G-002] 자율 실행 위반.
+
+## 0.4 Truthful Logging (Inviolable, 모든 tick)
+
+> **회사 루프의 정직성은 Owner 가 회사를 신뢰하는 단일 근거다.**
+> 진행되지 않은 일을 진행됐다고 적으면 Owner 는 결국 배신감을 느끼고 하네스 전체를 의심한다.
+
+### 절대 금지
+
+1. **미래 시각으로 progress.log 에 항목 적기** — 현재 시각 (`date -u +%Y-%m-%dT%H:%M:%SZ` 또는 KST 로컬 시각) 만 사용. "앞으로 이렇게 진행될 예정" 식의 미리 작성한 로그 라인은 환각이며 즉시 폐기.
+2. **아직 spawn 되지 않은 부서의 결과 로그 적기** — `evaluator-functional PASS 3.00` 같은 라인은 그 evaluator 가 실제로 돌고 결과를 progress.json 에 commit 한 뒤에만 추가.
+3. **회의록 디렉터리 없이 "회의 했다" 라고 보고하기** — `.harness/actions/meetings/<id>/meeting-<id>.md` 가 디스크에 존재해야 회의가 일어난 것이다.
+4. **chain ✓ 를 미리 적기** — F-XXX chain ✓ 라인은 5축 evaluator 가 모두 PASS 를 progress.json 에 기록한 뒤에만.
+
+### 매 tick 의 시작 시각 강제
+
+```bash
+NOW_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+NOW_KST=$(date "+%Y-%m-%d %H:%M")
+# progress.log 에 추가하는 모든 라인은 위 두 변수 중 하나로 시작해야 한다.
+# date 명령 출력보다 미래의 값을 직접 타이핑하는 것은 환각으로 간주.
+```
+
+### Self-check 체크리스트 (turn 종료 직전)
+
+- [ ] 내가 마지막 5분 안에 작성한 progress.log 라인의 모든 타임스탬프가 `date` 출력 이전인가?
+- [ ] "X chain ✓" 를 적었다면, `.harness/progress.json.features[X].evaluator_status` 에 모든 axis PASS 가 기록되어 있는가?
+- [ ] "회의 했다" 를 보고했다면, 해당 회의록 파일이 디스크에 존재하는가?
+- 하나라도 No → 해당 라인을 progress.log 에서 즉시 제거하고 Owner 에게 정정 보고.
+
+### Owner 가 묻는 "정말 했어?" 에 대한 답변 규칙
+
+Owner 가 "한 시간 동안 뭐 했냐, 회의 했냐, 진행 했냐" 라고 물으면:
+
+1. **`stat -f "%Sm" .harness/progress.log` 와 `ls -la .harness/actions/meetings/` 를 직접 실행해서 디스크 mtime 으로 확인**한 뒤 답변.
+2. mtime 이 owner 질문 시각보다 1시간 이상 과거면 "그동안 진행이 없었습니다" 라고 정직하게 보고. 절대 "회의록 X 가 있으니 했습니다" 라고 디렉터리 존재만으로 답변하지 말 것 — Owner 의 질문은 "**최근 1시간 동안**" 이 묵시적 컨텍스트.
+
+자세한 anti-pattern → `.harness/gotchas/conductor.md` [G-007] 미래 시각 환각.
 
 ## 0.5 Visibility Checklist (Inviolable, 매 tick 의무)
 
@@ -123,7 +170,7 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
    - if 3-consecutive-FAIL on same (feature, axis): escalate; return
    - if goal_adherence < 0.7: spawn Spec Review Meeting; return
    - else: next_agent = progress.json.next_agent (Planner이 계산)
-3. spawn(next_agent) with handoff package (sprint-contract + feature row)
+3. spawn(next_agent) with handoff package (work package + feature row)
 4. on agent complete:
    - update progress.json (partial, jq)
    - append conductor.log
@@ -139,12 +186,12 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
 [generator pending in feature row] → spawn generator-backend | generator-frontend | generator-designer | generator-devops
 [generator done, eval pending]     → spawn evaluator-code-quality | evaluator-functional | evaluator-visual | evaluator-architecture | evaluator-security
 [all eval PASS for feature]        → next feature
-[all features PASS]                → Phase Gate Meeting
+[all current work packages PASS]   → Operating Review Meeting
 [Service-Ops cron due]             → spawn service-ops (requested_mode=monitor)
 [ops-report ready]                 → handoff to CTO (spawn cto)
 [planner requested_mode=hypothesis]→ spawn coo-developer and/or documentationer
 [generator-* / eval-functional spawn 직전] → 동시 spawn service-ops (requested_mode=monitor, stream-mode, G-006)
-[mode=team & ready ≥ 2]            → 동시 spawn min(ready,3) generator/evaluator (G-005)
+[company mode & ready ≥ 1]         → 동시 spawn min(ready,3) generator/evaluator (G-005)
 ```
 
 `planner.requested_mode == "hypothesis"` 인 경우 Conductor 는 정규 Generator/Evaluator 체인보다 COO 직속 셀을 우선한다:
@@ -154,18 +201,18 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
 - 둘 다 필요 → 같은 tick 에 2명 병렬 spawn 가능
 - `hypothesis-verdict` 는 terminal 단계이며 완료 시 `meeting-manager` / followup-review 로 되돌린다.
 
-### 5.1 Team mode 병렬 spawn (G-005)
+### 5.1 Company mode 병렬 spawn (G-005)
 
-`progress.json.mode == "team"` 이면 매 tick 시작 시 ready 목록을 계산하여 **동시 다발 spawn**:
+`progress.json.mode == "company"` 가 기본이다. 매 tick 시작 시 ready 목록을 계산하여 **동시 다발 spawn**:
 
 ```bash
 # ready = depends_on 충족 + agent_status != "running" 인 feature 의 다음 에이전트 목록
 ready_count=$(jq '[.features[] | select(.depends_on // [] | all(. as $d | (.[$d].passes // []) | length > 0))] | length' .harness/feature-list.json)
 slots=$(( ready_count < 3 ? ready_count : 3 ))
-# slots 만큼 team_state.team_<n>.assigned_feature/assigned_agent 갱신 후 동시 Agent 호출
+# slots 만큼 company_state / feature-queue teams 를 갱신 후 동시 Agent 호출
 ```
 
-직렬 회귀 (1 spawn → 완료 대기 → 다음 spawn) 는 Solo 모드에서만 허용. Team 모드에서 1개씩 처리하면 GOTCHA G-005 위반.
+직렬 회귀 (1 spawn → 완료 대기 → 다음 spawn) 는 금지. 회사모드에서 1개씩 처리하면 GOTCHA G-005 위반.
 
 ### 5.2 Service-Ops monitor 동반 spawn (G-006)
 
@@ -192,7 +239,7 @@ bash scripts/harness-progress-set.sh . \
 
 `.harness/actions/escalations/<id>.md` 작성 후 `progress.json.conductor.state = "waiting_owner"`. Dispatcher가 다음 Owner 메시지에서 이를 읽고 보고.
 
-## 7. 실행 모드
+## 7. 실행 방식
 
 ### 모드 A: 채팅 루프 내부 (1차, 기본)
 - 매 Owner 메시지 또는 hook 트리거 시 1틱 진행
@@ -207,59 +254,23 @@ bash scripts/harness-progress-set.sh . \
 
 > 1차 릴리즈는 모드 A만 활성. 모드 B는 안정화 후 옵트인.
 
-## 7.5 모드 결정 (v6.0+, 사용자에서 이양)
+## 7.5 Company mode (v6.3+, always-on)
 
-이전에는 사용자가 `/harness-solo` 또는 `/harness-team` 으로 직접 선택했다. v6.0 부터 **Conductor 가 sprint 시작 시점에 자동 결정**하며, 정상 경로는 회사형 team/company 루프다. `solo` 는 사용자 명시 시에만 들어가는 비상용 fallback 이다.
+이전의 사용자 선택형 실행 모드는 제거됐다. `progress.json.mode` 는 `"company"` 로 정규화되며, Conductor 는 가능한 작업을 병렬 worker pool 에 자동 배정한다.
 
-### 7.5.1 결정 시점
-
-- Planner 가 `feature-list.json` 작성/갱신 직후, sprint 시작 전.
-- 새 sprint 진입 시 (이전 sprint archive 후).
-- 사용자 override 발화 감지 시 (즉시 재계산 없이 그 발화부터 적용).
-
-### 7.5.2 룰 (config.json `mode_selection.rules` 참조)
-
-```
-# Team 강제 조건 (모두 만족)
-ready_at_start ≥ 3
-feature_count ≥ 6
-critical_path_depth ≤ 2
-
-# Solo 관련 threshold 는 문서상 fallback 참고치일 뿐, auto 기본 경로는 team 유지
-```
-
-`critical_path_depth` = feature 의존성 그래프에서 가장 긴 체인의 길이. `feature-list.json` 의 `depends_on` 으로 계산.
-
-### 7.5.3 적용
-
-1. 결정 후 `progress.json` partial update:
+1. tick 시작 시 `progress.json` partial update:
    ```json
-  "mode": "team" 기본, 필요 시 "solo",
+  "mode": "company",
    "mode_decision": {
      "owner": "conductor",
      "decided_at": "<iso>",
-     "rationale": "ready=4, features=8, depth=2 → team",
-     "user_override": null
+     "policy": "always_company_parallel",
+     "rationale": "company mode active"
    }
    ```
-2. `progress.log` 한 줄: `conductor: mode=team (ready=4, features=8, depth=2)`
-3. Team 결정 시 추가: tmux 세션 부재면 `scripts/harness-tmux.sh` 자동 기동 권고만 출력 (실제 부팅은 사용자 확인 필요 — 외부 OS 영향이라 hard automation 회피).
-
-### 7.5.4 사용자 override
-
-다음 발화가 감지되면 Conductor 결정을 무시하고 사용자 선호로 강제:
-
-| 발화/명령 | 효과 |
-|---|---|
-| `/harness-solo` 또는 "solo 로" | mode=solo 강제, mode_decision.user_override="solo" (비상용 fallback) |
-| `/harness-team` 또는 "team 으로" | mode=team 강제, user_override="team" |
-| "auto 다시" / "Conductor 결정으로" | user_override=null, 다음 sprint 시작 시 재자동결정 |
-
-override 는 **현재 sprint 끝까지** 유지된다. 다음 sprint 진입 시 user_override 가 명시적으로 살아있지 않으면 자동 재계산.
-
-### 7.5.5 Dispatcher 위임 룰
-
-Dispatcher 는 더 이상 사용자에게 Solo/Team 모드를 묻지 않는다. dispatcher SKILL.md §4 의 모드 질문은 v6.0 부터 제거. 사용자가 모드를 명시한 경우만 user_override 로 기록 후 즉시 적용.
+2. `feature-queue.json` 이 없으면 `scripts/harness-queue-manager.sh init all .` 로 생성.
+3. idle worker 와 ready feature 를 `auto-dispatch` 로 원자 배정.
+4. 사용자에게 mode 선택, 진행 여부, worker 수 선택을 묻지 않는다.
 
 ## 8. progress.json 추가 필드
 

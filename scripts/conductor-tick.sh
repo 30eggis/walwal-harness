@@ -9,6 +9,7 @@ PROJECT_ROOT="$(resolve_harness_root "${1:-.}")" || exit 0
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
 CONFIG="$PROJECT_ROOT/.harness/config.json"
 FEATURES="$PROJECT_ROOT/.harness/actions/feature-list.json"
+QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
 
 [ -f "$PROGRESS" ] || exit 0
 [ -f "$CONFIG" ] || exit 0
@@ -22,12 +23,11 @@ fi
 current_agent=$(jq -r '.current_agent // "null"' "$PROGRESS")
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS")
 pipeline=$(jq -r '.pipeline // "null"' "$PROGRESS")
-mode=$(jq -r '.mode // "auto"' "$PROGRESS")
+mode=$(jq -r '.mode // "company"' "$PROGRESS")
 # v6.2 — parallel tracks (fork-join) state
 parallel_tracks=$(jq -c '.conductor.tracks // []' "$PROGRESS")
 parallel_rendezvous=$(jq -c '.conductor.rendezvous // null' "$PROGRESS")
 parallel_pending_count=$(jq -r '[ .conductor.tracks // [] | .[] | select(.status == "pending" or .status == "running") ] | length' "$PROGRESS")
-user_override=$(jq -r '.mode_decision.user_override // "null"' "$PROGRESS")
 requested_mode=$(jq -r '.service_ops.requested_mode // "null"' "$PROGRESS")
 planner_requested_mode=$(jq -r '.planner.requested_mode // "null"' "$PROGRESS")
 planner_last_brief=$(jq -r '.planner.last_brief // "null"' "$PROGRESS")
@@ -57,50 +57,16 @@ escape_json_string() {
   jq -Rn --arg v "$1" '$v'
 }
 
-maybe_select_mode() {
-  local effective="$mode"
-  if [ "$user_override" != "null" ] && [ -n "$user_override" ]; then
-    effective="$user_override"
-    set_progress ".mode = \"$effective\" |
-      .mode_decision.owner = \"conductor\" |
-      .mode_decision.user_override = \"$effective\" |
+normalize_company_mode() {
+  if [ "$mode" != "company" ]; then
+    set_progress '.mode = "company" |
+      .mode_decision.owner = "conductor" |
+      .mode_decision.policy = "always_company_parallel" |
+      .mode_decision.user_override = null |
       .mode_decision.decided_at = (now | todate) |
-      .mode_decision.rationale = \"user override: $effective\""
-    echo "$effective"
-    return
+      .mode_decision.rationale = "legacy mode normalized to always-on company mode"'
   fi
-  if [ "$mode" != "auto" ] || [ ! -f "$FEATURES" ]; then
-    echo "$mode"
-    return
-  fi
-
-  local feature_count ready_at_start critical_depth
-  feature_count=$(jq '.features | length // 0' "$FEATURES" 2>/dev/null || echo 0)
-  ready_at_start=$(jq '[.features[]? | select(((.depends_on // []) | length) == 0)] | length' "$FEATURES" 2>/dev/null || echo 0)
-  critical_depth=$(jq '
-    def feature($id): .features[]? | select(.id == $id);
-    def depth($id):
-      (feature($id) | .depends_on // []) as $deps
-      | if ($deps | length) == 0 then 1 else ([ $deps[] | depth(.) ] | max + 1) end;
-    ([.features[]?.id | depth(.)] | max) // 0
-  ' "$FEATURES" 2>/dev/null || echo 0)
-
-  local team_ready team_features team_depth selected rationale
-  team_ready=$(jq -r '.mode_selection.rules.force_team_when.ready_at_start_gte // 3' "$CONFIG")
-  team_features=$(jq -r '.mode_selection.rules.force_team_when.feature_count_gte // 6' "$CONFIG")
-  team_depth=$(jq -r '.mode_selection.rules.force_team_when.critical_path_depth_lte // 2' "$CONFIG")
-
-  if [ "$ready_at_start" -ge "$team_ready" ] && [ "$feature_count" -ge "$team_features" ] && [ "$critical_depth" -le "$team_depth" ]; then
-    selected="team"
-  else
-    selected=$(jq -r '.mode_selection.rules.tie_breaker // "team"' "$CONFIG")
-  fi
-  rationale="company-default: ready=${ready_at_start}, features=${feature_count}, depth=${critical_depth} -> ${selected}"
-  set_progress ".mode = \"$selected\" |
-    .mode_decision.owner = \"conductor\" |
-    .mode_decision.decided_at = (now | todate) |
-    .mode_decision.rationale = \"$rationale\""
-  echo "$selected"
+  echo "company"
 }
 
 infer_drift_classification() {
@@ -140,6 +106,18 @@ meeting_stage_for_owner() {
   esac
 }
 
+ensure_team_queue() {
+  [ "$effective_mode" = "company" ] || return 0
+  [ -f "$FEATURES" ] || return 0
+  [ -x "$SCRIPT_DIR/harness-queue-manager.sh" ] || return 0
+
+  if [ ! -f "$QUEUE" ]; then
+    bash "$SCRIPT_DIR/harness-queue-manager.sh" init all "$PROJECT_ROOT" >/dev/null 2>&1 || true
+  else
+    bash "$SCRIPT_DIR/harness-queue-manager.sh" recover "$PROJECT_ROOT" >/dev/null 2>&1 || true
+  fi
+}
+
 load_meeting_decision() {
   local decision
   decision=$(bash "$SCRIPT_DIR/harness-meeting-doc.sh" "$PROJECT_ROOT" read-decision 2>/dev/null || true)
@@ -150,7 +128,15 @@ load_meeting_decision() {
   fi
 }
 
-effective_mode="$(maybe_select_mode)"
+dispatch_company_workers() {
+  [ "$effective_mode" = "company" ] || { echo "[]"; return 0; }
+  [ -f "$FEATURES" ] || { echo "[]"; return 0; }
+  [ -x "$SCRIPT_DIR/harness-worker-dispatch.sh" ] || { echo "[]"; return 0; }
+  bash "$SCRIPT_DIR/harness-worker-dispatch.sh" "$PROJECT_ROOT" 2>/dev/null || echo "[]"
+}
+
+effective_mode="$(normalize_company_mode)"
+ensure_team_queue
 drift_classification="$(infer_drift_classification)"
 
 next="$candidate"
@@ -241,6 +227,10 @@ elif [ "$parallel_pending_count" -gt 0 ] && [ "$agent_status" = "completed" ] &&
         planner_filter=".planner.requested_mode = \"$next_action\""
       fi
       meeting_filter=".conductor.tracks = $updated_tracks | .meetings.decision.tracks = $updated_tracks"
+    else
+      next="$candidate"
+      action="parallel:await-rendezvous"
+      meeting_filter=".conductor.tracks = $updated_tracks | .meetings.decision.tracks = $updated_tracks"
     fi
   else
     # All tracks completed → rendezvous (followup-review)
@@ -318,16 +308,19 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
     esac
   fi
 
-  # v6.2 — Parallel fork: if 2+ tracks, materialize conductor.tracks[] and dispatch
-  # the first pending track owner. Subsequent ticks advance remaining tracks.
+  # v6.2 — Parallel fork: if 2+ tracks, materialize all tracks as running.
+  # `next_agent` keeps the first owner only for backward-compatible handoff display;
+  # the fork state itself must expose every track as active in the same tick.
   if [ "$(jq 'length' <<<"$decision_tracks")" -gt 1 ]; then
     first_track_owner=$(jq -r '.[0].owner' <<<"$decision_tracks")
     first_track_action=$(jq -r '.[0].action_type // "triage"' <<<"$decision_tracks")
     first_track_id=$(jq -r '.[0].id // "track-1"' <<<"$decision_tracks")
-    # mark first track as running, rest as pending
-    materialized_tracks=$(jq -c --arg first "$first_track_id" '
+    active_track_owners=$(jq -c '[.[] | .owner] | unique' <<<"$decision_tracks")
+    # mark every independent track as running; rendezvous waits for completion.
+    materialized_tracks=$(jq -c '
       [ .[] | . + {
-          status: (if .id == $first then "running" else (.status // "pending") end),
+          status: "running",
+          started_at: (now | todate),
           deliverable_path: (.deliverable_path // null)
         }
       ]
@@ -347,6 +340,7 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
       .meetings.requested_reason = null |
       .meetings.requested_tracks = [] |
       .meetings.requested_rendezvous = null |
+      .meetings.active = $active_track_owners |
       .meetings.decision = {
         \"owner\": \"$owner\",
         \"action_type\": \"$action_type\",
@@ -502,13 +496,13 @@ elif [ "$candidate" = "archive" ]; then
     local_drift="$drift_classification"
     if [ "$requested_mode" = "auto-retro" ] || [ "${open_incidents:-0}" -gt 0 ] || [ "${ops_alerts:-0}" -gt 0 ] || { [ "$goal_adherence" != "null" ] && awk "BEGIN {exit !($goal_adherence < 0.7)}"; }; then
       next="meeting-manager"
-      action="convene:sprint-review:${local_drift}"
+      action="convene:operating-review:${local_drift}"
       new_conductor_state="waiting_meeting"
       new_workflow_stage="ops-review"
       meeting_prepare=true
       meeting_filter="
         .meetings.active = [\"meeting-manager\"] |
-        .meetings.requested_type = \"sprint-review\" |
+        .meetings.requested_type = \"followup-review\" |
         .meetings.requested_reason = \"ops-batch\" |
         .service_ops.drift_classification = \"$local_drift\" |
         .meetings.decision = {
@@ -551,6 +545,20 @@ elif [ "$current_agent" = "service-ops" ] && [ "$next" != "service-ops" ]; then
 fi
 if [ "$next" = "meeting-manager" ] && [ "$workflow_stage" = "ops-review" ]; then
   filter="$filter | .workflow.loop_count = ((.workflow.loop_count // 0) + 1)"
+fi
+
+worker_dispatches="[]"
+if [ "$new_conductor_state" = "running" ] && [ "$next" != "meeting-manager" ] && [ "$next" != "service-ops" ] && [ "$next" != "archive" ]; then
+  worker_dispatches="$(dispatch_company_workers)"
+  if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$worker_dispatches"; then
+    dispatch_count="$(jq 'length' <<<"$worker_dispatches")"
+    filter="$filter |
+      .conductor.current_action = \"dispatch:workers:${dispatch_count}\" |
+      .next_agent = \"conductor\" |
+      .workflow.stage = \"implementation\" |
+      .workflow.last_reason = \"dispatch:workers:${dispatch_count}\""
+    next="conductor"
+  fi
 fi
 
 set_progress "$filter"

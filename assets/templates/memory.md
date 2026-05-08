@@ -65,7 +65,7 @@ docmeta:
   5. `result PASS`는 **SCORE ≥ 2.80**인 경우에만 기록. score=1.00을 PASS로 기록 금지.
   6. 각 단계마다 **어떤 도구/방법으로 검증했는지**(tsc/eslint/curl/playwright 등) 명시.
 - **Context**: 사용자가 대시보드 로그만 보고 진행 상황을 파악해야 하는데, 기존 축약 로그로는 4대 질문에 답이 안 보인다는 피드백.
-- **Applies to**: Team Worker(Generator + Evaluator), Solo Mode Generator/Evaluator, 모든 `logev` 호출 지점.
+- **Applies to**: Company Worker(Generator + Evaluator), 모든 `logev` 호출 지점.
 
 ### [M-NEXUS-P3] Owner ↔ CEO 단일 창구 + 자율 실행 (Inviolable)
 - **Date**: 2026-05-07
@@ -77,7 +77,7 @@ docmeta:
 - **Context**: v6.0.0 publish 직후 dispatcher 응답이 사용자를 "CEO 직접 리뷰…" 로 호명하고 "/harness-next 자동 진행하시겠습니까?" 로 사용자 펌프를 요구함. Owner 의 명시적 교정.
 - **Applies to**:
   - **Dispatcher**: 사용자 호칭/응답 문구, GOAL 정립, 모든 inbound/outbound owner 통신. → anti-pattern: `.harness/gotchas/dispatcher.md` [G-001]~[G-004].
-  - **Conductor**: GOAL 확정 직후 자동 시동 (사용자 허락 X), Eval PASS/FAIL 직후 자동 advance/retry, mode 결정 (config.json `mode_selection.rules`).
+  - **Conductor**: GOAL 확정 직후 자동 시동 (사용자 허락 X), Eval PASS/FAIL 직후 자동 advance/retry, 회사모드 병렬 worker pool 관리.
   - **Planner / CTO / CQO / Generator / Evaluator / Service-Ops**: Owner 와 직접 대화 X. 모든 통신은 Dispatcher 경유.
 - **Why this matters**: 회사가 매 단계 사용자 허락을 구하면 NEXUS 메타포 자체가 무너진다. P3 "Continuous Loop > End-of-Pipeline" 가 약속하는 95% 결함 차단·40~60% 단축은 자율 루프에서만 성립한다.
 

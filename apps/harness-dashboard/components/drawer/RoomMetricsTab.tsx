@@ -6,7 +6,7 @@ interface RoomMetricsTabProps {
 }
 
 const METRIC_LABEL: Record<string, string> = {
-  sprint_number: "Sprint",
+  sprint_number: "Cycle",
   last_review: "Last review",
   last_audit: "Last audit",
   last_check: "Last check",
@@ -14,10 +14,35 @@ const METRIC_LABEL: Record<string, string> = {
   open_alerts: "Open alerts",
   open_arch_risks: "Open arch risks",
   open_regressions: "Open regressions",
+  cadence: "Cadence",
+  next_scheduled: "Next meeting",
+  active_tracks: "Active tracks",
+  active_hypothesis: "Active hypothesis",
+  active_workers: "Active workers",
+  open_incidents: "Open incidents",
+  pass_rate: "Pass rate",
+  contract_signed: "Contract signed",
+  eval_scores: "Eval scores",
 };
 
-function fmt(value: unknown): string {
+function fmt(key: string, value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
+  if (key === "pass_rate" && typeof value === "number") {
+    return `${Math.round(value * 100)}%`;
+  }
+  if (key === "contract_signed" && typeof value === "object" && value) {
+    const v = value as { be?: boolean; fe?: boolean };
+    const parts = [v.be ? "BE" : null, v.fe ? "FE" : null].filter(Boolean);
+    return parts.length ? parts.join("·") : "—";
+  }
+  if (key === "eval_scores" && typeof value === "object" && value) {
+    const v = value as Record<string, number | null | undefined>;
+    const parts = Object.entries(v)
+      .filter(([, s]) => typeof s === "number")
+      .map(([k, s]) => `${k.slice(0, 3)} ${(s as number).toFixed(1)}`);
+    return parts.length ? parts.join(" · ") : "—";
+  }
+  if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
 
@@ -42,7 +67,7 @@ export function RoomMetricsTab({ room }: RoomMetricsTabProps) {
               <div className="text-[10px] uppercase tracking-wider text-gray-500">
                 {METRIC_LABEL[k] ?? k}
               </div>
-              <div className="text-[12px] text-gray-100">{fmt(v)}</div>
+              <div className="text-[12px] text-gray-100">{fmt(k, v)}</div>
             </div>
           ))}
         </div>

@@ -196,7 +196,7 @@ run_pre_eval_gate() {
 run_conductor_tick() {
   local candidate="$1"
   local owner
-  owner=$(jq -r '.mode_selection.owner // empty' "$CONFIG" 2>/dev/null || true)
+  owner=$(jq -r '.company_mode.owner // "conductor"' "$CONFIG" 2>/dev/null || true)
   if [ "$owner" != "conductor" ]; then return 0; fi
   if [ ! -x "$SCRIPT_DIR/conductor-tick.sh" ]; then return 0; fi
 

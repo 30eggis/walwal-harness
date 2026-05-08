@@ -1,11 +1,17 @@
+import path from "node:path";
 import type { Metadata } from "next";
 import "./globals.css";
 import { Header } from "@/components/Header";
+import { resolveHarnessRoot } from "@/lib/harness-root";
 
-export const metadata: Metadata = {
-  title: "Brick Office",
-  description: "walwal-harness 라이브 운영 대시보드",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const root = resolveHarnessRoot();
+  const name = path.basename(root);
+  return {
+    title: `Brick Office — ${name}`,
+    description: `walwal-harness 라이브 운영 대시보드 — ${name}`,
+  };
+}
 
 export default function RootLayout({
   children,

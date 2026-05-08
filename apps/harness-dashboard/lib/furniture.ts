@@ -3,13 +3,15 @@ import type { RoomId } from "./types";
 import { AGENT_ROSTER } from "./agent-roster";
 
 // How many desks each room should physically contain. The meeting room is
-// over-provisioned because anyone can drop in.
+// over-provisioned because anyone can drop in. Room desks must accommodate the
+// full roster in agent-roster.ts (CEO+Brainstormer; CTO+Conductor+4 Generators;
+// CQO+5 Evaluators).
 export const ROOM_CAPACITY: Record<RoomId, number> = {
-  ceo: 1,
+  ceo: 2,
   meeting: 7,
   coo: 3,
-  "cto-team": 5,
-  "cqo-team": 5,
+  "cto-team": 6,
+  "cqo-team": 6,
   "service-ops": 1,
   archive: 0,
 };

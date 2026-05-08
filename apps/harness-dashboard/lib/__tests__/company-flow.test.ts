@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,10 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../../../../");
+const hasHarnessShellFixtures =
+  existsSync(path.join(repoRoot, "scripts", "lib", "harness-progress-migrate.sh")) &&
+  existsSync(path.join(repoRoot, "assets", "templates", "config.json"));
+const describeHarnessShell = hasHarnessShellFixtures ? describe : describe.skip;
 
 function runBash(script: string, projectRoot: string, args: string[] = []) {
   return execFileSync("bash", [path.join(repoRoot, script), projectRoot, ...args], {
@@ -28,7 +32,7 @@ function writeState(projectRoot: string, progress: unknown, configOverrides: Rec
   writeFileSync(path.join(projectRoot, ".harness", "progress.json"), JSON.stringify(progress, null, 2));
 }
 
-describe("company-loop shell flows", () => {
+describeHarnessShell("company-loop shell flows", () => {
   let dir: string;
 
   beforeEach(() => {
@@ -39,7 +43,7 @@ describe("company-loop shell flows", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("migrate_progress_schema keeps runtime mode while removing meeting decision mode", () => {
+  it("migrate_progress_schema normalizes legacy runtime mode while removing meeting decision mode", () => {
     mkdirSync(path.join(dir, ".harness"), { recursive: true });
     writeFileSync(
       path.join(dir, ".harness", "progress.json"),
@@ -65,7 +69,7 @@ describe("company-loop shell flows", () => {
     runBash("scripts/lib/harness-progress-migrate.sh", path.join(dir, ".harness", "progress.json"));
 
     const migrated = JSON.parse(readFileSync(path.join(dir, ".harness", "progress.json"), "utf8"));
-    expect(migrated.mode).toBe("team");
+    expect(migrated.mode).toBe("company");
     expect(migrated.meetings.requested_mode).toBeUndefined();
     expect(migrated.meetings.decision.mode).toBeUndefined();
     expect(Array.isArray(migrated.meetings.decision.tracks)).toBe(true);

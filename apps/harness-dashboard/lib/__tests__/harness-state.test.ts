@@ -74,4 +74,121 @@ describe("readHarnessState", () => {
     expect(snap.errorBanner?.message_en).toContain("corrupt");
     expect(snap.agents.length).toBe(AGENT_ROSTER.length);
   });
+
+  it("v6 NEXUS: roster includes CTO, CQO, Brainstormer", () => {
+    const ids = AGENT_ROSTER.map((a) => a.id);
+    expect(ids).toContain("cto");
+    expect(ids).toContain("cqo");
+    expect(ids).toContain("brainstormer");
+  });
+
+  it("parallel tracks, hypothesis, escalations, incidents land in the snapshot", () => {
+    mkdirSync(path.join(dir, ".harness"), { recursive: true });
+    writeFileSync(
+      path.join(dir, ".harness", "progress.json"),
+      JSON.stringify({
+        sprint: { number: 3 },
+        pipeline: "FULLSTACK",
+        current_agent: "conductor",
+        agent_status: "running",
+        meetings: {
+          active: [],
+          cadence: "heavy",
+          next_scheduled: "2026-05-08T10:00Z",
+          current: { type: "incident-war-room", topic: "P0 prod outage" },
+        },
+        cto: {
+          last_review: "2026-05-07",
+          open_arch_risks: 1,
+          contract_signed: { be: true, fe: false },
+        },
+        cqo: {
+          last_audit: "2026-05-07",
+          sprint_verdict: "pending",
+          open_regressions: 2,
+          last_scores: {
+            functional: 2.9,
+            visual: 2.8,
+            code_quality: 2.5,
+            architecture: 2.95,
+            security: 3.0,
+          },
+        },
+        service_ops: {
+          monitor: { last_check: "2026-05-07", alerts_this_sprint: 4 },
+          incident: {
+            open: [
+              { id: "INC-1", dept: "CTO", severity: "critical", message: "DB down" },
+              { id: "INC-2", dept: "Operations", severity: "medium" },
+            ],
+          },
+        },
+        parallel_tracks: [
+          {
+            id: "T-1",
+            from_meeting: "spec-review",
+            to_dept: "CTO",
+            to_room: "cto-team",
+            status: "in_progress",
+          },
+          {
+            id: "T-2",
+            from_meeting: "spec-review",
+            to_dept: "Planner",
+            to_room: "coo",
+            status: "dispatched",
+          },
+        ],
+        hypothesis: {
+          active: [
+            { id: "H-1", brief: "Cache hit > 80%", verdict: "pending" },
+            { id: "H-2", brief: "p95 < 200ms", verdict: "valid" },
+          ],
+        },
+        escalations: {
+          open: [{ id: "E-1", reason: "three-fail", message: "regression x3" }],
+        },
+        contracts: {
+          api: { version: "v2.1.0" },
+          feature_list: { total: 16, passed: 12, failed: 1 },
+        },
+      })
+    );
+
+    const snap = readHarnessState(dir);
+    expect(snap.errorBanner).toBeNull();
+
+    expect(snap.tracks.map((t) => t.id)).toEqual(["T-1", "T-2"]);
+    expect(snap.incidents.length).toBe(2);
+    expect(snap.hypothesis.length).toBe(2);
+    expect(snap.escalations.length).toBe(1);
+    expect(snap.contract.pipeline).toBe("FULLSTACK");
+    expect(snap.contract.sprint_number).toBe(3);
+    expect(snap.contract.feature_total).toBe(16);
+    expect(snap.contract.contract_signed).toEqual({ be: true, fe: false });
+    expect(snap.evalScores?.code_quality).toBe(2.5);
+    expect(snap.meetings.cadence).toBe("heavy");
+    expect(snap.meetings.current?.type).toBe("incident-war-room");
+
+    // CTO has an open incident → CTO-dept agents go red-alert; Service-Ops
+    // is on-call and is *always* red when any incident is open.
+    const stateOf = (id: string) => snap.agents.find((a) => a.id === id)!.minifigState;
+    expect(stateOf("cto")).toBe("red-alert");
+    expect(stateOf("service-ops")).toBe("red-alert");
+    expect(stateOf("evaluator-visual")).toBe("idle"); // CQO dept untouched
+  });
+
+  it("buildArchive reads verdict.json when present", () => {
+    const sprintDir = path.join(dir, ".harness", "archive", "sprint-1");
+    mkdirSync(sprintDir, { recursive: true });
+    writeFileSync(path.join(sprintDir, "verdict.json"), JSON.stringify({ result: "PASS" }));
+    mkdirSync(path.join(dir, ".harness"), { recursive: true });
+    writeFileSync(
+      path.join(dir, ".harness", "progress.json"),
+      JSON.stringify({ sprint: { number: 1 } })
+    );
+
+    const snap = readHarnessState(dir);
+    expect(snap.archive.all.find((e) => e.dir === "sprint-1")?.result).toBe("PASS");
+  });
 });

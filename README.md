@@ -224,74 +224,27 @@ bash scripts/harness-token-limit.sh . mark 300
 
 핵심은 운영 품질이 아니라 빠른 사실 확인입니다.
 
-## 런타임 모드
+## 런타임 (회사모드 always-on)
 
-`progress.mode` 는 회사 실행 상태를 뜻합니다. 회의 결정의 `tracks[]` 와는 별개이며, fork-join 은 `tracks.length` 로만 판단합니다.
+회사모드는 유일한 런타임이며 항상 켜져 있습니다. `progress.mode == "company"` 가 항상 참이고, 별도 모드 전환 명령은 없습니다.
 
-### Company / Team
+자율 진행은 두 메커니즘으로 유지됩니다:
 
-기본 경로입니다. Conductor 가 `progress.mode=auto` 에서 선택합니다.
-
-특징:
-
-- 회사형 루프 유지
-- control-plane 과 worker-plane 분리
-- feature queue 기반 병렬 처리
-- tmux studio 사용 가능
-
-강제 전환:
-
-```text
-/harness-team
-```
-
-### Solo
-
-비상용 fallback 입니다.
-
-사용 시점:
-
-- 디버깅
-- 스크립트 장애
-- 짧은 수동 복구
-
-강제 전환:
-
-```text
-/harness-solo
-```
-
-### Stop
-
-Team 모드를 안전하게 멈추고 진행 중이던 feature 를 ready 로 복구합니다.
-
-```text
-/harness-stop
-```
-
-## Team Studio
-
-Team 모드에서는 tmux 기반 Studio 레이아웃을 사용합니다.
-
-시작:
-
-```text
-/harness-team
-```
-
-또는:
+- **Stop 훅** — Claude 가 한 turn 을 끝내려는 시점에 발화. `conductor.state == "running"` 이고 다음 부서가 있으면 자동으로 turn 을 한 번 더 굴려 끊김 없이 연쇄.
+- **launchd hourly wake (선택)** — 1시간마다 macOS 가 `scripts/harness-wake.sh` 를 호출. idle ≥ 55분이고 `paused/completed/escalated` 가 아닌 프로젝트만 깨움.
 
 ```bash
-npx walwal-harness team
+# 1시간 안전망 wake 등록
+bash scripts/harness-wake-install.sh install .
+
+# 상태 확인
+bash scripts/harness-wake-install.sh status
+
+# 즉시 한 번 발화 (테스트)
+bash scripts/harness-wake-install.sh run-now
 ```
 
-Team Studio 는 보통 다음을 보여줍니다.
-
-- Dashboard
-- Gotchas
-- Conventions
-- Memory
-- Team 1~3 worker pane
+회의 결정의 `tracks[]` 는 진행 흐름의 fork-join 단위이며 런타임 모드와는 별개입니다 (`tracks.length ≥ 2` 일 때 parallel).
 - Archive prompt
 
 Queue 관련 유용한 명령:
@@ -345,15 +298,22 @@ bash scripts/harness-queue-manager.sh idle-slots .
 
 | 스크립트 | 역할 |
 |---|---|
-| `scripts/harness-next.sh` | handoff 생성과 다음 agent 결정 |
-| `scripts/conductor-tick.sh` | company loop 라우팅 |
-| `scripts/harness-session-start.sh` | 새 세션 시작 시 자동 안내 |
-| `scripts/harness-user-prompt-submit.sh` | prompt 훅 주입/차단 |
-| `scripts/harness-task-session.sh` | agent 별 task session 생성 |
-| `scripts/harness-token-limit.sh` | TokenLimit hold/resume 마킹 |
-| `scripts/harness-queue-manager.sh` | team queue 관리 |
-| `scripts/harness-dashboard.sh` | dashboard 렌더 |
+| `scripts/conductor-tick.sh` | 회사 루프 라우터 — 다음 부서 결정 |
+| `scripts/harness-next.sh` | turn 종료 후 handoff 생성 + gotcha/convention 자동 등록 + audit gate |
+| `scripts/harness-progress-set.sh` | progress.json partial update 헬퍼 |
+| `scripts/harness-session-start.sh` | SessionStart 훅 (+ future-dated 라인 자동 격리) |
+| `scripts/harness-user-prompt-submit.sh` | UserPromptSubmit 훅 |
+| `scripts/harness-stop.sh` | Stop 훅 — turn 종료 시 자동 연쇄 |
+| `scripts/harness-wake.sh` | 1시간 안전망 wake (launchd 가 호출) |
+| `scripts/harness-wake-install.sh` | launchd 등록/관리 CLI |
+| `scripts/harness-statusline.sh` | 1줄 statusLine 렌더 |
+| `scripts/harness-queue-manager.sh` | feature queue 관리 |
 | `scripts/harness-meeting-doc.sh` | 회의 문서 skeleton / decision 처리 |
+| `scripts/harness-task-session.sh` | agent 별 task session (TokenLimit) |
+| `scripts/harness-token-limit.sh` | TokenLimit hold/resume 마킹 |
+| `scripts/harness-archive.sh` | sprint 종료 archive |
+| `scripts/harness-gotcha-register.sh` | evaluator output 의 gotcha_candidates 자동 등록 |
+| `scripts/harness-dashboard-up.sh` | Brick Office (브라우저 3D 대시보드) 기동 |
 
 ## 디렉토리 구조
 
@@ -414,17 +374,26 @@ cat .harness/progress.json | jq '.task_stop'
 bash scripts/harness-queue-manager.sh status .
 ```
 
-### mode 강제 전환
+### Stop 훅 자동 연쇄가 안 도는지 점검
 
-```text
-/harness-team
-/harness-solo
-/harness-stop
+```bash
+# config 확인 — auto_chain_on_stop 이 true 여야 함
+jq '.behavior.auto_chain_on_stop // true' .harness/config.json
+
+# stop_chain_count 와 sprint 상한 확인
+jq '{count: .conductor.stop_chain_count, max: 200}' .harness/progress.json
+```
+
+### 1시간 wake 가 발화 안 하는지 점검
+
+```bash
+bash scripts/harness-wake-install.sh status
+tail -30 ~/.walwal-harness/logs/wake.log
 ```
 
 ## 버전 호환성
 
-README 는 v6.1 계열 회사형 하네스를 기준으로 작성되었습니다.
+README 는 v6.x 계열 always-on 회사모드 기준입니다 (solo/team 모드 영구 제거).
 
 이 문서에서 전제하는 기능:
 

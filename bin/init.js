@@ -339,7 +339,7 @@ function scaffoldHarness() {
       const progress = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
       if (!progress.version || progress.version < 2) {
         progress.version = 2;
-        progress.mode = progress.mode || 'solo';
+        progress.mode = 'company';
         if (!progress.team_state) {
           progress.team_state = { active_teams: 0, paused_at: null, resume_from: null };
         }
@@ -710,6 +710,59 @@ function installUserPromptSubmitHook() {
 }
 
 // ─────────────────────────────────────────
+// 3e. Stop hook (auto-chain conductor tick)
+// ─────────────────────────────────────────
+function installStopHook() {
+  log('Installing Stop hook (auto-chain conductor tick)...');
+
+  const settingsDir = path.join(PROJECT_ROOT, '.claude');
+  const settingsFile = path.join(settingsDir, 'settings.json');
+
+  ensureDir(settingsDir);
+
+  let settings = {};
+  if (fileExists(settingsFile)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    } catch (e) {
+      log('WARNING: Could not parse existing .claude/settings.json, creating new');
+    }
+  }
+
+  if (!settings.hooks) settings.hooks = {};
+  if (!settings.hooks.Stop) settings.hooks.Stop = [];
+
+  const hookCmd = 'bash scripts/harness-stop.sh';
+
+  const alreadyInstalled = settings.hooks.Stop.some((entry) => {
+    if (!entry || typeof entry !== 'object') return false;
+    if (Array.isArray(entry.hooks)) {
+      return entry.hooks.some(
+        (h) => h && h.command && h.command.includes('harness-stop')
+      );
+    }
+    if (entry.type === 'command' && entry.command) {
+      return entry.command.includes('harness-stop');
+    }
+    return false;
+  });
+
+  if (!alreadyInstalled) {
+    settings.hooks.Stop.push({
+      matcher: '',
+      hooks: [{ type: 'command', command: hookCmd }]
+    });
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    log('Stop hook installed in .claude/settings.json');
+    log('  → Conductor 가 running 인 동안 turn 종료 시 자동으로 다음 tick 으로 연쇄');
+    log('  → 비활성: .harness/config.json behavior.auto_chain_on_stop = false');
+    log('  → 상한: behavior.auto_chain_max_per_sprint (기본 200)');
+  } else {
+    log('Stop hook already installed');
+  }
+}
+
+// ─────────────────────────────────────────
 // 4. AGENTS.md + CLAUDE.md
 // ─────────────────────────────────────────
 // ─────────────────────────────────────────
@@ -734,7 +787,7 @@ function installAgentTeamsEnv() {
     log('Agent Teams already enabled');
   }
 
-  // Add git worktree permission for Team Mode isolation
+  // Add git worktree permission for parallel worker isolation
   if (!settings.permissions) settings.permissions = {};
   if (!settings.permissions.allow) settings.permissions.allow = [];
   const worktreePerms = [
@@ -753,7 +806,7 @@ function installAgentTeamsEnv() {
   if (changed) {
     ensureDir(path.dirname(settingsPath));
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-    log('Git worktree permissions added for Team Mode isolation');
+    log('Git worktree permissions added for parallel worker isolation');
   }
 }
 
@@ -906,70 +959,35 @@ function showHelp() {
 Usage:
   npx walwal-harness                       Initialize project for harness engineering
   npx walwal-harness --force               Re-initialize (overwrites existing files)
-  npx walwal-harness team                  Launch Team Mode (tmux studio + auto teams)
-  npx walwal-harness team --kill           Kill Team Mode tmux session
-  npx walwal-harness migrate               Apply v3 → v4 migration (mode→auto + Conductor)
+  npx walwal-harness migrate               Apply migration (always-on company mode)
   npx walwal-harness migrate --dry-run     Preview migration changes without applying
+  npx walwal-harness verify                Verify install integrity
   npx walwal-harness --help                Show this help
 
-Modes (v6.0+ — Conductor 자동 결정, 사용자 override 가능):
-  /harness-solo       Solo Override — Conductor 결정을 Solo 로 강제
-  /harness-team       Team Override — Conductor 결정을 Team 으로 강제 (tmux 부팅)
-  /harness-stop       Stop Team mode (preserves queue state)
-  발화 "auto 로 돌려" → Conductor 자동결정 복귀
+Runtime (always-on company mode):
+  - Stop 훅이 매 turn 종료 시 다음 부서로 자동 연쇄.
+  - 1시간 안전망 wake (선택): bash scripts/harness-wake-install.sh install .
+  - 3D 대시보드 (선택): bash scripts/harness-dashboard-up.sh
+  - Owner 입력은 GOAL 모호성, escalation, 결과 보고에만 필요합니다.
 
 What it does:
   1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
   2. Installs skills to .claude/skills/ (dispatcher, planner, generators, evaluators)
-  3. Installs commands to .claude/commands/ (solo, team, stop)
-  4. Copies helper scripts to scripts/
-  5. Registers SessionStart + UserPromptSubmit hooks
-  6. Installs statusline (persistent 1-line status bar)
-  7. Creates AGENTS.md + CLAUDE.md symlink
+  3. Copies helper scripts to scripts/
+  4. Registers SessionStart + UserPromptSubmit + Stop hooks
+  5. Installs statusline (persistent 1-line status bar)
+  6. Creates AGENTS.md + CLAUDE.md symlink
 
 After init:
   1. Restart Claude Code session (/exit → re-enter directory)
   2. Say "하네스 엔지니어링 시작" or /harness-dispatcher
-  3. After Planner completes: /harness-team (team) or continue prompting (solo)
+  3. After GOAL intake, Conductor runs the company loop autonomously.
+  4. (선택) bash scripts/harness-wake-install.sh install . — 1시간마다 자동 wake.
 `);
 }
 
 // ─────────────────────────────────────────
-// Main
-// ─────────────────────────────────────────
-function runTeamStudio() {
-  const killMode = args.includes('--kill');
-  const scriptsDir = path.join(PKG_ROOT, 'scripts');
-  const tmuxScript = path.join(scriptsDir, 'harness-tmux.sh');
-
-  if (!fs.existsSync(tmuxScript)) {
-    log('ERROR: harness-tmux.sh not found.');
-    process.exit(1);
-  }
-
-  try {
-    execSync('which tmux', { stdio: 'ignore' });
-  } catch {
-    log('ERROR: tmux is required. Install with: brew install tmux');
-    process.exit(1);
-  }
-
-  if (killMode) {
-    const cmd = `bash "${tmuxScript}" --kill`;
-    execSync(cmd, { stdio: 'inherit' });
-    return;
-  }
-
-  // Enable Agent Teams in project settings
-  installAgentTeamsEnv();
-
-  const cmd = `bash "${tmuxScript}" "${PROJECT_ROOT}" --team`;
-  log('Launching Team Mode Studio...');
-  execSync(cmd, { stdio: 'inherit' });
-}
-
-// ─────────────────────────────────────────
-// Migration — v3 → v4 (mode auto + Conductor ownership)
+// Migration — legacy mode fields → always-on company mode
 // ─────────────────────────────────────────
 const TARGET_PROGRESS_VERSION = 4;
 
@@ -986,7 +1004,7 @@ function detectMigrationNeeded() {
   const memoryTplPath = path.join(PKG_ROOT, 'assets', 'templates', 'memory.md');
   const flags = {
     progressV3toV4: false,
-    configMissingModeSelection: false,
+    configMissingCompanyMode: false,
     memoryMissingSystemEntries: [],
     gotchaMissingEntries: {},   // { "<filename>": [G-IDs...] }
     bundleVersionStale: null,    // { current, installed }
@@ -1032,7 +1050,7 @@ function detectMigrationNeeded() {
   if (fs.existsSync(configPath)) {
     try {
       const c = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (!c.mode_selection) flags.configMissingModeSelection = true;
+      if (!c.company_mode || c.mode_selection) flags.configMissingCompanyMode = true;
     } catch {}
   }
   if (fs.existsSync(memoryPath) && fs.existsSync(memoryTplPath)) {
@@ -1092,12 +1110,12 @@ function showMigrationProposal(flags) {
   console.log('║  walwal-harness v6 — 자동 마이그레이션 사용 가능         ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
   if (flags.progressV3toV4) {
-    console.log('  • progress.json: v3 → v4 (mode → "auto" + mode_decision 추가)');
-    console.log('    기존 mode 값은 user_override 로 보존됩니다.');
+    console.log('  • progress.json: legacy mode → "company"');
+    console.log('    legacy mode 값은 보존하지 않고 회사모드로 정규화됩니다.');
   }
-  if (flags.configMissingModeSelection) {
-    console.log('  • config.json: mode_selection 섹션 누락 — 자동 주입 가능');
-    console.log('    Conductor 가 ready≥3 + features≥6 + depth≤2 로 자동 모드 결정.');
+  if (flags.configMissingCompanyMode) {
+    console.log('  • config.json: company_mode 섹션 동기화 가능');
+    console.log('    사용자 모드 선택 없이 회사모드 병렬 실행으로 고정합니다.');
   }
   if (flags.memoryMissingSystemEntries && flags.memoryMissingSystemEntries.length) {
     console.log('  • memory.md: 시스템 entry 누락 — append 가능');
@@ -1130,7 +1148,7 @@ function runMigrate(opts = {}) {
   const gotchaMissingTotal = Object.values(flags.gotchaMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   if (
     !flags.progressV3toV4 &&
-    !flags.configMissingModeSelection &&
+    !flags.configMissingCompanyMode &&
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
     gotchaMissingTotal === 0 &&
     !flags.bundleVersionStale
@@ -1138,7 +1156,7 @@ function runMigrate(opts = {}) {
     console.log('');
     let pkgVer = 'unknown';
     try { pkgVer = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version; } catch {}
-    log(`이미 최신 — bundle v${pkgVer} 일치, progress v${TARGET_PROGRESS_VERSION}, config.mode_selection, memory 시스템 entry, gotcha entry 모두 sync.`);
+    log(`이미 최신 — bundle v${pkgVer} 일치, progress v${TARGET_PROGRESS_VERSION}, config.company_mode, memory 시스템 entry, gotcha entry 모두 sync.`);
     return;
   }
 
@@ -1154,35 +1172,37 @@ function runMigrate(opts = {}) {
   if (flags.progressV3toV4 && fs.existsSync(progressPath)) {
     const original = fs.readFileSync(progressPath, 'utf8');
     const p = JSON.parse(original);
-    const oldMode = p.mode ?? 'solo';
+    const oldMode = p.mode ?? 'company';
     const newP = {
       ...p,
       version: TARGET_PROGRESS_VERSION,
-      mode: 'auto',
+      mode: 'company',
       mode_decision: {
         owner: 'conductor',
         decided_at: null,
-        rationale: `migration v3→v4 — 기존 mode="${oldMode}" 를 user_override 로 보존`,
-        user_override: oldMode === 'team' || oldMode === 'solo' ? oldMode : null,
+        rationale: `migration — legacy mode="${oldMode}" normalized to company`,
+        policy: 'always_company_parallel',
+        user_override: null,
       },
     };
-    log(`  progress.json: version 3 → ${TARGET_PROGRESS_VERSION}, mode "${oldMode}" → "auto" (user_override="${newP.mode_decision.user_override}")`);
+    log(`  progress.json: version 3 → ${TARGET_PROGRESS_VERSION}, mode "${oldMode}" → "company"`);
     if (!dryRun) {
       fs.writeFileSync(path.join(backupDir, 'progress.json'), original);
       fs.writeFileSync(progressPath, JSON.stringify(newP, null, 2) + '\n');
     }
   }
 
-  // 2. config.json — inject mode_selection from template if missing
+  // 2. config.json — inject company_mode from template if missing
   const configPath = path.join(HARNESS_DIR, 'config.json');
   const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
-  if (flags.configMissingModeSelection && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
+  if (flags.configMissingCompanyMode && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
     const original = fs.readFileSync(configPath, 'utf8');
     const c = JSON.parse(original);
     const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
-    if (tpl.mode_selection) {
-      c.mode_selection = tpl.mode_selection;
-      log('  config.json: mode_selection 섹션 주입 (default_mode=auto, owner=conductor, force_team_when ready≥3+features≥6+depth≤2, tie_breaker=solo)');
+    if (tpl.company_mode) {
+      c.company_mode = tpl.company_mode;
+      delete c.mode_selection;
+      log('  config.json: company_mode 섹션 주입 (always-on company parallel)');
       if (!dryRun) {
         fs.writeFileSync(path.join(backupDir, 'config.json'), original);
         fs.writeFileSync(configPath, JSON.stringify(c, null, 2) + '\n');
@@ -1252,7 +1272,7 @@ function runMigrate(opts = {}) {
   } else {
     log(`Migration 완료. 백업: ${backupDir}`);
     log('Conductor 가 다음 sprint 시작 시 자동으로 모드 결정합니다.');
-    log('자동 결정 무시하려면 /harness-solo 또는 /harness-team override.');
+    log('회사모드는 기본값이며 사용자 override 는 사용하지 않습니다.');
   }
   console.log('');
 }
@@ -1325,17 +1345,17 @@ function runVerify() {
     }
   }
 
-  // 3) config.json mode_selection
+  // 3) config.json company_mode
   const configPath = path.join(HARNESS_DIR, 'config.json');
   if (fs.existsSync(configPath)) {
     try {
       const c = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (!c.mode_selection) {
-        issues.push('  ✗ config.json: mode_selection 누락 → npx walwal-harness migrate');
+      if (!c.company_mode) {
+        issues.push('  ✗ config.json: company_mode 누락 → npx walwal-harness migrate');
         fail++;
       } else {
         pass++;
-        log(`  config.json: mode_selection.owner=${c.mode_selection.owner} OK`);
+        log(`  config.json: company_mode.owner=${c.company_mode.owner} OK`);
       }
     } catch {}
   }
@@ -1378,11 +1398,6 @@ function main() {
     return;
   }
 
-  if (subcommand === 'team') {
-    runTeamStudio();
-    return;
-  }
-
   if (subcommand === 'migrate') {
     runMigrate({ dryRun: args.includes('--dry-run') });
     return;
@@ -1393,10 +1408,14 @@ function main() {
     return;
   }
 
-  // Legacy subcommands — redirect to new equivalents
-  if (subcommand === 'studio' || subcommand === 'studio-v4' || subcommand === 'v4') {
-    log('NOTE: "studio" and "v4" subcommands are replaced by "team".');
-    runTeamStudio();
+  // Legacy subcommands — removed as of v6.x (always-on company mode).
+  if (subcommand === 'company' || subcommand === 'studio' ||
+      subcommand === 'studio-v4' || subcommand === 'v4') {
+    log(`NOTE: "${subcommand}" subcommand was removed.`);
+    log('회사모드는 항상 켜져 있는 기본 런타임입니다. 별도 launch 명령은 필요 없습니다.');
+    log('  - turn 자동 연쇄: Stop 훅 (자동)');
+    log('  - 1시간 안전망 wake: bash scripts/harness-wake-install.sh install .');
+    log('  - 시각화: bash scripts/harness-dashboard-up.sh');
     return;
   }
 
@@ -1418,6 +1437,7 @@ function main() {
   installSessionHook();
   installStatusline();
   installUserPromptSubmitHook();
+  installStopHook();
   installAgentTeamsEnv();
   setupAgentsMd();
   checkPlaywrightMcp();
@@ -1428,7 +1448,7 @@ function main() {
   const gotchaMissing = Object.keys(migFlags.gotchaMissingEntries || {}).length > 0;
   const hasContentDrift =
     migFlags.progressV3toV4 ||
-    migFlags.configMissingModeSelection ||
+    migFlags.configMissingCompanyMode ||
     (migFlags.memoryMissingSystemEntries && migFlags.memoryMissingSystemEntries.length) ||
     gotchaMissing;
   if (hasContentDrift) {
@@ -1462,14 +1482,13 @@ function main() {
     log('║  Then say: "하네스 엔지니어링 시작"                        ║');
     log('║  Or invoke: /harness-dispatcher                          ║');
     log('║                                                          ║');
-    log('║  기본은 Solo 모드 (순차 진행) — 입력 불필요.              ║');
-    log('║  병렬 3팀 실행을 원하면 파이프라인 확정 후 /harness-team  ║');
+    log('║  기본은 회사모드: 병렬 · 자율 진행. 추가 입력 불필요.     ║');
     log('╚═══════════════════════════════════════════════════════════╝');
   } else {
     log('Next steps:');
     log('  1. Restart Claude Code session (/exit → re-enter directory)');
     log('  2. Say "하네스 엔지니어링 시작" or /harness-dispatcher');
-    log('  3. Solo 모드는 자동. Team 모드 원할 때만 파이프라인 확정 후 /harness-team');
+    log('  3. 회사모드가 자동으로 병렬 실행합니다. 진행 여부를 묻지 않습니다.');
   }
   console.log('');
 }

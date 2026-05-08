@@ -1,10 +1,12 @@
 export type AgentId =
   | "dispatcher"
+  | "brainstormer"
   | "conductor"
   | "meeting-manager"
   | "planner"
   | "coo-developer"
   | "documentationer"
+  | "cto"
   | "generator-backend"
   | "generator-frontend"
   | "generator-designer"
@@ -28,7 +30,7 @@ export type RoomId =
 
 export type Dept = "CEO" | "Meeting" | "Planner" | "CTO" | "CQO" | "Operations";
 
-export type MinifigState = "idle" | "typing" | "talking" | "red-alert";
+export type MinifigState = "idle" | "queued" | "typing" | "talking" | "red-alert";
 
 export interface AgentState {
   id: AgentId;
@@ -53,6 +55,15 @@ export interface RoomMetrics {
   open_alerts?: number;
   open_arch_risks?: number;
   open_regressions?: number;
+  cadence?: MeetingCadence;
+  next_scheduled?: string | null;
+  active_tracks?: number;
+  active_hypothesis?: number;
+  active_workers?: number;
+  open_incidents?: number;
+  pass_rate?: number | null;
+  contract_signed?: { be?: boolean; fe?: boolean };
+  eval_scores?: EvalScores | null;
 }
 
 export interface SeatLayout {
@@ -90,10 +101,90 @@ export interface ArchiveStat {
   all: ArchiveEntry[];
 }
 
+export type MeetingCadence = "light" | "normal" | "heavy";
+export type MeetingType =
+  | "standup"
+  | "sprint-review"
+  | "spec-review"
+  | "incident-war-room"
+  | "all-hands"
+  | "followup-review";
+
+export interface CurrentMeeting {
+  type: MeetingType;
+  topic?: string;
+  convened_at?: string | null;
+}
+
 export interface MeetingsState {
   active: AgentId[];
-  cadence: string;
+  cadence: MeetingCadence;
   next_scheduled: string | null;
+  current: CurrentMeeting | null;
+}
+
+export type TrackStatus = "dispatched" | "in_progress" | "joined" | "blocked";
+
+export interface ParallelTrack {
+  id: string;
+  from_meeting: string;
+  to_dept: Dept | "Operations" | "Multi";
+  to_room: RoomId;
+  status: TrackStatus;
+  label?: string;
+}
+
+export type IncidentSeverity = "low" | "medium" | "high" | "critical";
+
+export interface IncidentEntry {
+  id: string;
+  dept: Dept | "Operations" | "Multi" | string;
+  severity: IncidentSeverity;
+  message?: string;
+  ts?: string | null;
+}
+
+export type HypothesisVerdict = "pending" | "valid" | "invalid";
+
+export interface HypothesisEntry {
+  id: string;
+  brief: string;
+  verdict: HypothesisVerdict;
+  ts?: string | null;
+}
+
+export type EscalationReason =
+  | "three-fail"
+  | "incident"
+  | "goal-violation"
+  | "budget"
+  | "other";
+
+export interface EscalationEntry {
+  id: string;
+  reason: EscalationReason | string;
+  message?: string;
+  ts?: string | null;
+}
+
+export type Pipeline = "FULLSTACK" | "FE-ONLY" | "BE-ONLY" | "META_REFACTOR" | null;
+
+export interface ContractSnapshot {
+  sprint_number: number | null;
+  pipeline: Pipeline;
+  api_version: string | null;
+  feature_total: number;
+  feature_passed: number;
+  feature_failed: number;
+  contract_signed: { be: boolean; fe: boolean };
+}
+
+export interface EvalScores {
+  functional?: number | null;
+  visual?: number | null;
+  code_quality?: number | null;
+  architecture?: number | null;
+  security?: number | null;
 }
 
 export interface ErrorBanner {
@@ -102,13 +193,77 @@ export interface ErrorBanner {
   message_en: string;
 }
 
+export interface WorkerSnapshot {
+  team: number | string;
+  feature: string;
+  title?: string;
+  agent: AgentId | string;
+  phase?: string;
+  status: "spawned" | "recorded" | "running" | "idle" | "blocked" | "unknown";
+  pid?: number | null;
+  prompt?: string | null;
+  log?: string | null;
+  progress: number | null;
+  summary: string;
+  next_material?: string | null;
+}
+
+export interface MeetingRecord {
+  id: string;
+  path: string;
+  ts: string | null;
+  title: string;
+  verdict?: string | null;
+  summary: string;
+}
+
+export interface OpsServiceHealth {
+  name: string;
+  host: string;
+  port: number;
+  status: "ok" | "degraded" | "down" | "unknown";
+  port_state?: string | null;
+  health_status?: number | null;
+  health_path?: string | null;
+  recent_errors?: number | null;
+}
+
+export interface EnvKeySummary {
+  key: string;
+  category: "secret" | "endpoint" | "port" | "mode" | "other";
+  masked: string;
+}
+
+export interface EnvFileSummary {
+  path: string;
+  updated_at: string | null;
+  key_count: number;
+  keys: EnvKeySummary[];
+}
+
+export interface OperationsDashboard {
+  workers: WorkerSnapshot[];
+  recentMeetings: MeetingRecord[];
+  opsHealth: OpsServiceHealth[];
+  envFiles: EnvFileSummary[];
+}
+
 export interface HarnessSnapshot {
   version: string;
   ts: string;
+  projectName: string;
+  projectPath: string;
   agents: AgentState[];
   rooms: RoomState[];
   goal: GoalCard | null;
   archive: ArchiveStat;
   meetings: MeetingsState;
+  tracks: ParallelTrack[];
+  incidents: IncidentEntry[];
+  hypothesis: HypothesisEntry[];
+  escalations: EscalationEntry[];
+  contract: ContractSnapshot;
+  evalScores: EvalScores | null;
   errorBanner: ErrorBanner | null;
+  dashboard: OperationsDashboard;
 }

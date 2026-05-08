@@ -9,8 +9,8 @@ disable-model-invocation: false
 ## progress.json 업데이트 규칙 (v5.6.3+)
 
 ⚠️ **절대로 progress.json 을 통째로 재작성하지 마라**. `Write` 도구로 전체 파일을
-덮어쓰면 `mode` / `team_state` / 기타 top-level 필드가 누락되어 Team Mode 가 Solo 로
-되돌아가는 등 런타임 오류가 발생한다.
+덮어쓰면 `mode` / `company_state` / 기타 top-level 필드가 누락되어 회사모드 병렬 루프가
+끊기는 등 런타임 오류가 발생한다.
 
 **올바른 방법** — 반드시 partial update 로 갱신:
 
@@ -190,7 +190,7 @@ planner (verdict 검토 · 완료 시 meeting-manager/followup-review 로 복귀
 
 ## Team 병렬 스케줄링 규칙 (필수)
 
-Team Mode의 `3`은 **회사 전체 에이전트 수 제한이 아니라 generator/evaluator worker pool 상한**이다. Planner는 feature-list.json 설계 시 control-plane(CEO/Meeting/CTO/CQO/Service-Ops)을 제외한 **worker plane** 이 끊기지 않게 다음 규칙을 반드시 준수한다.
+Company worker pool의 `3`은 **회사 전체 에이전트 수 제한이 아니라 generator/evaluator worker pool 상한**이다. Planner는 feature-list.json 설계 시 control-plane(CEO/Meeting/CTO/CQO/Service-Ops)을 제외한 **worker plane** 이 끊기지 않게 다음 규칙을 반드시 준수한다.
 
 ### 핵심 원칙: Sprint 시작 시 ready ≥ 3
 

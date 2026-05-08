@@ -19,7 +19,7 @@ migrate_progress_schema() {
 
   # v6.2 — Parallel tracks (fork-join) fields. tracks.length >= 2 → fork.
   # Note: there is intentionally NO `meetings.decision.mode` field — single/parallel is derived
-  # from tracks.length. Runtime progress.mode is preserved because it still governs solo/team/paused.
+  # from tracks.length. Runtime progress.mode is normalized to always-on company mode.
   local filter='
     .conductor.tracks           = (.conductor.tracks // [])
     | .conductor.rendezvous       = (.conductor.rendezvous // null)
@@ -35,6 +35,11 @@ migrate_progress_schema() {
     | .meetings.decision.rendezvous = (.meetings.decision.rendezvous // null)
     | del(.meetings.decision.mode)
     | del(.meetings.requested_mode)
+    | .mode = "company"
+    | .mode_decision.owner = "conductor"
+    | .mode_decision.policy = "always_company_parallel"
+    | .mode_decision.user_override = null
+    | .mode_decision.rationale = (.mode_decision.rationale // "company mode normalized by migration")
   '
 
   local tmp

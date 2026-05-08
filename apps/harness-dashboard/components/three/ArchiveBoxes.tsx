@@ -18,14 +18,19 @@ export function ArchiveBoxes({ archive }: ArchiveBoxesProps) {
   const baseX = room.wx + 0.5;
   const baseZ = room.wy + 0.5;
 
+  // Use the full sorted list so each rendered box can carry its own verdict
+  // colour, not just the recent three.
+  const ordered = archive.all.length > 0 ? archive.all : archive.recent;
   const boxes = Array.from({ length: archive.sprintCount }, (_, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
+    const entry = i < ordered.length ? ordered[i] : null;
     return {
       x: baseX + col * rowSpacingX + rowSpacingX / 2,
       z: baseZ + row * rowSpacingZ,
       isRecent: i < 3,
-      entry: i < archive.recent.length ? archive.recent[i] : null,
+      entry,
+      result: entry?.result ?? "unknown",
     };
   });
 
@@ -33,19 +38,27 @@ export function ArchiveBoxes({ archive }: ArchiveBoxesProps) {
 
   return (
     <group data-testid="archive-boxes">
-      {boxes.map((b, i) => (
-        <group key={i} position={[b.x, 0.21, b.z]}>
+      {boxes.map((b, i) => {
+        const baseColor = b.isRecent ? "#caa978" : "#8a7c5a";
+        const tapeColor =
+          b.result === "PASS"
+            ? "#34d399"
+            : b.result === "FAIL"
+            ? "#ef4444"
+            : "#6a5a3a";
+        return (
+        <group key={i} position={[b.x, 0.21, b.z]} data-testid={`archive-box-${b.result.toLowerCase()}`}>
           <mesh castShadow position={[0, 0.16, 0]}>
             <boxGeometry args={[0.34, 0.32, 0.28]} />
             <meshStandardMaterial
-              color={b.isRecent ? "#caa978" : "#8a7c5a"}
+              color={baseColor}
               roughness={0.85}
             />
           </mesh>
-          {/* Tape line on top — toy cardboard cue. */}
+          {/* Tape line on top — verdict-coloured for at-a-glance archive scan. */}
           <mesh position={[0, 0.33, 0]}>
             <boxGeometry args={[0.36, 0.01, 0.06]} />
-            <meshStandardMaterial color="#6a5a3a" />
+            <meshStandardMaterial color={tapeColor} />
           </mesh>
           {b.isRecent && b.entry && (
             <Html
@@ -62,7 +75,8 @@ export function ArchiveBoxes({ archive }: ArchiveBoxesProps) {
             </Html>
           )}
         </group>
-      ))}
+        );
+      })}
       {overflowAfterThree > 0 && (
         <Html
           position={[room.wx + room.ww / 2, 0.6, room.wy + room.wh - 0.3]}

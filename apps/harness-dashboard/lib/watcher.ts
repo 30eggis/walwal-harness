@@ -30,6 +30,9 @@ export function watchHarness(
     {
       ignoreInitial: true,
       awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },
+      // Vitest creates and deletes temp harness dirs quickly; polling avoids
+      // macOS FSEvents EMFILE noise after close().
+      usePolling: process.env.VITEST === "true",
       // Don't crawl deeply into archive — recent dirs only.
       depth: 4,
     }

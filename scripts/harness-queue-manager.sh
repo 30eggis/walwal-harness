@@ -5,7 +5,8 @@
 # feature-queue.json을 생성/관리한다.
 #
 # Commands:
-#   init          feature-list.json → feature-queue.json 초기 생성
+#   init [sprint|all] [project-root]
+#                 feature-list.json → feature-queue.json 초기 생성
 #   dequeue <team> ready 큐에서 feature를 꺼내 team에 배정
 #   pass <fid>    feature를 passed로 이동, blocked→ready 전이
 #   fail <fid>    feature를 failed로 이동
@@ -71,8 +72,10 @@ fi
 
 # ══════════════════════════════════════════
 # init — Build queue from feature-list.json
-# Usage: init [sprint_number]
-#   sprint_number: optional, filter features by sprint (default: all)
+# Usage: init [sprint_number|all] [project-root]
+#   sprint_number: optional, filter features by sprint (default: all).
+#   If passing a project root, use `init all /path/to/project`; otherwise the
+#   first argument is interpreted as the sprint filter.
 # ══════════════════════════════════════════
 cmd_init() {
   local sprint_filter="${1:-all}"
@@ -85,11 +88,15 @@ cmd_init() {
   # Build dependency graph and topological sort
   # Output: feature-queue.json with ready (no deps) and blocked (has deps)
   jq --argjson concurrency "$CONCURRENCY" --arg sprint "$sprint_filter" '
-    # Build passed set (features already passed by evaluator)
+    # Build passed set (features already passed by evaluator or imported audit).
+    # Legacy projects use string passes; newer NEXUS artifacts may use objects.
     def passed_set:
       [.features[] | select(
         ((.passes // []) | length > 0) and
-        ((.passes // []) | any(. == "evaluator-functional"))
+        ((.passes // []) | any(
+          (. == "evaluator-functional") or
+          ((type == "object") and ((.status // "") == "PASS"))
+        ))
       ) | .id] ;
 
     # Filter features by sprint if specified

@@ -9,8 +9,8 @@ disable-model-invocation: false
 ## progress.json 업데이트 규칙 (v5.6.3+)
 
 ⚠️ **절대로 progress.json 을 통째로 재작성하지 마라**. `Write` 도구로 전체 파일을
-덮어쓰면 `mode` / `team_state` / 기타 top-level 필드가 누락되어 Team Mode 가 Solo 로
-되돌아가는 등 런타임 오류가 발생한다.
+덮어쓰면 `mode` / `company_state` / 기타 top-level 필드가 누락되어 회사모드 병렬 루프가
+끊기는 등 런타임 오류가 발생한다.
 
 **올바른 방법** — 반드시 partial update 로 갱신:
 
@@ -40,7 +40,7 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 2. `feature-list.json` 의 해당 feature `passes` 에 `"generator-frontend"` 추가
 3. `.harness/progress.log` 에 요약 추가
 4. 출력: `"✓ Generator-Frontend 완료. 자동 핸드오프 (Conductor 자율 시동)."`
-5. **즉시 내부 핸드오프 (scripts/harness-next.sh) 를 호출하여 다음 에이전트로 자동 핸드오프** (Solo 모드. Team 모드는 Lead가 별도 오케스트레이션).
+5. **즉시 내부 핸드오프 (scripts/harness-next.sh) 를 호출하여 다음 에이전트로 자동 핸드오프** (회사모드 내부 핸드오프).
 
 ## Startup (Adaptive Loading)
 
@@ -68,9 +68,9 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
     - `ref.api.base_url` 이 `null` 이 아니면 `curl -s <base_url>/health` 로 헬스체크
     - `null` (네이티브 앱 등) 이면 체크 스킵
 
-## Feature-Level Mode (Team Mode)
+## Feature-Level Company Worker
 
-Team Mode 에서 Team Worker 가 호출할 때, 프롬프트에 `FEATURE_ID` 가 지정된다.
+Company worker가 호출할 때, 프롬프트에 `FEATURE_ID` 가 지정된다.
 
 ### Feature-Level Rules
 - `feature-list.json` 에서 **지정된 FEATURE_ID 만** 필터하여 구현
