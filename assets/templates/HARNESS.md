@@ -1,413 +1,226 @@
-# 7-Agent Production Harness — 사용 가이드
+---
+docmeta:
+  id: HARNESS
+  title: walwal-harness — NEXUS Company Harness 가이드
+  type: output
+  createdAt: 2026-05-08T00:00:00Z
+  updatedAt: 2026-05-08T00:00:00Z
+  source:
+    producer: agent
+    skillId: harness-release
+  inputs:
+    - documentId: AGENTS
+      uri: ../../AGENTS.md
+      relation: output-from
+      sections:
+        - sourceRange: { startLine: 121, endLine: 126 }
+          targetRange: { startLine: 11, endLine: 22 }
+        - sourceRange: { startLine: 94, endLine: 120 }
+          targetRange: { startLine: 24, endLine: 45 }
+        - sourceRange: { startLine: 35, endLine: 81 }
+          targetRange: { startLine: 49, endLine: 102 }
+        - sourceRange: { startLine: 170, endLine: 195 }
+          targetRange: { startLine: 144, endLine: 161 }
+        - sourceRange: { startLine: 214, endLine: 237 }
+          targetRange: { startLine: 171, endLine: 179 }
+        - sourceRange: { startLine: 238, endLine: 243 }
+          targetRange: { startLine: 181, endLine: 187 }
+  tags: [harness, template, nexus, v6.1.4, doctrine]
+---
 
-> Anthropic 블로그 "Harness Design for Long-Running Application Development" 기반
-> Solo: 20min/$9 (broken) → Harness: 6hr/$200 (fully functional)
-> Stack: NestJS MSA + React/Next.js + Playwright MCP
+# walwal-harness — NEXUS Company Harness 가이드
+
+> Anthropic 블로그 "Harness Design for Long-Running Application Development" 기반.
+> v6 NEXUS 도큐트린: 하네스를 **하나의 회사**로 본다. Owner(사용자)는 Dispatcher(CEO)와만 대화하고, 회사 내부 부서가 자율적으로 GOAL 을 실행·검증·운영한다.
+>
+> 이 파일은 **빠른 운영 가이드** 입니다. 프로젝트별 살아있는 컨텍스트는 `AGENTS.md` (CLAUDE.md = AGENTS.md 심볼릭 링크) 를 참조하세요.
+
+## 단일 대화 창구 (Doctrine)
+
+```
+Owner (사용자)
+  ↕ (단일 대화 창구)
+Dispatcher = CEO   ── 부서 식별 · GOAL 협의 · escalation 보고
+```
+
+- Owner ↔ Dispatcher만 직접 대화. 다른 부서가 Owner와 직접 대화하는 것은 **금지**.
+- 모든 escalation은 Dispatcher 경유.
+- GOAL 작성·수정은 CEO 전용 (`.harness/actions/goals.md`, CTO와 협의로 구체화).
+
+## 조직 구조 (v6 NEXUS)
+
+```
+Owner
+  ↕
+Dispatcher (CEO)
+  ├─ Conductor          # 자율 실행 엔진 (Gen↔Eval↔Ops 루프, escalation 트리거)
+  └─ Meeting-Manager    # 동기화 엔진 (6종 회의 · 적응형 cadence · parallel-tracks fork-join)
+        ↓
+   Planner (COO + HR)   # Sprint·AC·인선·온보딩
+      └─ COO Hypothesis Cell (직영)
+         ├─ coo-developer       # 가설 검증 spike·백데이터 실험
+         └─ documentationer     # 웹리서치·보고서·가설 판정
+        ↓
+  ┌─────┴────────┬──────────────┐
+  CTO            CQO            Service-Ops
+  (Gen 총괄)    (Eval 총괄)     (운용·모니터·인시던트·자율회고)
+  ├ Gen-BE       ├ Eval-Functional
+  ├ Gen-FE       ├ Eval-Visual
+  ├ Designer     ├ Eval-CodeQuality
+  └ DevOps       ├ Eval-Architecture
+                 └ Eval-Security
+```
+
+각 역할의 상세 트리거·산출물·금기는 `.claude/skills/harness-<role>/SKILL.md` 와 `gotchas/<role>.md`, `conventions/<role>.md` 에 명시.
 
 ## 디렉토리 구조
 
+### 프로젝트 루트 (개발자가 직접 보는 파일)
+
 ```
-CONVENTIONS.md                    # 프로젝트 컨벤션 (사용자 작성, 에이전트 읽기 전용)
+AGENTS.md           # 프로젝트 컨텍스트 (Planner 가 유지) · v6 IA-MAP·조직도·권한 매트릭스
+CLAUDE.md           # → AGENTS.md 심볼릭 링크 (Claude Code 진입점)
+CONVENTIONS.md      # 프로젝트 최상위 규칙 (사용자 작성, 에이전트 읽기 전용)
+gotchas/<role>.md   # 부서별 부정형 규칙 (G-NNN entry append)
+conventions/<role>.md  # 부서별 긍정형 규칙 (C-NNN entry append)
+scripts/            # 하네스 스크립트 (init.js 가 동기화)
+.claude/skills/harness-<role>/  # Claude Code 가 로드하는 스킬 정의 (init.js 가 동기화)
+```
+
+### `.harness/` 런타임 (회사가 작동하면서 만드는 산출물)
+
+```
 .harness/
-├── HARNESS.md                  # 이 파일
-├── config.json                 # 하네스 설정
-├── progress.json               # 기계 판독 상태 (세션 오케스트레이션)
-├── progress.log                # 사람 판독 히스토리 (append-only)
-├── handoff.json                # 세션 전환 문서 (prompt, model, artifacts, regression 등)
-├── actions/                    # 현재 활성 문서
-│   ├── pipeline.json           # Dispatcher 결정 (어떤 파이프라인인지)
-│   ├── plan.md                 # 제품 사양
-│   ├── feature-list.json       # 기능 추적 (layer + service 필드)
-│   ├── api-contract.json       # API 계약서
-│   ├── sprint-contract.md      # 현재 스프린트 계약
-│   ├── evaluation-functional.md
-│   └── evaluation-visual.md
-└── archive/                    # 완료 스프린트 보관 (불변)
-    └── sprint-NNN/
+├── HARNESS.md              # 이 파일
+├── config.json             # 하네스 설정 (mode_selection, behavior, flow gates)
+├── progress.json           # 기계 판독 상태 (세션 오케스트레이션 SoT)
+├── progress.log            # 사람 판독 히스토리 (append-only)
+├── handoff.json            # 세션 전환 문서 (prompt, model, artifacts, regression)
+├── memory.md               # 시스템 entry (예: M-NEXUS-P3) + 사용자 메모
+├── doctrine/nexus.md       # NEXUS 도큐트린 본문
+├── ref/<role>-<stack>.md   # 스택별 best-practice (FE/BE/Designer/DevOps)
+├── prompts/                # 에이전트 프롬프트
+├── baselines/              # Eval baseline (의존 그래프, 시각 baseline 등)
+├── ops/metrics.jsonl       # 운영 메트릭 (DevOps append / Service-Ops read)
+├── actions/                # 활성 스프린트 산출물 (각 부서 쓰기)
+│   ├── pipeline.json       # Dispatcher 결정 (FULLSTACK / FE-ONLY / BE-ONLY)
+│   ├── plan.md             # Planner — 제품 사양
+│   ├── feature-list.json   # Planner — Executable AC
+│   ├── api-contract.json   # Planner — API 계약 (BE/FE 공유)
+│   ├── sprint-contract.md  # Planner → BE/FE 가 섹션별로 채움
+│   ├── evaluation-*.md     # Evaluator-* 별 결과
+│   ├── goals.md            # CEO (Dispatcher) 전용
+│   ├── meetings/           # Meeting-Manager — 회의록·prep (followup-review 포함)
+│   ├── incidents/          # Service-Ops — 사고 타임라인·RCA
+│   ├── escalations/        # Conductor — Owner 보고용
+│   ├── onboarding/         # Planner(HR) — 부서 온보딩 패키지
+│   ├── hypothesis/<id>/    # COO Hypothesis Cell (spike/, brief.md, report.md, verdict.json)
+│   ├── hr-roster.md        # Planner(HR) — 활성 부서 명단
+│   ├── cto-review-*.md     # CTO 전용
+│   ├── cqo-audit-*.md      # CQO 전용
+│   └── ops-report-*.md     # Service-Ops 전용
+└── archive/                # 완료 스프린트 (불변, Evaluator 가 archive)
+    └── D-NNN/S-NNN/        # design-NNN / sprint-NNN
 ```
 
-## 실행 흐름
+## 실행 흐름 (Conductor-driven)
 
 ```
-사용자: 프로젝트 요청 (자유 형식)
-         │
-         ▼
-┌──────────────────┐
-│  0. DISPATCHER    │  요청 분석 → pipeline.json 생성
-│  (파이프라인 선택) │  사용자 확인
-└────────┬─────────┘
-         │
-    ┌────┴────┬──────────┐
-    ▼         ▼          ▼
- FULLSTACK  FE-ONLY   BE-ONLY
+Owner: "X 만들어줘" (자유 형식)
+   │
+   ▼
+Dispatcher (CEO)
+   ├─ Goal 협의 (모호하면 1회 짧게 명료화)
+   └─ pipeline.json 결정 → Conductor 핸드오프
+   │
+   ▼
+Conductor (자율 실행 엔진)
+   │
+   ▼
+Planner ─ ┐
+   │      ├─ light  → 기존 PRD 만 보강
+   │      └─ full   → plan.md + feature-list + api-contract 확정
+   ▼
+CTO ── 실행 분할 ── ┐
+   ▼              ▼
+Gen-BE ⇄ Gen-FE  (병렬 / Team 모드)
+   │
+   ▼
+CQO 적대적 검증 (early-exit chain)
+   ├─ Eval-CodeQuality  (정적 · 저비용)
+   ├─ Eval-Functional   (동작 · 중비용 · Playwright/curl)
+   ├─ Eval-Visual       (렌더 · 고비용 · screenshot)
+   ├─ Eval-Architecture (IA-MAP·계층 위반·의존 그래프)
+   └─ Eval-Security     (OWASP·SAST·시크릿·CVE)
+        │
+        ▼
+Service-Ops (상시) ── monitor · auto-retro · incident
+        │
+        ▼
+Archive  (sprint advance)
 ```
 
-### Evaluator Chain (공통)
+앞단 FAIL 시 뒤 단계는 실행하지 않고 즉시 재작업으로 리라우팅.
+3회 연속 FAIL · GOAL 위반 · 인시던트 → Conductor 가 Dispatcher 통해 Owner에게 escalation.
 
-Generator 이후는 **3-Evaluator 직렬 체인 + 조기 종료**:
+## 6종 회의 (Meeting-Manager)
 
-```
-Generator
-  → Eval-Code-Quality  (정적 · 저비용 · 브라우저 없음)
-  → Eval-Functional    (동작 · 중비용 · Playwright/curl)
-  → Eval-Visual        (렌더 · 고비용 · 스크린샷)
-  → Archive
-```
+| 회의 | 시점 | 결정자 |
+|------|------|--------|
+| **standup** | 적응형 cadence (light 30m / normal 1h / heavy 4h) | 부서 발신 |
+| **sprint-review** | sprint advance 직전 | CTO |
+| **spec-review** | Planner 산출물 변경 | CTO |
+| **incident-war-room** | Service-Ops 인시던트 발신 | CEO + CTO |
+| **all-hands** | 분기/대형 결정 | CEO |
+| **followup-review** | parallel-tracks fork 종료 후 | CTO (goal-* fork 면 CEO) |
 
-앞단 FAIL 시 뒤 평가자는 실행하지 않고 즉시 Generator 재작업으로 리라우팅.
-구조가 깨진 코드에 동작/렌더 테스트를 낭비하지 않기 위함.
+### Parallel Tracks (Fork-Join, v6.2)
 
-| 평가자 | 관심사 | 도구 |
-|--------|--------|------|
-| evaluator-code-quality | 유지보수성·레이어·타입 안정성·테스트 품질 (BE/FE/libs 공통) | Read/Grep + tsc/eslint |
-| evaluator-functional   | 엔드포인트·E2E 사용자 플로우·API 계약 준수                  | Playwright(browser_*) 또는 curl(api-only) |
-| evaluator-visual       | 레이아웃·반응형·접근성·AI슬롭                               | Playwright(screenshot/resize/snapshot) |
+회의 결정의 `tracks[]` 길이 ≥ 2 면 fork. Conductor 가 트랙 dispatch 와 rendezvous join 을 자동 처리.
 
-### FULLSTACK — 신규 PRD 기반 풀스택
+- 대표 패턴: `track-1: cto/bugfix` + `track-2: planner/hypothesis-validation` → followup-review 에서 통합 결정.
+- followup-review 에서 결정자가 `apply-now / backlog / more-validation` 중 하나로 마무리.
+- followup-review 자체에서 또 fork 금지 (무한 fork 방지).
+- 한 sprint 내 parallel fork ≥ 3 회면 다음 fork 는 single 강제.
 
-```
-Planner → Gen-BE → Gen-FE → Eval-Code-Quality → Eval-Func → Eval-Visual → Archive
-```
+## Solo / Team / Hypothesis 모드
 
-### FE-ONLY — 기존 API + 프론트엔드 연동
+| 모드 | 트리거 | 실행 |
+|------|--------|------|
+| **Solo** | 기본 | 한 번에 한 에이전트 spawn (1개 슬롯 유지) |
+| **Team** | `progress.json.mode = "team"` (Owner 또는 Conductor 결정) | 매 tick `min(ready, 3)` 동시 spawn, parallel evaluator |
+| **Hypothesis** | Planner `requested_mode = "hypothesis"` | `documentationer → coo-developer → documentationer → planner` 가설 검증 루프 |
 
-```
-Planner(light) → Gen-FE → Eval-Code-Quality → Eval-Func → Eval-Visual → Archive
-    │
-    └─ OpenAPI spec → api-contract.json 변환
-       Gen-BE SKIP (외부 서버 사용)
-```
+## 품질 게이트
 
-### BE-ONLY — 기존 서버 + 백엔드 기능 추가
+| 게이트 | 시점 | 동작 |
+|--------|------|------|
+| **Pre-Eval Gate** | Generator → Evaluator 전환 | tsc / eslint / jest&#124;vitest 자동 실행. 실패 시 Generator 리라우팅 |
+| **파일 소유권 검증** | 에이전트 전환 시 | git diff 로 권한 밖 파일 수정 감지 |
+| **아티팩트 선행조건** | 에이전트 시작 전 | progress.json.artifacts 상태 확인 |
+| **Evaluation PASS 기준** | Evaluator 결과 | 2.80 / 3.00 이상. Evidence 없는 score = 0. AC 부분 통과 = FAIL. Regression 1건 = FAIL |
+| **Known-Bug Hard Gate** | sprint advance | 알려진 런타임 버그 보유 시 PASS / sprint advance 금지 |
 
-```
-Planner → Gen-BE → Eval-Code-Quality → Eval-Func(API-only) → Archive
-    │
-    └─ 기존 코드 분석 후 확장 설계
-       Gen-FE SKIP, Eval-Visual SKIP
-       Eval-Func: Playwright 대신 curl/httpie API 테스트
-```
+## Conventions / Gotchas (Hierarchical)
 
-### 공통 — 실패 시 루프
+- **gotchas/**: 부서별 부정형 규칙. Dispatcher 가 Owner 의 실수 지적을 받아 `### [G-NNN]` 으로 append.
+- **conventions/**: 부서별 긍정형 규칙. 같은 메커니즘으로 `### [C-NNN]` append.
+- **메모리 오염 방어**: 신규 entry 는 `unverified` 로 시작 → Planner 리뷰 시 `verified` 승격. TTL 만료 항목은 sprint 전환 시 갱신/삭제.
+- **검증 불가능 항목 즉시 삭제**.
 
-```
-Eval-Code-Quality FAIL → failure.location 에 따라 Gen-BE 또는 Gen-FE 재작업 (뒤 평가자 실행 없음)
-Eval-Func FAIL         → 동일 규칙으로 재작업
-Eval-Visual FAIL       → Gen-FE 재작업
-3회 실패 → Planner 에스컬레이션 (scope 축소/접근 변경)
-5회 초과 → 사용자 개입 요청
-```
+## 자주 쓰는 명령
 
-### Pre-Eval Gate (Deterministic Checks)
-
-Generator → Evaluator 전환 전, 결정론적 검증을 자동 실행합니다:
-
-```
-Generator 완료 → [tsc --noEmit] → [eslint] → [jest/vitest --bail] → Evaluator
-                  ↓ FAIL                                              
-                  Generator로 리라우팅 (Evaluator 세션 미개설)
-```
-
-- Backend: `tsc --noEmit`, `eslint . --max-warnings=0`, `jest --bail`
-- Frontend: `tsc --noEmit`, `eslint . --max-warnings=0`, `vitest run --bail 1`
-- `config.json`의 `flow.pre_eval_gate`에서 커스터마이징 가능
-
-### Runtime Guardrail (파일 소유권 검증)
-
-에이전트 전환 시 `git diff`로 이전 에이전트가 권한 밖 파일을 수정했는지 검증합니다.
-위반 발견 시 경고를 출력하고 리뷰를 요청합니다.
-
-### Context Isolation Guard (컨텍스트 분리 가드레일)
-
-한 세션에서 여러 에이전트를 실행하면 컨텍스트가 오염됩니다.
-`UserPromptSubmit` 훅이 다음 위반을 실시간 감지합니다:
-
-- `current_agent`가 running인데 다른 `/harness-*` 스킬 호출 시 경고 주입
-- `agent_status`를 completed로 변경하지 않고 다음 에이전트 호출 시 경고
-
-### Statusline (상시 상태 표시)
-
-터미널 하단에 항상 고정되는 1줄 compact 상태:
-
-```
-[S1] FULL | >backend | 2/5 feat | ctx 45% | $1.23
-```
-
-- `scripts/harness-statusline.sh`가 3초 간격으로 `progress.json`을 읽어 갱신
-- `.claude/settings.json`의 `statusLine` 설정으로 활성화
-- 세션 시작 시 장황한 프로그래스 출력 대신 statusline으로 대체
-
-### Artifact State Machine
-
-주요 아티팩트는 상태를 추적합니다:
-
-```
-pending → draft → reviewed → approved
-```
-
-| 아티팩트 | 생성 에이전트 | 필수 상태 (다음 에이전트 진행 조건) |
-|----------|-------------|----------------------------------|
-| plan.md | Planner | draft 이상 → Generator |
-| api-contract.json | Planner | draft 이상 → Generator |
-| feature-list.json | Planner | draft 이상 → Generator |
-| sprint-contract.md | Generator | draft 이상 → Evaluator |
-
-상태는 `progress.json.artifacts`에서 추적됩니다.
-
-## 세션 오케스트레이션
-
-### 핵심: 한 세션에 1 에이전트 단계
-
-각 에이전트는 독립 Claude Code 세션에서 실행됩니다. 컨텍스트 소진을 방지하고 품질을 유지합니다.
-
-### 상태 관리
-
-| 파일 | 역할 |
+| 명령 | 설명 |
 |------|------|
-| `.harness/progress.json` | 기계 판독 상태 (현재 에이전트, 파이프라인, 실패 정보) |
-| `.harness/progress.log` | 사람 판독 히스토리 (append-only, 전체) |
-| `.harness/handoff.json` | 세션 전환 문서 (prompt, model, thinking_mode, artifacts) |
-| `.harness/actions/audit.log` | Sprint cycle 단위 실행 추적 (Planner→Eval 통과) |
+| `npx walwal-harness` | 첫 설치 / 안전 init (G-NNN, C-NNN 보존) |
+| `npx walwal-harness --force` | 시스템 파일 강제 갱신 (G/C entry 는 여전히 보존) |
+| `npx walwal-harness migrate` | 구버전 progress.json / config.json schema 정상화 |
+| `npx walwal-harness team` | tmux/iTerm Team 스튜디오 기동 |
+| `bash scripts/harness-dashboard-up.sh` | Brick Office 라이브 대시보드 (http://localhost:3001) |
+| `bash scripts/harness-session-start.sh` | SessionStart 훅 (자동 호출) |
 
-### Audit Log
+## 다음 단계
 
-1 sprint cycle(Planner/Dispatcher 시작 → Eval 통과) 단위의 상세 실행 추적입니다.
-
-```
-# 예시:
-TIMESTAMP            | AGENT          | ACTION   | STATUS   | TARGET                         | DETAIL
-2026-04-09T14:30:00Z | planner        | plan     | start    | plan.md                        | Sprint 1 설계 시작
-2026-04-09T14:35:00Z | planner        | plan     | complete | api-contract.json              | 3 endpoints, 2 services
-2026-04-09T14:35:01Z | planner        | handoff  | complete | →gen-backend                   |
-2026-04-09T14:36:00Z | system         | gate     | pass     | pre-eval                       | gen-backend
-2026-04-09T14:40:00Z | gen-backend    | develop  | start    | apps/service-user/             | User CRUD 구현
-2026-04-09T14:50:00Z | gen-backend    | develop  | complete | apps/service-user/             | 4 endpoints
-2026-04-09T14:50:01Z | gen-backend    | handoff  | complete | →eval-functional               |
-2026-04-09T14:55:00Z | eval-func      | review   | start    | POST /api/auth/register        | AC-001~003 검증
-2026-04-09T14:58:00Z | eval-func      | review   | fail     | POST /api/auth/register        | 409→400 contract 불일치
-2026-04-09T14:58:01Z | eval-func      | handoff  | complete | →gen-backend                   | Re-Generate
-```
-
-**라이프사이클**: 새 Planner/Dispatcher 사이클 시작 시 이전 로그는 archive로 이동, 새 로그 시작.
-
-**에이전트 기록 의무**: 모든 에이전트는 세션 중 주요 작업의 시작/완료를 audit에 기록해야 합니다.
-
-```bash
-# 에이전트 스킬에서 호출:
-source scripts/lib/harness-audit.sh && init_audit .
-audit_log "gen-backend" "develop" "start" "apps/service-user/" "User CRUD 구현"
-audit_log "gen-backend" "develop" "complete" "apps/service-user/" "4 endpoints 완료"
-```
-
-### 실행 방법
-
-#### 1. 첫 세션: Dispatcher
-```
-"하네스 엔지니어링 시작" 또는 /harness-dispatcher
-```
-
-#### 2. 이후 세션: 새 세션만 열면 자동 진행
-
-에이전트가 완료 후 STOP하면, **새 세션을 시작하기만 하면 됩니다**.
-SessionStart 훅이 자동으로:
-1. 이전 에이전트의 완료 상태 감지
-2. 게이트 체크 실행 (Pre-Eval Gate, 파일 소유권, 아티팩트 선행조건)
-3. `handoff.json` 생성 (prompt, model, thinking_mode, regression 등)
-4. 다음 에이전트 안내 출력
-
-```
-# 새 세션 시작 시 자동 출력 예시:
-# Harness: next → /harness-generator-backend  (sonnet)
-```
-
-사용자는 안내에 따라 스킬을 호출하면 됩니다.
-
-#### 자동 CLI 실행 (옵션)
-
-완전 자동화를 원하면 아래 명령으로 다음 에이전트를 즉시 시작할 수 있습니다:
-
-```bash
-claude --model $(jq -r .model .harness/handoff.json) --prompt "$(jq -r .prompt .harness/handoff.json)"
-```
-
-#### 디버깅 (수동)
-
-문제가 생겼을 때만 수동으로 상태를 확인합니다:
-
-```bash
-bash scripts/harness-next.sh        # 게이트 체크 + 프로그래스 출력
-jq . .harness/handoff.json          # handoff 내용 확인
-jq . .harness/progress.json         # 현재 상태 확인
-```
-
-### Session Boundary Protocol
-
-모든 에이전트 스킬에 내장된 프로토콜:
-
-- **On Start**: `progress.json` 읽기 → `agent_status: "running"` 설정 → `handoff.json` 참조 → `CONVENTIONS.md` 읽기 (존재 시)
-- **On Complete**: `progress.json` 업데이트 → 아티팩트 상태 갱신 → `next_agent` 계산 → **STOP**
-- **On Fail** (Evaluator): `failure` 정보 기록 → `retry_target` 설정 → **STOP**
-- **On Transition**: 파일 소유권 검증 → Pre-Eval Gate (해당 시) → 아티팩트 선행조건 검증
-
-에이전트는 절대 다음 에이전트를 직접 호출하지 않습니다.
-
-### Handoff Document
-
-에이전트 전환 시 `.harness/handoff.json`이 자동 생성됩니다:
-
-```json
-{
-  "from": "planner",
-  "to": "generator-backend",
-  "sprint": 1,
-  "retry_count": 0,
-  "sprint_status": "running",
-  "failure_context": null,
-  "artifacts_ready": ["plan.md", "api-contract.json", "feature-list.json"],
-  "focus_features": ["F-001", "F-002"],
-  "warnings": [],
-  "timestamp": "2026-04-09T12:00:00Z"
-}
-```
-
-각 에이전트는 세션 시작 시 이 파일을 읽어 컨텍스트를 확보합니다.
-
-### Escalation Protocol
-
-```
-1-2회 실패: 동일 에이전트 재시도 (실패 원인 요약 포함)
-3회 실패:   Planner 에스컬레이션 (scope 축소 또는 접근 변경)
-5회 실패:   BLOCKED — 사용자 개입 요청
-```
-
-## 핵심 원칙
-
-1. **Backend First** — API가 안정된 후 Frontend 연동 (없는 API 호출 방지)
-2. **api-contract.json이 진실의 원천** — FE↔Gateway↔Services 간 유일한 계약
-3. **한 세션에 1 에이전트 단계** — 컨텍스트 소진 방지, Session Boundary Protocol 준수
-4. **feature-list.json의 passes만 수정** — 기능 정의는 Planner만 변경
-5. **테스트 삭제/약화 금지** — 테스트는 계약이다
-6. **Evaluator는 적대적** — Rubber-stamping 금지, 2.80/3.00 미만 = FAIL, Evidence 없는 Score = 0
-7. **아카이브 불변** — 완료 문서 수정 금지
-8. **MSA 경계 존수** — 서비스 간 직접 DB 접근 금지, 반드시 메시지 패턴
-
-## Evaluation System (v3.2)
-
-### 정량 채점 (Rubric Scoring)
-
-모든 Evaluator는 구조화된 Rubric으로 채점합니다:
-
-| 설정 | 값 |
-|------|------|
-| 척도 | 0-3 (항목별) |
-| PASS 기준 | **2.80 / 3.00 이상** |
-| FAIL 기준 | 2.79 이하 (예외 없음) |
-| Evidence 없는 항목 | Score = 0으로 강제 재계산 |
-
-### Evaluator-Code-Quality 채점 항목 (C1-C5)
-
-| # | Criterion | Weight |
-|---|-----------|--------|
-| C1 | Layer & Boundary (IA-MAP/MSA/FE VM 경계) | 25% |
-| C2 | Readability & Complexity | 15% |
-| C3 | Reuse & DRY | 20% |
-| C4 | Type Safety & Error Handling | 25% |
-| C5 | Test Quality | 15% |
-
-### Evaluator-Functional 채점 항목 (R1-R5)
-
-| # | Criterion | Weight |
-|---|-----------|--------|
-| R1 | API Contract 준수 | 25% |
-| R2 | Acceptance Criteria 전수 통과 | 25% |
-| R3 | 부정 테스트 (엔드포인트당 2개+) | 20% |
-| R4 | E2E 시나리오 (Playwright) | 15% |
-| R5 | 에러 핸들링 & 엣지케이스 | 15% |
-
-### Evaluator-Visual 채점 항목 (V1-V5)
-
-| # | Criterion | Weight |
-|---|-----------|--------|
-| V1 | 레이아웃 정확성 | 20% |
-| V2 | 반응형 (375/768/1280px) | 20% |
-| V3 | 접근성 WCAG 2.1 AA | 20% |
-| V4 | 시각적 일관성 + AI슬롭 감지 | 20% |
-| V5 | 인터랙션 상태 (로딩/에러/빈/호버/포커스) | 20% |
-
-### 자동 FAIL 조건 (Verdict Rules)
-
-어떤 상황에서도 아래 조건 충족 시 FAIL:
-
-1. Weighted Score < 2.80
-2. AC 100% 미통과 (부분 통과 불인정)
-3. Regression 실패 1건 이상 (신규 점수 무관)
-4. Evidence 누락 항목 존재 → 해당 Score = 0 재계산
-5. Cross-Validation 불일치 1건 이상 → CONDITIONAL FAIL
-6. (Visual) a11y Critical/Serious 위반 1건 이상 → V3 = 0
-7. (Visual) AI Slop 2건 이상 → V4 최대 1점
-
-### Executable Acceptance Criteria
-
-Planner는 feature-list.json에 기능을 정의할 때 **실행 가능한 검증 조건(AC)**을 반드시 작성합니다:
-
-```json
-{
-  "id": "AC-001",
-  "description": "유효한 이메일로 가입 시 201 응답",
-  "type": "api",
-  "verify": {
-    "method": "POST",
-    "path": "/api/auth/register",
-    "body": { "email": "test@test.com", "password": "Test1234!" },
-    "expect": { "status": 201 }
-  }
-}
-```
-
-AC 타입: `api` (HTTP 요청), `visual` (UI 요소 존재), `e2e` (사용자 플로우)
-
-### Regression Checkpoint
-
-Sprint N의 Evaluator는 이전 Sprint에서 PASS된 AC를 재검증합니다:
-- archive에서 이전 feature-list.json의 passed AC를 로드
-- handoff.json의 `regression` 필드로 전달
-- **1건이라도 회귀 실패하면 전체 FAIL**
-
-### Cross-Validation
-
-Eval-Functional의 결과를 Eval-Visual이 교차 검증합니다:
-- evaluation-functional.md 내 JSON 블록 → handoff.json의 `cross_validation_from_functional`
-- API 성공인데 UI에 에러 표시 = 불일치 = FAIL 사유
-
-### Adversarial Rules (적대적 행동 규칙)
-
-Evaluator 에이전트에게 강제되는 행동 규칙:
-- Generator의 '완료' 주장을 신뢰하지 않고 직접 검증
-- 정상 1개당 비정상 2개 이상 테스트
-- PASS 전 자문: "내가 이 코드로 PR을 올리겠는가?"
-- '전반적으로 잘 되었습니다' 류의 모호한 긍정 평가 **금지**
-- '시간 제약상 일부만 테스트' **금지** — 전수 불가 시 FAIL 처리
-
-## Tech Stack
-
-| 영역 | 기술 |
-|------|------|
-| Backend Framework | NestJS (TypeScript) |
-| Architecture | MSA (Microservice Architecture) |
-| Monorepo | NestJS 내장 monorepo (nest-cli.json) |
-| Runner | 통합 러너 (`npm run dev` = concurrently) |
-| Transport | TCP (dev) / RabbitMQ·NATS (prod) |
-| Frontend | React 또는 Next.js (TypeScript) |
-| Styling | Tailwind CSS |
-| State | TanStack Query + Zustand |
-| E2E Testing | Playwright MCP |
-| Unit Testing | Jest (backend) + Vitest (frontend) |
-| Database | PostgreSQL (dev: SQLite 가능) |
-
-## MCP 도구
-
-Playwright MCP (`@playwright/mcp`) — headless + vision 모드:
-- `browser_navigate`, `browser_click`, `browser_fill`
-- `browser_take_screenshot`, `browser_snapshot`
-- `browser_console_messages`, `browser_network_requests`
-- `browser_resize`, `browser_press_key`, `browser_wait`
+1. `AGENTS.md` 의 `[?]` 태그를 Planner 가 분류하도록 요청.
+2. `gotchas/<role>.md`, `conventions/<role>.md` 의 Preserved Rules 섹션 정리.
+3. Owner 는 "하네스 엔지니어링 시작" 또는 자유 형식 지시로 Dispatcher 를 깨운다 — 이후는 Conductor 가 이어받는다.

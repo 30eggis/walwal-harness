@@ -1,8 +1,8 @@
 {
   "harness": {
-    "name": "7-Agent Production Harness",
-    "version": "5.6.0",
-    "description": "Solo/Team 통합 하네스 — Dispatcher + 3-Evaluator Chain (Code-Quality → Functional → Visual) + Hierarchical Conventions/Gotchas + NestJS MSA + React/Next.js + Playwright",
+    "name": "walwal-harness — NEXUS company harness",
+    "version": "6.1.4",
+    "description": "NEXUS-adapted company metaphor for AI-agent engineering. Owner ↔ Dispatcher(CEO) ↔ Conductor + Meeting-Manager ↔ Planner(COO/HR) + CTO + CQO + Service-Ops. Generators (BE/FE/Designer/DevOps) + Evaluators (Functional/Visual/Code-Quality/Architecture/Security) + COO Hypothesis Cell. Solo/Team modes, parallel-tracks fork-join meetings, hierarchical Conventions/Gotchas. React/Next.js/Flutter FE, NestJS/Laravel BE.",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
   "agents": {

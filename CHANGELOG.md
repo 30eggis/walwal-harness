@@ -29,6 +29,16 @@ docmeta:
 
 # Changelog
 
+## 6.1.4 — Template + package files alignment with v6 NEXUS (2026-05-08)
+
+### Why
+6.1.3 까지 `assets/templates/HARNESS.md` 와 `assets/templates/config.json` 의 메타 헤더가 v3 시절 "7-Agent Production Harness / 5.6.0" 으로 정지해 있어, `--force` 가 stale 템플릿을 그대로 덮어쓰는 회귀 발생. 또 신규 `conventions/` 디렉토리가 `package.json` "files" 에 누락되어 게시 패키지에 포함되지 않았다.
+
+### Changed
+- `assets/templates/HARNESS.md`: v6 NEXUS 도큐트린 기준으로 전면 재작성 (단일 대화 창구·조직도·디렉토리·실행 흐름·6종 회의·parallel-tracks·Solo/Team/Hypothesis 모드·품질 게이트·자주 쓰는 명령).
+- `assets/templates/config.json`: `harness.name` / `version` / `description` 메타 헤더를 v6.1.4 NEXUS 기준으로 갱신.
+- `package.json` "files": `conventions/` 추가 (이제 게시 tarball 에 포함됨).
+
 ## 6.1.3 — Parallel-tracks fork-join + role gotchas/conventions backfill (2026-05-08)
 
 ### Added
