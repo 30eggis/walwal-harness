@@ -1,6 +1,6 @@
 ---
 name: harness-meeting-manager
-description: "부서 간 동기화 엔진. Cron(Service-Ops)·Event(부서 발신)·Manual 트리거로 5종 회의(Standup/Sprint Review/Spec Review/Incident War Room/All-Hands)를 소집·집계·디스패치. 적응형 cadence(light 30m / normal 1h / heavy 4h). 트리거: '미팅 소집', 'meeting convene', 'standup'."
+description: "부서 간 동기화 엔진. Cron(Service-Ops)·Event(부서 발신)·Manual 트리거로 6종 회의(Standup/Sprint Review/Spec Review/Incident War Room/All-Hands/Followup Review)를 소집·집계·디스패치. parallel tracks fork-join 지원. 적응형 cadence(light 30m / normal 1h / heavy 4h). 트리거: '미팅 소집', 'meeting convene', 'standup', 'followup'."
 disable-model-invocation: false
 ---
 
@@ -23,7 +23,7 @@ walwal-harness 의 부서 구조에 맞게 재해석함.
 - **권한**: 모든 부서에 prep 양식 발신, 회의록 작성·집계, queue enqueue (v5.9.6 재사용)
 - **금지**: 의사결정 직접 수행 (사회만 봄), Owner와 직접 대화 (escalation은 Dispatcher 경유)
 
-## 2. 회의 5종
+## 2. 회의 6종 (v6.2 — Followup Review 추가)
 
 | 종류 | 트리거 | 참석자 | 결과물 | Owner 푸시? |
 |---|---|---|---|---|
@@ -32,6 +32,7 @@ walwal-harness 의 부서 구조에 맞게 재해석함.
 | **Spec Review** | Eval "Change Request" 발신 | COO·CTO·발신 Eval | feature-list 수정·api-contract 변경 | 변경 시 ✅ |
 | **Incident War Room** | Service-Ops red-alert | CEO·CTO·Incident-Responder·관련 Gen | 핫픽스·롤백·RCA 초안 | ✅ 즉시 |
 | **All-Hands (Phase Gate)** | Phase 0~6 전환 이벤트 | 전 부서 + CEO·COO | Phase 진입 승인·부서 편성 변경 | ✅ 요약본 |
+| **Followup Review** *(v6.2)* | parallel tracks 의 모든 deliverable 도착 또는 `rendezvous.when` 도달 | fork meeting 의 트랙 owner 들 + 결정자(CTO 또는 CEO) | 트랙 산출물 통합 결정 (즉시 적용 / 백로그 / 추가 검증) | 변경 시 ✅ |
 
 ## 3. 회의 라이프사이클 (5단계)
 
@@ -99,12 +100,27 @@ meeting:
       vote: { agree: 0.71, override: false }
   decision:
     owner: planner | cto | cqo | service-ops | dispatcher
-    action_type: goal-alignment | replan | implement | re-evaluate | monitor | escalate-owner
+    action_type: goal-alignment | replan | implement | re-evaluate | monitor | escalate-owner | hypothesis-validation | bugfix
     rationale: <fact-based why this owner must act next>
     evidence:
       - source: <artifact path>
-        kind: ops-report | cqo-audit | cto-review | meeting-prep
+        kind: ops-report | cqo-audit | cto-review | meeting-prep | track-deliverable
     drift_classification: implementation_drift | planning_drift | ops_drift | goal_drift
+    # v6.2 — Parallel tracks (fork-join). tracks.length >= 2 이면 fork, 없거나 1이면 single.
+    # 별도의 mode 플래그는 두지 않음 — 단일 진실은 tracks 자체.
+    tracks:
+      - id: track-1
+        owner: cto
+        action_type: bugfix
+        deliverable: hotfix-result | validation-report | spike-result | report
+        deliverable_path: <artifact path or null>
+        status: pending | running | completed | abandoned
+    rendezvous:               # tracks.length >= 2 일 때만 의미 있음
+      type: followup-review | sprint-review
+      when: next_cadence | <iso>
+    # Followup Review 전용 필드
+    fork_meeting_id: <원본 fork 회의 id, 있으면>
+    prior_tracks: [<완료된 tracks[] 스냅샷>]
   action_items:
     - id: AI-1
       owner: generator-backend
@@ -140,11 +156,103 @@ meeting:
     "rationale": "...",
     "evidence": [],
     "drift_classification": "planning_drift",
+    "tracks": [],
+    "rendezvous": null,
     "source_path": ".harness/actions/meetings/M-.../meeting-M-....md"
   },
+  "requested_tracks": [],
+  "requested_rendezvous": null,
+  "fork_meeting_id": null,
   "manual_override": null
 }
 ```
+
+> tracks.length ≥ 2 면 fork-join, 그 외(0 또는 1)는 single. 별도 mode 플래그는 없음.
+
+`progress.json.conductor` 에는 활성 fork 의 트랙 상태가 거울처럼 미러링 된다:
+
+```json
+"conductor": {
+  "tracks": [
+    { "id": "track-1", "owner": "cto", "action_type": "bugfix",
+      "deliverable": "hotfix-result", "deliverable_path": null,
+      "status": "running", "started_at": "<iso>" }
+  ],
+  "rendezvous": { "type": "followup-review", "when": "next_cadence" },
+  "fork_meeting_id": "M-..."
+}
+```
+
+## 7.05 Parallel Tracks (v6.2 — Fork-Join)
+
+회의 결론이 한 개의 owner 로 모이지 않고 둘 이상의 부서가 **독립 산출물**을 만든 뒤 **다음 회의에서 합치는** 패턴을 지원한다.
+
+### 7.05.1 언제 parallel 을 선택하는가
+
+다음을 **모두** 충족할 때만 parallel 로 결정한다.
+
+1. 결론이 둘 이상의 deliverable 로 자연 분해된다 (예: "버그 핫픽스" + "가설 보고서").
+2. 두 deliverable 사이에 직접 의존이 없다 (한쪽이 다른 쪽 결과를 기다리지 않는다).
+3. 결정자(CTO 또는 CEO) 가 두 결과를 **함께 보고** 다음 단계를 정해야 한다.
+
+위 셋 중 하나라도 어긋나면 single 로 가고, 후속 작업은 별도 회의에서 다룬다.
+
+### 7.05.2 Fork 회의 결정 작성법
+
+회의록 `## Decision JSON` 블록에 다음을 작성한다:
+
+```json
+{
+  "decision": {
+    "owner": "cto",
+    "action_type": "bugfix",
+    "rationale": "운영 버그 + 신규 가설 두 트랙 동시 진행 — 다음 followup-review 에서 통합 결정",
+    "evidence": [...],
+    "drift_classification": "implementation_drift",
+    "tracks": [
+      { "id": "track-1", "owner": "cto", "action_type": "bugfix", "deliverable": "hotfix-result" },
+      { "id": "track-2", "owner": "planner", "action_type": "hypothesis-validation", "deliverable": "validation-report" }
+    ],
+    "rendezvous": { "type": "followup-review", "when": "next_cadence" }
+  }
+}
+```
+
+> `tracks` 가 2개 이상 → 자동으로 fork-join. 1개 이하 → single (rendezvous 무시). 별도 mode 플래그 없음.
+
+규칙:
+- `tracks[0].owner` 와 `tracks[0].action_type` 는 backward-compat 으로 `decision.owner` / `decision.action_type` 와 동일해야 한다 (Conductor 의 1차 dispatch 대상).
+- `id` 는 `track-1`, `track-2` 형식으로 1-based 순번. 두 개를 권장. 셋 이상은 fork 가 너무 무거워지므로 회의를 분리해라.
+- `deliverable` 은 짧은 슬러그(`hotfix-result`, `validation-report`, `spike-result`, `report`).
+- `rendezvous.when` 은 `next_cadence` (다음 정기 회의에 합류) 또는 ISO 시각 (특정 시점에 강제 소집).
+
+### 7.05.3 Conductor 가 하는 일 (참고)
+
+`scripts/conductor-tick.sh` 가 자동으로:
+1. fork 회의 직후 `progress.json.conductor.tracks` 에 트랙 상태 미러링.
+2. 첫 번째 트랙 owner 를 spawn (status=running). 그 owner 가 완료하면 트랙을 completed 처리하고 다음 pending 트랙 spawn.
+3. 모든 트랙이 completed 되면 `meetings.requested_type=<rendezvous.type>` + `meetings.requested_reason=rendezvous` 로 followup-review 를 자동 소집.
+4. fork 회의 id 는 `progress.json.meetings.fork_meeting_id` 로 followup 회의에 전달된다.
+
+Meeting-Manager 는 트랙 dispatch 자체에 관여하지 않는다. fork 회의록의 decision JSON 만 정확히 작성하면 된다.
+
+### 7.05.4 Followup Review 진행 방식
+
+소집 직후 `notice.md` 에는 fork 회의 id 와 트랙 deliverable 경로 목록이 자동 채워진다. Meeting-Manager 는 다음 순서로 진행:
+
+1. **트랙 산출물 수집**: `prior_tracks[]` 의 각 `deliverable_path` 를 읽어 prep 양식에 요약을 넣는다 (`prep-cto.md` 에 hotfix-result, `prep-planner.md` 에 validation-report). `fork_context` 가 비어 있어도 `conductor.tracks` 또는 `meetings.decision.tracks` 로 복구한다.
+2. **결정자 지정**: 기본 결정자 = CTO (운영 적용 여부). 단 fork 회의가 `goal-intake` 또는 `goal-drift` 였으면 CEO(Dispatcher) 로 escalate.
+3. **세 가지 통합 결정 중 하나**:
+   - `apply-now` — 두 산출물을 즉시 정규 sprint artifact 로 승격. 다음 owner = planner (sprint-contract 갱신).
+   - `backlog` — 백로그 등록 후 다음 sprint 에서 다룸. 다음 owner = planner (feature-list append).
+   - `more-validation` — 추가 검증 필요. 다시 parallel fork 또는 단일 spec-review.
+4. 결정은 **single mode** 로 작성한다 (followup 자체에서 또 fork 하지 말 것 — 무한 fork 방지).
+
+### 7.05.5 안전 가드
+
+- **Followup 무한 fork 금지**: followup-review 의 결정 JSON 은 `tracks.length ≤ 1` 만 허용 (또는 tracks 자체를 비움). 추가 분할이 필요하면 별도 spec-review 로 회부.
+- **Track abandon**: 트랙이 24h 이상 stuck 또는 owner 가 escalation 발신 → 해당 트랙 `status: abandoned`, 나머지 진행 + followup 에서 사유 명시.
+- **Fork 폭주 방지**: 한 sprint 내 parallel fork 가 ≥ 3회 발생하면 다음 fork 는 single 로 강제 (회의 분해 시그널).
 
 ## 7.1 회의 진행 방식
 
@@ -180,6 +288,7 @@ Meeting-Manager 자체는 cron을 돌리지 않음. Service-Ops가 매 hourly �
 | Planner | Phase 전환 요청 | All-Hands (Phase Gate) |
 | Owner | `/meeting convene <type>` | 해당 타입 (manual) |
 | Service-Ops | `goal_adherence < 0.5` 24h | Spec Review (긴급) |
+| Conductor | parallel tracks 모두 완료 또는 `rendezvous.when` 도달 | **Followup Review** *(v6.2)* |
 
 ## 10. Action Item 디스패치
 
@@ -218,6 +327,7 @@ bash scripts/queue-enqueue.sh   --owner generator-backend   --feature <feature-i
 5. 기본 handoff 규칙:
    - `goal-intake` / `goal-drift` / `spec-review` / `incident-followup` → `planner(COO)`
    - `ops-batch` / `sprint-review` / `quality-fail` → `cto`
+   - `rendezvous` (followup-review 결정 시) → 결정자 = `cto` 기본, 단 fork 회의가 `goal-intake|goal-drift` 였으면 `dispatcher` 로 escalate
 
 ### On Archived
 1. `.harness/archive/meetings/<id>/` 로 이동

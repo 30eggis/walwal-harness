@@ -21,6 +21,13 @@ ops_report=$(jq -r '.service_ops.auto_retro.last_report // empty' "$PROGRESS")
 cqo_audit=$(jq -r '.cqo.audit_path // empty' "$PROGRESS")
 cto_review=$(jq -r '.cto.review_path // empty' "$PROGRESS")
 current_path=$(jq -r '.meetings.current_record_path // empty' "$PROGRESS")
+# v6.2 — parallel tracks hints (set by conductor before convene). length >= 2 = fork.
+requested_tracks=$(jq -c '.meetings.requested_tracks // []' "$PROGRESS")
+requested_rendezvous=$(jq -c '.meetings.requested_rendezvous // null' "$PROGRESS")
+fork_context=$(jq -c '.meetings.fork_context // null' "$PROGRESS")
+fallback_fork_meeting_id=$(jq -r '.meetings.fork_meeting_id // .conductor.fork_meeting_id // ""' "$PROGRESS")
+fallback_conductor_tracks=$(jq -c '.conductor.tracks // []' "$PROGRESS")
+fallback_decision_tracks=$(jq -c '.meetings.decision.tracks // []' "$PROGRESS")
 
 default_decision_json() {
   local owner="planner"
@@ -35,6 +42,33 @@ default_decision_json() {
     owner="planner"
     action_type="goal-alignment"
   fi
+
+  # v6.2 — Tracks 가 단일 진실: length >= 2 → fork-join, length == 1 → single.
+  # legacy {owner, action_type} 만 들어와도 1-element tracks[] 로 합성.
+  local tracks_json="[]"
+  local rendezvous_json="null"
+  if [ "$(jq 'length' <<<"$requested_tracks")" -gt 1 ]; then
+    tracks_json=$(jq -c '
+      [ to_entries[] | (.value + {
+          id: ((.value.id // null) // ("track-" + ((.key + 1) | tostring))),
+          deliverable: (.value.deliverable // "report"),
+          deliverable_path: (.value.deliverable_path // null),
+          status: (.value.status // "pending")
+        })
+      ]
+    ' <<<"$requested_tracks")
+    rendezvous_json=$(jq -c '. // {type:"followup-review", when:"next_cadence"}' <<<"$requested_rendezvous")
+    # primary owner = first track owner (편의 미러)
+    owner=$(jq -r '.[0].owner // "planner"' <<<"$tracks_json")
+    action_type=$(jq -r '.[0].action_type // "triage"' <<<"$tracks_json")
+  else
+    # single — derive a 1-element tracks[] (backward compat 도 동시에 처리)
+    tracks_json=$(jq -c -n \
+      --arg owner "$owner" \
+      --arg action_type "$action_type" \
+      '[ {id:"track-1", owner:$owner, action_type:$action_type, deliverable:"report", deliverable_path:null, status:"pending"} ]')
+  fi
+
   jq -n \
     --arg owner "$owner" \
     --arg action_type "$action_type" \
@@ -42,7 +76,9 @@ default_decision_json() {
     --arg drift_classification "$1" \
     --arg ops_report "$ops_report" \
     --arg cqo_audit "$cqo_audit" \
-    --arg cto_review "$cto_review" '
+    --arg cto_review "$cto_review" \
+    --argjson tracks "$tracks_json" \
+    --argjson rendezvous "$rendezvous_json" '
     {
       owner: $owner,
       action_type: $action_type,
@@ -54,8 +90,38 @@ default_decision_json() {
           (if $cto_review != "" then {source:$cto_review, kind:"cto-review"} else empty end)
         ]
       ),
-      drift_classification: $drift_classification
+      drift_classification: $drift_classification,
+      tracks: $tracks,
+      rendezvous: $rendezvous
     }'
+}
+
+resolve_followup_fork_context() {
+  local resolved="$fork_context"
+  if [ "$requested_type" != "followup-review" ]; then
+    echo "$resolved"
+    return
+  fi
+
+  if [ "$resolved" != "null" ] && [ -n "$resolved" ]; then
+    echo "$resolved"
+    return
+  fi
+
+  local fallback_tracks="$fallback_conductor_tracks"
+  if [ "$(jq 'length' <<<"$fallback_tracks")" -eq 0 ] && [ "$(jq 'length' <<<"$fallback_decision_tracks")" -gt 0 ]; then
+    fallback_tracks="$fallback_decision_tracks"
+  fi
+
+  if [ "$(jq 'length' <<<"$fallback_tracks")" -eq 0 ]; then
+    echo "null"
+    return
+  fi
+
+  jq -c -n \
+    --arg fork_meeting_id "$fallback_fork_meeting_id" \
+    --argjson prior_tracks "$fallback_tracks" \
+    '{fork_meeting_id:$fork_meeting_id, prior_tracks:$prior_tracks, sealed_at:(now | todate)}'
 }
 
 if [ "$MODE" = "prepare" ]; then
@@ -64,16 +130,30 @@ if [ "$MODE" = "prepare" ]; then
   mkdir -p "$meeting_dir"
   record="$meeting_dir/meeting-$meeting_id.md"
 
+  # v6.2 — Notice surfaces tracks/rendezvous for visibility (length >= 2 = fork)
+  tracks_summary="(single owner)"
+  rendezvous_summary="-"
+  is_fork="false"
+  if [ "$(jq 'length' <<<"$requested_tracks")" -gt 1 ]; then
+    is_fork="true"
+    tracks_summary=$(jq -r '[.[] | "\(.id // "?"):\(.owner)/\(.action_type)→\(.deliverable // "report")"] | join(", ")' <<<"$requested_tracks")
+    rendezvous_summary=$(jq -r '"\(.type // "followup-review")@\(.when // "next_cadence")"' <<<"$requested_rendezvous")
+  fi
   cat > "$meeting_dir/notice.md" <<EOF
 # Notice — $meeting_id
 
 - type: $requested_type
 - reason: $requested_reason
 - goal_adherence: $goal_adherence
+- fork: $is_fork
+- tracks: $tracks_summary
+- rendezvous: $rendezvous_summary
 
 ## Request
 "$requested_reason" 요청이 접수되었습니다. 참석자들은 각자의 전문 시각에서 사실·증거를 제출하고,
 다음 owner와 action_type을 evidence 중심으로 결정하십시오.
+
+> **Parallel tracks (v6.2)**: \`tracks[]\` 의 길이 ≥ 2 면 fork-join. \`rendezvous\` 시점에 followup-review 로 합쳐집니다. 단일 트랙 회의는 기존과 동일하게 동작합니다.
 EOF
 
   cat > "$meeting_dir/prep-dispatcher.md" <<'EOF'
@@ -108,6 +188,26 @@ EOF
 EOF
 
   decision_json="$(default_decision_json "$drift")"
+
+  # v6.2 — followup-review: surface prior_tracks + fork_meeting_id from fork_context
+  resolved_fork_context="$(resolve_followup_fork_context)"
+
+  fork_section=""
+  if [ "$requested_type" = "followup-review" ] && [ "$resolved_fork_context" != "null" ] && [ -n "$resolved_fork_context" ]; then
+    fork_id=$(jq -r '.fork_meeting_id // ""' <<<"$resolved_fork_context")
+    fork_section="
+
+## Fork Context (v6.2)
+- fork_meeting_id: $fork_id
+- prior_tracks (rendezvous 입력):
+
+\`\`\`json
+$(jq '.prior_tracks' <<<"$resolved_fork_context")
+\`\`\`
+
+> 결정자(기본 CTO) 는 위 트랙별 deliverable 을 통합 검토 후 \`apply-now / backlog / more-validation\` 중 하나를 선택해 아래 Decision JSON 의 \`tracks\` 를 비우고 \`owner / action_type\` 만 채운다 (followup 에서 또 fork 금지)."
+  fi
+
   cat > "$record" <<EOF
 # Meeting Record — $meeting_id
 
@@ -115,6 +215,7 @@ EOF
 - type: $requested_type
 - reason: $requested_reason
 - goal_adherence: $goal_adherence
+$fork_section
 
 ## Decision JSON
 \`\`\`json
@@ -135,6 +236,10 @@ EOF
        jq -n --arg meeting_id "$meeting_id" --arg type "$requested_type" --arg reason "$requested_reason" --arg source_path "${record#$PROJECT_ROOT/}" --argjson decision "$decision_json" '{meeting_id:$meeting_id,type:$type,reason:$reason,decision:($decision + {source_path:$source_path})}'
      )"))" >/dev/null
 
+  if [ "$requested_type" = "followup-review" ] && [ "$resolved_fork_context" != "null" ] && [ -n "$resolved_fork_context" ]; then
+    bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" ".meetings.fork_context = $resolved_fork_context" >/dev/null
+  fi
+
   echo "${record#$PROJECT_ROOT/}"
   exit 0
 fi
@@ -147,6 +252,45 @@ if [ "$MODE" = "read-decision" ]; then
     /```/ && capture {capture=0; exit}
     capture {print}
   ' "$PROJECT_ROOT/$current_path" | jq -c '.decision'
+  exit 0
+fi
+
+# v6.2 — read-tracks: emit normalized tracks[] (length>=2 = fork, length==1 = single).
+# Legacy decisions without tracks → synthesize 1-element tracks[] from {owner, action_type}.
+if [ "$MODE" = "read-tracks" ]; then
+  jq -c '
+    if ((.meetings.decision.tracks // []) | length) > 0 then
+      .meetings.decision.tracks
+    elif ((.meetings.fork_context.prior_tracks // []) | length) > 0 then
+      .meetings.fork_context.prior_tracks
+    elif ((.conductor.tracks // []) | length) > 0 then
+      .conductor.tracks
+    else
+      [ {
+          id: "track-1",
+          owner: (.meetings.decision.owner // "planner"),
+          action_type: (.meetings.decision.action_type // "triage"),
+          deliverable: "report",
+          deliverable_path: null,
+          status: "pending"
+        }
+      ]
+    end
+  ' "$PROGRESS"
+  exit 0
+fi
+
+# v6.2 — read-rendezvous: emit rendezvous{} or null
+if [ "$MODE" = "read-rendezvous" ]; then
+  jq -c '.meetings.decision.rendezvous // .conductor.rendezvous // null' "$PROGRESS"
+  exit 0
+fi
+
+# v6.2 — read-fork: "true" if tracks.length >= 2, else "false"
+if [ "$MODE" = "read-fork" ]; then
+  decision="$(bash "$0" "$PROJECT_ROOT" read-decision 2>/dev/null || true)"
+  if [ -z "$decision" ]; then decision='{}'; fi
+  jq -r '((.tracks // []) | length) > 1' <<<"$decision"
   exit 0
 fi
 

@@ -21,12 +21,20 @@ disable-model-invocation: false
 - Planner의 `requested_mode = "hypothesis"`
 - 기존 코드베이스, 로컬 데이터, 백데이터, 샘플 CSV/JSON/DB dump
 
-## 3. 출력
+## 3. 출력 (산출물 경로 표준)
 
-- 실험 코드 또는 스크립트
-- 재현 절차
-- 관찰 결과와 한계
-- "가설 지지 / 반박 / 추가 데이터 필요" 3분류 결론
+- `.harness/actions/hypothesis/<id>/spike/` — 실험 코드 또는 스크립트
+- `.harness/actions/hypothesis/<id>/repro.md` — 재현 절차
+- `.harness/actions/hypothesis/<id>/observations.md` — 관찰 결과와 한계
+- `<id>` 는 `H-YYYYMMDDTHHMMSSZ` 형식. Planner 가 fork 시점에 발급.
+
+`progress.json` 업데이트 (완료 시):
+
+```bash
+bash scripts/harness-progress-set.sh . \
+  '.coo_developer.last_spike_path = "actions/hypothesis/<id>/spike/" |
+   .coo_developer.last_observations = "actions/hypothesis/<id>/observations.md"'
+```
 
 ## 4. 작업 원칙
 
@@ -40,3 +48,25 @@ disable-model-invocation: false
 - 실험 결과만으로 운영 가능 판정
 - 정규 팀 평가 없이 배포 코드로 승격
 - 근거 없는 직감성 결론
+
+## 6. Parallel-Tracks 컨텍스트 (v6.2)
+
+Hypothesis Cell 은 fork 회의 (결정 JSON 의 `tracks[]` 길이 ≥ 2) 에서 **track-N** 의 owner 로 지명되어 활동한다 (보통 `track-2: planner/hypothesis-validation` 의 sub-step).
+
+- 자기 활동이 fork 회의에서 시작되었는지는 `progress.json.conductor.fork_meeting_id` 와 `progress.json.conductor.tracks[]` 에서 확인.
+- 형제 트랙 (예: `track-1: cto/bugfix`) 의 진행은 차단 사유가 아니다 — 평행 진행.
+- 완료 시 spike/observations 경로를 documentationer 에 인계 (Planner 가 이어 받아 followup-review 산출물 `validation-report` 로 정리).
+- followup-review 결정 = `apply-now` 면 spike 경로의 일부가 sprint artifact 로 승격될 수 있다. 그 시점부터는 정규 Generator 가 다시 짠다 — Hypothesis Cell 코드는 SoT 가 아니다.
+
+## 7. Session Boundary
+
+### On Start
+1. `.harness/progress.json` 읽기 — `conductor.fork_meeting_id` / `conductor.tracks[]` / `planner.last_brief` 확인
+2. 자기 트랙 식별 (owner 가 `coo-developer` 또는 `planner` + brief=`hypothesis:experiment`)
+3. `.harness/conventions/coo-developer.md`, `.harness/gotchas/coo-developer.md` 읽기
+4. (v6.2) parallel 모드면 형제 트랙 owner 의 gotcha 도 한 번 훑기
+
+### On Complete
+1. `actions/hypothesis/<id>/` 산출물 경로 확정
+2. partial update: `coo_developer.last_spike_path`, `agent_status = "completed"`
+3. `next_agent = "documentationer"` (Planner 의 hypothesis 흐름이 활성화된 경우)

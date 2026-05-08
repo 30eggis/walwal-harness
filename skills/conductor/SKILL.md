@@ -152,6 +152,7 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
 - 리서치·정리 중심 → `documentationer`
 - 빠른 실험·백데이터 코드 중심 → `coo-developer`
 - 둘 다 필요 → 같은 tick 에 2명 병렬 spawn 가능
+- `hypothesis-verdict` 는 terminal 단계이며 완료 시 `meeting-manager` / followup-review 로 되돌린다.
 
 ### 5.1 Team mode 병렬 spawn (G-005)
 

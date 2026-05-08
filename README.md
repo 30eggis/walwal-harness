@@ -224,11 +224,13 @@ bash scripts/harness-token-limit.sh . mark 300
 
 핵심은 운영 품질이 아니라 빠른 사실 확인입니다.
 
-## 모드
+## 런타임 모드
+
+`progress.mode` 는 회사 실행 상태를 뜻합니다. 회의 결정의 `tracks[]` 와는 별개이며, fork-join 은 `tracks.length` 로만 판단합니다.
 
 ### Company / Team
 
-기본 경로입니다. Conductor 가 `mode=auto` 에서 선택합니다.
+기본 경로입니다. Conductor 가 `progress.mode=auto` 에서 선택합니다.
 
 특징:
 

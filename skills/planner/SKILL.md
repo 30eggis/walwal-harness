@@ -67,13 +67,58 @@ Planner는 더 이상 초기 파이프라인의 단순 1회성 spec writer가 �
 
 - **COO 역할**: Goal 정렬, 설계 허점 탐지, 브레인스토밍 필요 여부 판단
 - **HR 역할**: 필요한 스킬/부서가 비어 있으면 채용/온보딩 경로 준비
+- **Hypothesis Cell 운영**: COO 직속 `coo-developer` + `documentationer` 셀을 통해 가설을 빠르게 사실로 검증
 - **입력 경로**:
   - `meeting-manager` 의 CEO 회의 결과
   - `cto` 의 hotfix / execution-plan 요청
   - `service-ops` / `cqo` 로부터 올라온 재기획 요구
+  - **(v6.2)** parallel-tracks fork 회의의 `track-N` owner 지명
 - **출력 경로**:
   - 신규/수정된 `plan.md`, `feature-list.json`, `api-contract.json`
   - CTO가 바로 실행할 수 있는 작업 분할
+  - **Hypothesis Cell 산출물** (정규 sprint 와 분리): `.harness/actions/hypothesis/<id>/`
+
+## Hypothesis-Validation 분기 (v6.2)
+
+회의 결정에서 owner=planner, action_type=`hypothesis-validation` (또는 `hypothesis-*`) 으로 지명되면 Planner 는 정규 plan/feature 갱신 대신 **Hypothesis Cell 검증 흐름** 을 시동한다.
+
+### 흐름 (Conductor 자동 라우팅)
+
+```
+planner (brief 작성)
+   │  next: documentationer  +  planner.last_brief = "hypothesis:research"
+   ▼
+documentationer (사전 리서치 brief.md)
+   │  next: coo-developer  +  planner.last_brief = "hypothesis:experiment"
+   ▼
+coo-developer (spike 실행 → spike/, observations.md)
+   │  next: documentationer  +  planner.last_brief = "hypothesis:report"
+   ▼
+documentationer (실험 통합 → report.md + verdict.json)
+   │  next: planner  +  planner.last_brief = "hypothesis:done"
+   ▼
+planner (verdict 검토 · 완료 시 meeting-manager/followup-review 로 복귀)
+```
+
+### Planner 가 fork 회의 트랙으로 활동할 때 (v6.2)
+
+`progress.json.conductor.fork_meeting_id` 가 set 되어 있고 자기 트랙이 `hypothesis-*` 이면:
+
+1. fork 회의록의 `tracks[].deliverable` 슬러그 (보통 `validation-report`) 가 곧 산출물 이름.
+2. Hypothesis Cell 흐름 종료 시 `progress.json.planner.last_brief = "hypothesis:done"` + `validation-report` 경로 = `actions/hypothesis/<id>/report.md`.
+3. Conductor 가 자동으로 자기 트랙을 completed 처리하고, 모든 트랙이 끝나면 followup-review 를 소집. verdict 완료 후에는 planner.requested_mode 를 비운다.
+4. Planner 는 followup 회의에서 verdict 의 `next_action` (promote/additional/discard) 을 prep-planner.md 에 요약하여 결정자에게 전달.
+
+### 발급 규칙 (id, 경로)
+
+- `<id>` = `H-YYYYMMDDTHHMMSSZ` (UTC). Planner 가 hypothesis 흐름 시작 시 발급.
+- `progress.json.planner.last_hypothesis_id` 에 기록.
+- `actions/hypothesis/<id>/` 디렉토리 생성 책임은 Planner. brief.md 자체는 documentationer 가 채움.
+
+### 금지
+
+- Hypothesis Cell 산출물을 정규 `feature-list.json` / `api-contract.json` 에 직접 병합 금지. followup-review 의 `apply-now` 결정 후에만 Planner 가 별도 sprint artifact 로 다시 작성.
+- `coo-developer` 가 만든 spike 코드를 `apps/` 또는 `libs/` 경로로 옮기는 것 금지. 운영 경로는 정규 Generator 가 새로 짠다.
 
 ## Outputs (4개)
 

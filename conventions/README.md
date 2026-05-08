@@ -27,12 +27,28 @@ docmeta:
 .harness/conventions/
 ├── README.md                        # 이 파일
 ├── shared.md                        # 모든 에이전트 공통 규범
-├── planner.md                       # Planner 전용
-├── generator-backend.md             # Generator-Backend 전용
-├── generator-frontend.md            # Generator-Frontend 전용
+│
+├── conductor.md
+├── dispatcher.md
+├── meeting-manager.md
+├── planner.md
+├── cto.md
+├── cqo.md
+├── service-ops.md
+│
+├── coo-developer.md
+├── documentationer.md
+│
+├── generator-backend.md
+├── generator-frontend.md
+├── generator-designer.md
+├── generator-devops.md
+│
 ├── evaluator-code-quality.md
 ├── evaluator-functional.md
-└── evaluator-visual.md
+├── evaluator-visual.md
+├── evaluator-architecture.md
+└── evaluator-security.md
 ```
 
 루트의 `CONVENTIONS.md` 는 사용자가 자유롭게 기술하는 **최상위 원칙** 용도로
@@ -47,9 +63,11 @@ docmeta:
 2. `.harness/conventions/shared.md` (공통)
 3. `.harness/conventions/<self>.md` (자기 스코프)
 4. `.harness/gotchas/<self>.md` (과거 실수 방어)
-5. `.harness/memory.md` (구조적 교훈)
+5. **(v6.2) parallel-tracks 형제 트랙 owner 의 gotcha** — `progress.json.conductor.tracks[]` 에서 자기 트랙이 아닌 형제 트랙의 owner 를 식별, 해당 owner 의 `gotchas/<owner>.md` 도 한 번 훑기. fork 회의에서 같은 결정으로 함께 출발한 부서의 가드를 무시하지 않기 위함.
+6. `.harness/memory.md` (구조적 교훈)
 
 **충돌 시 우선순위**: `<self>` > `shared` > 루트 `CONVENTIONS.md`.
+형제 트랙 gotcha 는 **참고**용 — 자기 결정과 충돌 시 자기 스코프가 우선.
 
 ## 항목 형식
 

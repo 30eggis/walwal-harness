@@ -8,10 +8,12 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB="$SCRIPT_DIR/lib/harness-render-progress.sh"
 AUDIT_LIB="$SCRIPT_DIR/lib/harness-audit.sh"
+MIGRATE_LIB="$SCRIPT_DIR/lib/harness-progress-migrate.sh"
 
 if [ ! -f "$LIB" ]; then exit 0; fi
 source "$LIB"
 [ -f "$AUDIT_LIB" ] && source "$AUDIT_LIB"
+[ -f "$MIGRATE_LIB" ] && source "$MIGRATE_LIB"
 command -v jq &>/dev/null || exit 0
 
 PROJECT_ROOT="$(resolve_harness_root "." 2>/dev/null)" || exit 0
@@ -19,6 +21,11 @@ PROGRESS="$PROJECT_ROOT/.harness/progress.json"
 CONFIG="$PROJECT_ROOT/.harness/config.json"
 HANDOFF="$PROJECT_ROOT/.harness/handoff.json"
 [ -f "$PROGRESS" ] || exit 0
+
+# v6.2 — idempotent schema migration (parallel tracks fields, etc.)
+if declare -f migrate_progress_schema >/dev/null 2>&1; then
+  migrate_progress_schema "$PROGRESS" || true
+fi
 
 sprint_status=$(jq -r '.sprint.status // "init"' "$PROGRESS" 2>/dev/null)
 sprint_num=$(jq -r '.sprint.number // 0' "$PROGRESS" 2>/dev/null)

@@ -1,13 +1,22 @@
-# Gotchas — COO Developer
+---
+docmeta:
+  id: gotchas-coo-developer
+  title: Gotchas — ucoo-udeveloper
+  type: input
+  createdAt: 2026-05-08T00:00:00Z
+  updatedAt: 2026-05-08T00:00:00Z
+  source:
+    producer: user
+    skillId: harness-dispatcher
+  inputs: []
+  tags: [gotchas, coo-developer]
+---
 
-### [G-001] 운영코드와 실험코드 혼동  <!-- rule_id: coo-developer-experiment-vs-production -->
-- **Status**: unverified
-- **Date**: 2026-05-08
-- **Source**: planner:manual
-- **Trigger**: COO 직속 가설검증 셀 신설
-- **Wrong**: spike 코드를 운영 경로의 정본처럼 다룸
-- **Right**: 실험 코드는 실험으로 남기고, 정규화가 필요하면 Planner가 다시 Sprint artifact로 승격
-- **Why**: 이 셀의 목적은 빠른 사실 확인이지 운영 품질 보장이 아니다
-- **Scope**: `coo-developer`의 모든 실험 작업
-- **Occurrences**: 1
-- **Last-Seen**: 2026-05-08
+# Gotchas — ucoo-udeveloper
+
+> Dispatcher 가 관리. ucoo-udeveloper 는 세션 시작 시 이 파일을 읽고 같은 실수를 반복하지 않습니다.
+> 
+> 항목 형식은 `gotchas/README.md` 참조. Dispatcher 가 사용자의 실수 지적을 감지하면 자동으로
+> `### [G-NNN]` 항목을 append 합니다. 사용자가 직접 편집해도 무방합니다.
+
+<!-- 항목이 추가되면 아래에 기록됩니다 -->

@@ -61,10 +61,11 @@ docmeta:
 │   ├── ref/                    # [HARNESS] 스택별 best-practice 참조본       → Planner
 │   ├── prompts/                # [HARNESS] 에이전트 프롬프트                 → Planner
 │   ├── actions/                # [HARNESS] 활성 스프린트 문서                → 각 에이전트
-│   │   ├── meetings/           # [HARNESS] 회의록·prep                       → Meeting-Manager
+│   │   ├── meetings/           # [HARNESS] 회의록·prep (followup-review 포함) → Meeting-Manager
 │   │   ├── incidents/          # [HARNESS] 사고 타임라인·RCA                 → Service-Ops
 │   │   ├── escalations/        # [HARNESS] Owner 보고용                      → Conductor
-│   │   └── onboarding/         # [HARNESS] 부서 온보딩 패키지                → Planner(HR)
+│   │   ├── onboarding/         # [HARNESS] 부서 온보딩 패키지                → Planner(HR)
+│   │   └── hypothesis/         # [HARNESS] COO Hypothesis Cell 산출물 (spike/report/verdict) → Planner(발급)·coo-developer·documentationer
 │   ├── ops/                    # [HARNESS] 운영 메트릭 적재                  → Generator-DevOps(append) / Service-Ops(read)
 │   ├── baselines/              # [HARNESS] Eval baseline (의존 그래프 등)    → Evaluator-*
 │   └── archive/                # [HARNESS] 완료 스프린트 (불변)              → Evaluator
@@ -100,7 +101,7 @@ Owner (사용자)
   ↕ (단일 대화 창구)
 Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
   ├─ Conductor          (자율 실행 엔진: Gen↔Eval↔Ops 루프)
-  └─ Meeting-Manager    (동기화 엔진: 5종 회의 · 적응형 cadence)
+  └─ Meeting-Manager    (동기화 엔진: 6종 회의 · 적응형 cadence · parallel-tracks fork-join)
         ↓
    Planner = COO + HR   (Sprint·AC·인선·온보딩)
       └─ COO Hypothesis Cell (직영)
@@ -154,6 +155,10 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
 | .harness/actions/org-chart-*.json | 전체 | Dispatcher(CEO)만 |
 | .harness/ops/metrics.jsonl | 전체 | Generator-DevOps(append) / Service-Ops(read) |
 | .harness/baselines/ | 전체 | Evaluator-* (자기 baseline만) |
+| .harness/actions/hypothesis/ | 전체 | Planner(발급) / coo-developer(spike·observations·repro) / documentationer(brief·report·verdict·evidence) |
+| .harness/actions/hypothesis/&lt;id&gt;/spike/ | 전체 | coo-developer만 (실험 코드, 운영 SoT 아님) |
+| .harness/actions/hypothesis/&lt;id&gt;/{brief,report,verdict}.* | 전체 | documentationer만 |
+| .harness/actions/meetings/&lt;id&gt;/followup-*.md | 전체 | Meeting-Manager만 (followup-review prep·결정) |
 | apps/web/design/ | 전체 | Generator-Designer만 |
 | apps/harness-dashboard/app/, components/, hooks/, e2e/, public/ | 전체 | Generator-Frontend |
 | apps/harness-dashboard/lib/, app/api/ | 전체 | Generator-Backend |
@@ -167,6 +172,7 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
 - **목적**: CTO/CQO 정규 라인 투입 전에 가설을 빠르게 검증하는 실험 셀
 - **구성**: `coo-developer` 1명 + `documentationer` 1명
 - **직속**: Planner(COO)가 직접 운영, Dispatcher/Service-Ops 입력을 받아 기동
+- **산출물 경로**: `.harness/actions/hypothesis/<id>/{spike/, brief.md, report.md, verdict.json, evidence/}` (`<id>` = `H-YYYYMMDDTHHMMSSZ`, Planner 발급)
 - **허용 범위**:
   - 웹 리서치 기반 가설 수립/보강
   - 백데이터 활용 분석·실험용 코드 작성
@@ -176,6 +182,16 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
   - 실험 산출물은 운영 코드의 SoT가 아님
   - 정규 배포/운영 경로 투입 전에는 Planner가 결과를 Sprint/GOAL artifact로 재정식화해야 함
   - 정규 팀(CTO/CQO) 평가 없이 "완료" 또는 "운영 가능" 판정 금지
+
+### Parallel Tracks (v6.2 — Fork-Join)
+
+회의 결정이 둘 이상의 부서로 분기되어야 할 때 Meeting-Manager 가 `tracks[]` 길이 ≥ 2 인 결정 JSON 을 작성한다 (skills/meeting-manager/SKILL.md §7.05 참조). 별도 mode 플래그는 없음 — tracks 가 단일 진실.
+
+- 대표 패턴: `track-1: cto/bugfix` + `track-2: planner/hypothesis-validation` → 다음 followup-review 에서 통합 결정.
+- Conductor 가 트랙 dispatch 와 rendezvous join 을 자동 처리 (`progress.json.conductor.tracks[]`).
+- followup-review 에서 결정자(기본 CTO, fork 가 goal-* 였으면 CEO) 가 `apply-now / backlog / more-validation` 중 하나를 단일 결정으로 마무리.
+- followup-review 자체에서 또 fork 금지 (무한 fork 방지).
+- 한 sprint 내 parallel fork ≥ 3회면 다음 fork 는 single 강제.
 
 ### 변경 요청 프로토콜
 

@@ -23,6 +23,10 @@ current_agent=$(jq -r '.current_agent // "null"' "$PROGRESS")
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS")
 pipeline=$(jq -r '.pipeline // "null"' "$PROGRESS")
 mode=$(jq -r '.mode // "auto"' "$PROGRESS")
+# v6.2 — parallel tracks (fork-join) state
+parallel_tracks=$(jq -c '.conductor.tracks // []' "$PROGRESS")
+parallel_rendezvous=$(jq -c '.conductor.rendezvous // null' "$PROGRESS")
+parallel_pending_count=$(jq -r '[ .conductor.tracks // [] | .[] | select(.status == "pending" or .status == "running") ] | length' "$PROGRESS")
 user_override=$(jq -r '.mode_decision.user_override // "null"' "$PROGRESS")
 requested_mode=$(jq -r '.service_ops.requested_mode // "null"' "$PROGRESS")
 planner_requested_mode=$(jq -r '.planner.requested_mode // "null"' "$PROGRESS")
@@ -191,6 +195,80 @@ elif [ "$meetings_active_count" -gt 0 ] && [ "$current_agent" != "meeting-manage
   next="meeting-manager"
   action="spawn:meeting-manager:${meeting_type}"
   new_conductor_state="waiting_meeting"
+  if [ "$meeting_type" = "followup-review" ]; then
+    new_workflow_stage="followup-review"
+    if [ "$current_agent" = "planner" ] && [ "$planner_requested_mode" = "hypothesis-verdict" ]; then
+      planner_filter='.planner.requested_mode = null'
+    fi
+  fi
+
+# v6.2 — Parallel tracks advance: if a track owner just completed, mark its track done
+# and dispatch the next pending track. When all tracks completed, convene followup-review.
+#
+# Exclusion: for planner running a hypothesis chain (action_type=hypothesis-*), the track is
+# only terminal when the chain ends with planner.last_brief="hypothesis:done". Intermediate
+# planner ticks (research, verdict-prep, etc.) must defer to the dedicated planner-completed
+# branch which routes the chain.
+elif [ "$parallel_pending_count" -gt 0 ] && [ "$agent_status" = "completed" ] && \
+     [ "$(jq --arg a "$current_agent" '[.[] | select(.owner == $a and (.status == "running" or .status == "pending"))] | length' <<<"$parallel_tracks")" -gt 0 ] && \
+     ! { [ "$current_agent" = "planner" ] && \
+         [ "$(jq --arg a "$current_agent" '[.[] | select(.owner == $a and (.status == "running" or .status == "pending")) | .action_type // ""] | first | startswith("hypothesis")' <<<"$parallel_tracks")" = "true" ] && \
+         [ "$planner_last_brief" != "hypothesis:done" ]; }; then
+  # mark the matching running/pending track as completed
+  updated_tracks=$(jq -c --arg a "$current_agent" '
+    [ .[] |
+      if .owner == $a and (.status == "running" or .status == "pending") then
+        . + { status: "completed", completed_at: (now | todate) }
+      else . end
+    ]
+  ' <<<"$parallel_tracks")
+  remaining=$(jq -r '[ .[] | select(.status == "pending" or .status == "running") ] | length' <<<"$updated_tracks")
+  if [ "$remaining" -gt 0 ]; then
+    # dispatch the next pending track
+    next_owner=$(jq -r '[ .[] | select(.status == "pending") ] | .[0].owner // empty' <<<"$updated_tracks")
+    next_action=$(jq -r '[ .[] | select(.status == "pending") ] | .[0].action_type // "triage"' <<<"$updated_tracks")
+    next_track_id=$(jq -r '[ .[] | select(.status == "pending") ] | .[0].id // "track-?"' <<<"$updated_tracks")
+    if [ -n "$next_owner" ]; then
+      updated_tracks=$(jq -c --arg id "$next_track_id" '
+        [ .[] |
+          if .id == $id then . + { status: "running", started_at: (now | todate) } else . end
+        ]
+      ' <<<"$updated_tracks")
+      next="$next_owner"
+      action="dispatch:parallel:${next_track_id}:${next_owner}/${next_action}"
+      new_workflow_stage="$(meeting_stage_for_owner "$next_owner")"
+      if [ "$next_owner" = "planner" ]; then
+        planner_filter=".planner.requested_mode = \"$next_action\""
+      fi
+      meeting_filter=".conductor.tracks = $updated_tracks | .meetings.decision.tracks = $updated_tracks"
+    fi
+  else
+    # All tracks completed → rendezvous (followup-review)
+    rdv_type=$(jq -r '.type // "followup-review"' <<<"$parallel_rendezvous")
+    fork_meeting_id=$(jq -r '.conductor.fork_meeting_id // ""' "$PROGRESS")
+    next="meeting-manager"
+    action="convene:${rdv_type}:rendezvous"
+    new_conductor_state="waiting_meeting"
+    new_workflow_stage="followup-review"
+    meeting_prepare=true
+    # Save prior_tracks + fork_meeting_id to a stable namespace (.meetings.fork_context)
+    # because meeting-doc.sh prepare overwrites .meetings.decision with a new skeleton.
+    meeting_filter="
+      .meetings.active = [\"meeting-manager\"] |
+      .meetings.requested_type = \"$rdv_type\" |
+      .meetings.requested_reason = \"rendezvous\" |
+      .meetings.requested_tracks = [] |
+      .meetings.requested_rendezvous = null |
+      .meetings.fork_meeting_id = $(escape_json_string "$fork_meeting_id") |
+      .meetings.fork_context = {
+        \"fork_meeting_id\": $(escape_json_string "$fork_meeting_id"),
+        \"prior_tracks\": $updated_tracks,
+        \"sealed_at\": (now | todate)
+      } |
+      .planner.requested_mode = null |
+      .conductor.tracks = $updated_tracks |
+      .conductor.rendezvous = null"
+  fi
 
 elif [ "$requested_mode" != "null" ] && [ -n "$requested_mode" ] && [ "$current_agent" != "service-ops" ]; then
   next="service-ops"
@@ -224,6 +302,9 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
   evidence=$(jq -c '.evidence // []' <<<"$meeting_decision")
   decision_drift=$(jq -r '.drift_classification // "unknown"' <<<"$meeting_decision")
   source_path=$(jq -r '.source_path // "null"' <<<"$meeting_decision")
+  # v6.2 — tracks length >= 2 → fork-join, else single. mode 필드 없음.
+  decision_tracks=$(jq -c '.tracks // []' <<<"$meeting_decision")
+  decision_rendezvous=$(jq -c '.rendezvous // null' <<<"$meeting_decision")
 
   if [ "$owner" = "null" ] || [ -z "$owner" ]; then
     case "$decision_drift" in
@@ -237,30 +318,95 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
     esac
   fi
 
-  next="$owner"
-  action="dispatch:${owner}:${action_type}"
-  new_workflow_stage="$(meeting_stage_for_owner "$owner")"
-  if [ "$owner" = "planner" ]; then
-    planner_filter=".planner.requested_mode = \"$action_type\""
+  # v6.2 — Parallel fork: if 2+ tracks, materialize conductor.tracks[] and dispatch
+  # the first pending track owner. Subsequent ticks advance remaining tracks.
+  if [ "$(jq 'length' <<<"$decision_tracks")" -gt 1 ]; then
+    first_track_owner=$(jq -r '.[0].owner' <<<"$decision_tracks")
+    first_track_action=$(jq -r '.[0].action_type // "triage"' <<<"$decision_tracks")
+    first_track_id=$(jq -r '.[0].id // "track-1"' <<<"$decision_tracks")
+    # mark first track as running, rest as pending
+    materialized_tracks=$(jq -c --arg first "$first_track_id" '
+      [ .[] | . + {
+          status: (if .id == $first then "running" else (.status // "pending") end),
+          deliverable_path: (.deliverable_path // null)
+        }
+      ]
+    ' <<<"$decision_tracks")
+    next="$first_track_owner"
+    action="dispatch:parallel:${first_track_id}:${first_track_owner}/${first_track_action}"
+    new_workflow_stage="$(meeting_stage_for_owner "$first_track_owner")"
+    if [ "$first_track_owner" = "planner" ]; then
+      planner_filter=".planner.requested_mode = \"$first_track_action\""
+    fi
+    meeting_filter="
+      .meetings.active = [] |
+      .meetings.last_type = .meetings.requested_type |
+      .meetings.last_reason = .meetings.requested_reason |
+      .meetings.last_decision = \"fork:${first_track_owner}:${first_track_action}\" |
+      .meetings.requested_type = null |
+      .meetings.requested_reason = null |
+      .meetings.requested_tracks = [] |
+      .meetings.requested_rendezvous = null |
+      .meetings.decision = {
+        \"owner\": \"$owner\",
+        \"action_type\": \"$action_type\",
+        \"rationale\": $(escape_json_string "$rationale"),
+        \"evidence\": $evidence,
+        \"drift_classification\": $(escape_json_string "$decision_drift"),
+        \"source_path\": $(escape_json_string "$source_path"),
+        \"tracks\": $materialized_tracks,
+        \"rendezvous\": $decision_rendezvous
+      } |
+      .conductor.tracks = $materialized_tracks |
+      .conductor.rendezvous = $decision_rendezvous |
+      .conductor.fork_meeting_id = (.meetings.current_id // null)"
+  else
+    next="$owner"
+    action="dispatch:${owner}:${action_type}"
+    new_workflow_stage="$(meeting_stage_for_owner "$owner")"
+    if [ "$owner" = "planner" ]; then
+      planner_filter=".planner.requested_mode = \"$action_type\""
+    fi
+    meeting_filter="
+      .meetings.active = [] |
+      .meetings.last_type = .meetings.requested_type |
+      .meetings.last_reason = .meetings.requested_reason |
+      .meetings.last_decision = \"$owner:$action_type\" |
+      .meetings.requested_type = null |
+      .meetings.requested_reason = null |
+      .meetings.requested_tracks = [] |
+      .meetings.requested_rendezvous = null |
+      .meetings.decision = {
+        \"owner\": \"$owner\",
+        \"action_type\": \"$action_type\",
+        \"rationale\": $(escape_json_string "$rationale"),
+        \"evidence\": $evidence,
+        \"drift_classification\": $(escape_json_string "$decision_drift"),
+        \"source_path\": $(escape_json_string "$source_path"),
+        \"tracks\": [],
+        \"rendezvous\": null
+      } |
+      .conductor.tracks = [] |
+      .conductor.rendezvous = null |
+      .conductor.fork_meeting_id = null"
   fi
-  meeting_filter="
-    .meetings.active = [] |
-    .meetings.last_type = .meetings.requested_type |
-    .meetings.last_reason = .meetings.requested_reason |
-    .meetings.last_decision = \"$owner:$action_type\" |
-    .meetings.requested_type = null |
-    .meetings.requested_reason = null |
-    .meetings.decision = {
-      \"owner\": \"$owner\",
-      \"action_type\": \"$action_type\",
-      \"rationale\": $(escape_json_string "$rationale"),
-      \"evidence\": $evidence,
-      \"drift_classification\": $(escape_json_string "$decision_drift"),
-      \"source_path\": $(escape_json_string "$source_path")
-    }"
 
 elif [ "$current_agent" = "planner" ] && [ "$agent_status" = "completed" ]; then
-  if [ "$planner_requested_mode" = "hypothesis" ]; then
+  # v6.2 — hypothesis-verdict is terminal for the cell; return to meeting-manager.
+  if [ "$planner_requested_mode" = "hypothesis-verdict" ]; then
+    next="meeting-manager"
+    action="convene:followup-review:hypothesis-verdict"
+    new_workflow_stage="followup-review"
+    meeting_prepare=true
+    planner_filter='.planner.requested_mode = null'
+    meeting_filter="
+      .meetings.active = [\"meeting-manager\"] |
+      .meetings.requested_type = \"followup-review\" |
+      .meetings.requested_reason = \"rendezvous\" |
+      .meetings.requested_tracks = [] |
+      .meetings.requested_rendezvous = null"
+  # v6.2 — Accept hypothesis* (e.g. "hypothesis", "hypothesis-validation") as Hypothesis Cell trigger
+  elif [[ "$planner_requested_mode" == hypothesis* ]]; then
     next="documentationer"
     action="dispatch:hypothesis:documentationer"
     new_workflow_stage="coo-hypothesis-research"

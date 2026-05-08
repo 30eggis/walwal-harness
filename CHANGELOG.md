@@ -29,6 +29,27 @@ docmeta:
 
 # Changelog
 
+## 6.1.3 — Parallel-tracks fork-join + role gotchas/conventions backfill (2026-05-08)
+
+### Added
+- **Meeting parallel-tracks (fork-join)**: 회의 결정의 `tracks[]` 길이 ≥ 2 를 단일 진실로 사용 (별도 mode 플래그 없음). Conductor 가 트랙 dispatch · rendezvous join 을 자동 처리.
+- **followup-review** 회의 타입(6번째) 정식화 — fork 결과를 결정자(CTO 기본, goal-* fork 면 CEO) 가 `apply-now/backlog/more-validation` 중 하나로 마무리.
+- `scripts/lib/harness-progress-migrate.sh` — `progress.json` 스키마 idempotent migrator. SessionStart 마다 `conductor.tracks/rendezvous/fork_meeting_id`, `meetings.requested_tracks/requested_rendezvous`, `meetings.decision.tracks/rendezvous` 필드를 안전하게 채움 (기존 값 보존, 폐기 필드 정리).
+- **신규 역할 gotchas**: `cto`, `cqo`, `generator-designer`, `generator-devops`, `evaluator-architecture`, `evaluator-security`, `meeting-manager`.
+- **신규 역할 conventions**: `conductor`, `coo-developer`, `cqo`, `cto`, `dispatcher`, `documentationer`, `evaluator-architecture`, `evaluator-security`, `generator-designer`, `generator-devops`, `meeting-manager`, `service-ops`.
+- `apps/harness-dashboard/lib/__tests__/company-flow.test.ts` — company-loop 검증.
+
+### Changed
+- `scripts/conductor-tick.sh`: parallel-tracks 분기·rendezvous 라우팅, hypothesis chain 단계별 라우팅 가드 (`hypothesis:research → experiment → report → done`) 보강.
+- `scripts/harness-meeting-doc.sh`: `requested_tracks` 가 length≥2 면 fork-join decision JSON 합성, length≤1 이면 1-element tracks[] 로 backward compat.
+- `skills/meeting-manager/SKILL.md`: §7.05 parallel-tracks 합성 규칙 + followup-review prep 절차 추가.
+- `skills/planner/SKILL.md`: hypothesis-validation fork 트랙 운영 흐름 + Hypothesis Cell 산출물 경로(`actions/hypothesis/<id>/`) 명문화.
+- `AGENTS.md`: IA-MAP 에 `actions/hypothesis/`, followup-review 추가, 권한 매트릭스에 hypothesis/followup 경로 추가.
+
+### Validation
+- `bash -n scripts/conductor-tick.sh scripts/harness-meeting-doc.sh scripts/lib/harness-progress-migrate.sh`
+- 회사 플로우 테스트 통과 (`apps/harness-dashboard/lib/__tests__/company-flow.test.ts`)
+
 ## 6.1.2 — TokenLimit hold/resume checker (2026-05-08)
 
 ### Added

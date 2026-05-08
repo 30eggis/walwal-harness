@@ -8,12 +8,31 @@
 
 ```
 .harness/gotchas/
-├── README.md                      # 이 파일
-├── planner.md                     # Planner의 반복 실수
-├── generator-backend.md           # Generator-Backend의 반복 실수
-├── generator-frontend.md          # Generator-Frontend의 반복 실수
-├── evaluator-functional.md        # Evaluator-Functional의 반복 실수
-└── evaluator-visual.md            # Evaluator-Visual의 반복 실수
+├── README.md                      # 이 파일 (형식·관리 규칙)
+│
+├── conductor.md                   # Conductor (자율 실행 엔진)
+├── dispatcher.md                  # Dispatcher (CEO)
+├── meeting-manager.md             # Meeting-Manager (회의 사회)
+├── planner.md                     # Planner (COO + HR)
+├── cto.md                         # CTO (Gen 총괄)
+├── cqo.md                         # CQO (Eval 총괄)
+├── service-ops.md                 # Service-Ops (운용)
+│
+├── coo-developer.md               # COO Hypothesis Cell — Developer
+├── documentationer.md             # COO Hypothesis Cell — Documentationer
+│
+├── generator-backend.md           # Generator-Backend
+├── generator-frontend.md          # Generator-Frontend
+├── generator-designer.md          # Generator-Designer
+├── generator-devops.md            # Generator-DevOps
+│
+├── evaluator-code-quality.md      # Eval-Code-Quality
+├── evaluator-functional.md        # Eval-Functional
+├── evaluator-visual.md            # Eval-Visual
+├── evaluator-architecture.md      # Eval-Architecture
+├── evaluator-security.md          # Eval-Security
+│
+└── generator-backend-<stack>.md   # 스택별 가드 (예: -laravel)
 ```
 
 ## 항목 형식
@@ -22,8 +41,8 @@
 ### [G-NNN] 간결한 제목  <!-- rule_id: <unique-key> -->
 - **Status**: unverified | verified | resolved
 - **Date**: YYYY-MM-DD
-- **Source**: <작성 주체>        (예: "evaluator-functional:F-003" / "dispatcher:manual")
-- **Trigger**: 사용자가 한 말 또는 "Eval 자동 감지"
+- **Source**: <작성 주체>        (예: "evaluator-functional:F-003" / "dispatcher:manual" / "meeting:M-...:track-2")
+- **Trigger**: 사용자가 한 말 또는 "Eval 자동 감지" 또는 "track abandon"
 - **Wrong**: 에이전트가 했던 잘못된 행동
 - **Right**: 올바른 행동
 - **Why**: 왜 잘못인지 근거
@@ -31,6 +50,19 @@
 - **Occurrences**: 1
 - **Last-Seen**: YYYY-MM-DD
 ```
+
+### Source 필드 (v6.2 — parallel tracks 추적)
+
+`Source` 는 항목이 어디서 생겼는지 추적한다. 가능한 형식:
+
+| 형식 | 의미 |
+|---|---|
+| `dispatcher:manual` | 사용자가 명시적으로 지적 |
+| `evaluator-<axis>:F-<id>` | Evaluator 가 자동 감지한 사건 (gotcha_candidates) |
+| `service-ops:incident-<id>` | Service-Ops 인시던트에서 도출 |
+| `meeting:M-<id>:track-<n>` | parallel-tracks 회의의 특정 트랙에서 도출 (v6.2) |
+| `meeting:M-<id>:rendezvous` | followup-review 통합 결정에서 도출 |
+| `planner:manual` | Planner 가 sprint 전환 시 등록 |
 
 ## 작성 주체
 
