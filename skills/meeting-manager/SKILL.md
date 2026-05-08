@@ -152,6 +152,7 @@ Meeting-Manager는 단순히 "토론해 주세요"라고 말하지 않는다. �
 
 - `Dispatcher/CEO`: Goal 자체가 흔들렸는가, Owner escalation 이 필요한가
 - `Planner/COO`: 기획/가설/웹리서치/레퍼런스 재검토가 필요한가
+- `COO Hypothesis Cell`: 실험으로 바로 검증 가능한가, 어떤 백데이터/리서치가 필요한가
 - `CTO`: 구현/아키텍처/기술선택 문제가 원인인가
 - `CQO`: 품질/회귀/검증 부족이 원인인가
 - `Service-Ops`: KPI/로그/incident 기준으로 어떤 drift 가 발생했는가

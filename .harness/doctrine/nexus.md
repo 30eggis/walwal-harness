@@ -76,6 +76,9 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
   └─ Meeting-Manager    (동기화: cron + event 회의)
         ↓
    Planner = COO + HR   (Sprint·AC·인선·온보딩)
+      └─ COO Hypothesis Cell
+         ├─ Developer 1       (spike·backdata 실험)
+         └─ Documentationer 1 (research·report·verdict)
         ↓
   ┌─────┴────────┬──────────────┐
   CTO            CQO            Service-Ops
@@ -91,6 +94,7 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
 - **Owner ↔ Dispatcher만** 직접 대화. 다른 부서는 Owner와 직접 대화 X (escalation 시 Dispatcher 경유).
 - **GOAL 작성**: CEO 단독 권한, CTO와 협의로 구체화.
 - **Sprint·AC 작성**: Planner(COO) 단독.
+- **가설 검증 셀 운영**: Planner(COO) 단독. `coo-developer` 와 `documentationer` 는 COO 직속 보조 부서다.
 - **api-contract.json·AGENTS.md 쓰기**: Planner 단독.
 - **코드 쓰기**: 해당 영역 Generator만 (BE/FE/Designer/DevOps).
 - **PASS/FAIL 판정**: 해당 Evaluator만, CQO가 cross-validate.
@@ -120,6 +124,12 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
 ### H-5. Ops Report (Service-Ops → CTO)
 - `ops-report-<ts>.md` (GOAL adherence + 권장 수정안 + 우선순위)
 - CTO가 Hotfix Feature로 변환 → Planner 등록
+
+### H-5b. Hypothesis Intake (CEO/Service-Ops → Planner → COO Hypothesis Cell)
+- 입력: 신규 기획 방향, 운영 드리프트, 미검증 아이디어, 웹 리서치 필요사항
+- `coo-developer`: 빠른 실험 구현·백데이터 검증
+- `documentationer`: 리서치·실험 로그 정리·유효/무효 보고서 작성
+- 출력: Planner가 정규 Sprint artifact로 승격할 수 있는 검증 보고서
 
 ### H-6. Escalation (any → Dispatcher → Owner)
 - 3회 연속 FAIL / 승인 필요 / GOAL 위반 / 인시던트 P0~P1

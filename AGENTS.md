@@ -103,6 +103,9 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
   └─ Meeting-Manager    (동기화 엔진: 5종 회의 · 적응형 cadence)
         ↓
    Planner = COO + HR   (Sprint·AC·인선·온보딩)
+      └─ COO Hypothesis Cell (직영)
+         ├─ Developer 1       (가설 검증용 spike·백데이터 실험)
+         └─ Documentationer 1 (웹리서치·보고서·가설 판정)
         ↓
   ┌─────┴────────┬──────────────┐
   CTO            CQO            Service-Ops
@@ -158,6 +161,21 @@ Dispatcher = CEO  ── 부서 식별 · GOAL 협의 · escalation 보고
 | infra/ | 전체 | Generator-DevOps만 |
 | skills/ | 전체 | Planner(HR)만 |
 | gotchas/ | 전체 | Planner만 (verified 승격) / 각 부서 (자기 unverified 추가 가능) |
+
+### COO Hypothesis Cell 운영 규칙
+
+- **목적**: CTO/CQO 정규 라인 투입 전에 가설을 빠르게 검증하는 실험 셀
+- **구성**: `coo-developer` 1명 + `documentationer` 1명
+- **직속**: Planner(COO)가 직접 운영, Dispatcher/Service-Ops 입력을 받아 기동
+- **허용 범위**:
+  - 웹 리서치 기반 가설 수립/보강
+  - 백데이터 활용 분석·실험용 코드 작성
+  - 아키텍처/코드퀄리티/테스트 엄수 없이도 빠른 spike 허용
+  - 보고서 작성 및 가설 유효/무효 판정
+- **제한**:
+  - 실험 산출물은 운영 코드의 SoT가 아님
+  - 정규 배포/운영 경로 투입 전에는 Planner가 결과를 Sprint/GOAL artifact로 재정식화해야 함
+  - 정규 팀(CTO/CQO) 평가 없이 "완료" 또는 "운영 가능" 판정 금지
 
 ### 변경 요청 프로토콜
 

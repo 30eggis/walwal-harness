@@ -29,6 +29,29 @@ docmeta:
 
 # Changelog
 
+## 6.1.1 — COO hypothesis routing activation (2026-05-08)
+
+### Why
+v6.1.0 에서 COO 직속 `coo-developer` / `documentationer` 역할과 hypothesis cell 문서는 추가됐지만, 실제 Conductor 라우팅은 여전히 `planner -> cto` 직행이었다. 그래서 "COO가 가설을 세우면 빠르게 리서치·실험·판정한다" 는 운용 모델이 문서상으로만 존재했다.
+
+### Changes
+- **runtime routing for hypothesis mode**
+  - `planner.requested_mode = "hypothesis"` 이면 `documentationer` 로 우선 라우팅
+  - 이후 `documentationer -> coo-developer -> documentationer -> planner` 순서로 가설 검증 루프 진행
+  - 단계 추적용 상태를 `planner.last_brief` 에 `hypothesis:research`, `hypothesis:experiment`, `hypothesis:report`, `hypothesis:done` 으로 기록
+- **agent registry update**
+  - `.harness/config.json` 의 `agents` 카탈로그에 `coo-developer`, `documentationer` 등록
+  - handoff/statusline/session-start 가 두 agent 를 정상 인식하도록 연결
+
+### Validation
+- `bash -n scripts/conductor-tick.sh`
+- `jq empty .harness/config.json`
+- `/private/tmp` 샌드박스에서 hypothesis flow 시뮬레이션:
+  - `planner(completed, requested_mode=hypothesis) -> documentationer`
+  - `documentationer -> coo-developer`
+  - `coo-developer -> documentationer`
+  - `documentationer -> planner(requested_mode=hypothesis-verdict)`
+
 ## 6.1.0 — document-driven company loop + task-session isolation (2026-05-08)
 
 ### Why

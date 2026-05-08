@@ -3,6 +3,8 @@ export type AgentId =
   | "conductor"
   | "meeting-manager"
   | "planner"
+  | "coo-developer"
+  | "documentationer"
   | "generator-backend"
   | "generator-frontend"
   | "generator-designer"

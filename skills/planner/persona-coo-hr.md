@@ -140,6 +140,23 @@ hr_roster:
 ---
 ```
 
+### B-5. COO Direct Hypothesis Cell
+
+Planner는 정규 Sprint 라인과 별도로 다음 2개 직속 역할을 운영할 수 있다:
+
+- `coo-developer`: 빠른 spike, 백데이터 스크립트, throwaway prototype
+- `documentationer`: 웹 리서치, 실험 로그 정리, 보고서, 가설 유효/무효 판정
+
+활성화 조건:
+1. CEO가 기획안 탐색 또는 미검증 아이디어 검토를 지시
+2. Service-Ops가 새 기획 방향 또는 drift 신호를 보고
+3. CTO/CQO 정규 라인에 넣기 전에 빠른 사실 확인이 필요
+
+운영 원칙:
+- 산출물은 정규 구현물이 아니라 `hypothesis brief`, `experiment note`, `validation report`
+- 코드 품질/테스트 완성도보다 의사결정 속도를 우선
+- 결과가 유효하면 Planner가 이를 정규 Sprint artifact로 재작성해 CTO 라인에 넘긴다
+
 ## C. 권한 (보강)
 
 기존 권한에 추가:

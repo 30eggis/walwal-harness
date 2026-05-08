@@ -47,6 +47,9 @@ docmeta:
                    ┌──────────┼─────────────┬──────────────────┐
                    COO        CTO           CQO                Service-Ops
                   (Planner)  (Gen 총괄)    (Eval 총괄)         (운용팀)
+                    │
+           Hypothesis Cell
+        Developer 1 · Documentationer 1
                               │              │                  │
                   ┌────┬──────┼─────┐  ┌─────┼────┬─────┐   ┌───┴──────┐
                   BE   FE  Designer DevOps  Func Visual CQ  Arch Sec  Monitor Incident AutoRetro
@@ -70,6 +73,15 @@ docmeta:
 | ✅ | project-management-studio-producer | 부서 간 조율 |
 | ✅ | project-management-experiment-tracker | A/B·실험 추적 |
 | ➖ | project-management-jira-workflow-steward | 외부 JIRA 미사용 시 보류 |
+
+### 2-1. COO Direct Hypothesis Cell (신규)
+| 채택 | 출처 | 배치 |
+|---|---|---|
+| ✅ | engineering-rapid-prototyper | `skills/coo-developer/` 빠른 spike 구현 |
+| ✅ | engineering-data-engineer | 백데이터 기반 가설 검증 |
+| ✅ | engineering-technical-writer | `skills/documentationer/` 실험 문서화 |
+| ✅ | specialized-document-generator | 보고서 초안 자동화 |
+| ✅ | design-ux-researcher | 리서치 질문 설계·가설 보강 |
 
 ### 3. CTO (Generator 총괄, 신규)
 | 채택 | 출처 | 배치 |
@@ -207,7 +219,7 @@ docmeta:
 ## Phase C 대시보드 (Brick Office)
 
 - 위치: `apps/harness-dashboard/` (Next.js, SVG 2.5D isometric)
-- 룸: CEO실 / COO실 / CTO팀룸(BE·FE·Designer·DevOps 책상) / CQO팀룸(Func·Visual·CQ·Arch·Sec) / Service-Ops룸(모니터 벽) / 회의실(Sprint Planning) / 아카이브 창고
+- 룸: CEO실 / COO실(Planner + Hypothesis Cell) / CTO팀룸(BE·FE·Designer·DevOps 책상) / CQO팀룸(Func·Visual·CQ·Arch·Sec) / Service-Ops룸(모니터 벽) / 회의실(Sprint Planning) / 아카이브 창고
 - 데이터: `progress.json` + `progress.log` + `actions/*` chokidar watch → WS push
 - 미니피규어 상태: idle / typing / talking(handoff) / red-alert
 - 인터랙션: 미니피규어 클릭→로그 패널, 룸 클릭→부서 메트릭, GOAL 카드는 CEO실 벽에 핀

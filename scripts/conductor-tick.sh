@@ -25,6 +25,8 @@ pipeline=$(jq -r '.pipeline // "null"' "$PROGRESS")
 mode=$(jq -r '.mode // "auto"' "$PROGRESS")
 user_override=$(jq -r '.mode_decision.user_override // "null"' "$PROGRESS")
 requested_mode=$(jq -r '.service_ops.requested_mode // "null"' "$PROGRESS")
+planner_requested_mode=$(jq -r '.planner.requested_mode // "null"' "$PROGRESS")
+planner_last_brief=$(jq -r '.planner.last_brief // "null"' "$PROGRESS")
 goal_adherence=$(jq -r '.goals.current_adherence // "null"' "$PROGRESS")
 meetings_active_count=$(jq -r '(.meetings.active | length) // 0' "$PROGRESS")
 cqo_verdict=$(jq -r '.cqo.sprint_verdict // "pending"' "$PROGRESS")
@@ -258,12 +260,44 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
     }"
 
 elif [ "$current_agent" = "planner" ] && [ "$agent_status" = "completed" ]; then
-  next="cto"
-  action="handoff:cto:plan-ready"
-  new_workflow_stage="cto-review"
-  planner_filter='
-    .planner.last_brief = (.planner.requested_mode // "goal-alignment") |
-    .planner.requested_mode = null'
+  if [ "$planner_requested_mode" = "hypothesis" ]; then
+    next="documentationer"
+    action="dispatch:hypothesis:documentationer"
+    new_workflow_stage="coo-hypothesis-research"
+    planner_filter='
+      .planner.last_brief = "hypothesis:research" |
+      .planner.requested_mode = null'
+  else
+    next="cto"
+    action="handoff:cto:plan-ready"
+    new_workflow_stage="cto-review"
+    planner_filter='
+      .planner.last_brief = (.planner.requested_mode // "goal-alignment") |
+      .planner.requested_mode = null'
+  fi
+
+elif [ "$current_agent" = "documentationer" ] && [ "$agent_status" = "completed" ]; then
+  if [ "$planner_last_brief" = "hypothesis:research" ]; then
+    next="coo-developer"
+    action="dispatch:hypothesis:experiment"
+    new_workflow_stage="coo-hypothesis-experiment"
+    planner_filter='.planner.last_brief = "hypothesis:experiment"'
+  elif [ "$planner_last_brief" = "hypothesis:report" ]; then
+    next="planner"
+    action="dispatch:planner:hypothesis-verdict"
+    new_workflow_stage="coo-hypothesis-verdict"
+    planner_filter='
+      .planner.last_brief = "hypothesis:done" |
+      .planner.requested_mode = "hypothesis-verdict"'
+  fi
+
+elif [ "$current_agent" = "coo-developer" ] && [ "$agent_status" = "completed" ]; then
+  if [ "$planner_last_brief" = "hypothesis:experiment" ]; then
+    next="documentationer"
+    action="dispatch:hypothesis:report"
+    new_workflow_stage="coo-hypothesis-report"
+    planner_filter='.planner.last_brief = "hypothesis:report"'
+  fi
 
 elif [ "$current_agent" = "cto" ]; then
   if [ "${cto_hotfixes:-0}" -gt 0 ] || [ "${ops_recommendations:-0}" -gt 0 ]; then

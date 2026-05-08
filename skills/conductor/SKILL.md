@@ -142,9 +142,16 @@ idle ─► running ─► (waiting_meeting | waiting_owner | running) ─► co
 [all features PASS]                → Phase Gate Meeting
 [Service-Ops cron due]             → spawn service-ops (requested_mode=monitor)
 [ops-report ready]                 → handoff to CTO (spawn cto)
+[planner requested_mode=hypothesis]→ spawn coo-developer and/or documentationer
 [generator-* / eval-functional spawn 직전] → 동시 spawn service-ops (requested_mode=monitor, stream-mode, G-006)
 [mode=team & ready ≥ 2]            → 동시 spawn min(ready,3) generator/evaluator (G-005)
 ```
+
+`planner.requested_mode == "hypothesis"` 인 경우 Conductor 는 정규 Generator/Evaluator 체인보다 COO 직속 셀을 우선한다:
+
+- 리서치·정리 중심 → `documentationer`
+- 빠른 실험·백데이터 코드 중심 → `coo-developer`
+- 둘 다 필요 → 같은 tick 에 2명 병렬 spawn 가능
 
 ### 5.1 Team mode 병렬 spawn (G-005)
 

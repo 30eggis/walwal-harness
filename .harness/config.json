@@ -61,6 +61,20 @@
       "thinking_mode": null,
       "thinking_mode_description": null
     },
+    "coo-developer": {
+      "role": "COO 직속 가설검증 개발. 빠른 spike, 백데이터 실험, throwaway prototype.",
+      "skill": "harness-coo-developer",
+      "model": "sonnet",
+      "thinking_mode": null,
+      "runtime_status": "partially_connected"
+    },
+    "documentationer": {
+      "role": "COO 직속 리서치·문서화·가설 판정. 실험 결과를 의사결정 문서로 정리.",
+      "skill": "harness-documentationer",
+      "model": "opus",
+      "thinking_mode": null,
+      "runtime_status": "partially_connected"
+    },
     "generator-backend": {
       "role": "NestJS MSA 서비스 구현, API 엔드포인트, DB 스키마",
       "skill": "harness-generator-backend",

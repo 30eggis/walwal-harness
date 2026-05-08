@@ -7,7 +7,7 @@ import { AGENT_ROSTER } from "./agent-roster";
 export const ROOM_CAPACITY: Record<RoomId, number> = {
   ceo: 1,
   meeting: 7,
-  coo: 1,
+  coo: 3,
   "cto-team": 5,
   "cqo-team": 5,
   "service-ops": 1,

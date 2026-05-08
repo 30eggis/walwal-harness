@@ -38,7 +38,7 @@ describe("readHarnessState", () => {
 
     const snap = readHarnessState(dir);
     expect(snap.errorBanner).toBeNull();
-    expect(snap.agents.length).toBe(14);
+    expect(snap.agents.length).toBe(AGENT_ROSTER.length);
     expect(snap.agents.map((a) => a.id).sort()).toEqual(
       AGENT_ROSTER.map((a) => a.id).sort()
     );
@@ -63,7 +63,7 @@ describe("readHarnessState", () => {
   it("missing .harness: returns error banner, no crash", () => {
     const snap = readHarnessState(dir);
     expect(snap.errorBanner?.level).toBe("error");
-    expect(snap.agents.length).toBe(14);
+    expect(snap.agents.length).toBe(AGENT_ROSTER.length);
   });
 
   it("corrupt progress.json: returns error banner, no crash", () => {
@@ -72,6 +72,6 @@ describe("readHarnessState", () => {
     const snap = readHarnessState(dir);
     expect(snap.errorBanner?.level).toBe("error");
     expect(snap.errorBanner?.message_en).toContain("corrupt");
-    expect(snap.agents.length).toBe(14);
+    expect(snap.agents.length).toBe(AGENT_ROSTER.length);
   });
 });

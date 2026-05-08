@@ -83,6 +83,7 @@ Source: https://github.com/msitarzewski/agency-agents (MIT)
 | Enterprise Feature | "기존 시스템", "엔터프라이즈", "통합" | + Eval-Arch·Eval-Security·Service-Ops |
 | Marketing/Content | "랜딩", "캠페인", "콘텐츠" | Designer·Marketing(옵트인)·Eval-Visual |
 | Incident Response | "장애", "다운", "긴급", "롤백" | Incident-Responder·Service-Ops·관련 Gen |
+| Hypothesis Validation | "가설", "리서치", "실험", "백데이터", "빠르게 검증" | Planner·coo-developer·documentationer·Service-Ops(옵트인) |
 
 매칭 실패 시 → "추가 정보가 필요합니다" 1회 질문 → 그래도 모호하면 **Startup MVP** 기본값.
 
@@ -96,7 +97,7 @@ Source: https://github.com/msitarzewski/agency-agents (MIT)
   "runbook": "startup-mvp",
   "departments": {
     "must":  ["planner","cto","cqo","conductor","meeting-manager","generator-backend","generator-frontend","generator-designer","evaluator-functional","evaluator-visual","evaluator-code-quality","generator-devops"],
-    "should":["evaluator-architecture","service-ops"],
+    "should":["evaluator-architecture","service-ops","coo-developer","documentationer"],
     "may":   ["evaluator-security","marketing","sales"],
     "off":   ["finance","legal-compliance","spatial-computing"]
   },

@@ -150,7 +150,9 @@
   "org": {
     "active": [
       "dispatcher",
-      "planner"
+      "planner",
+      "coo-developer",
+      "documentationer"
     ],
     "inactive": [],
     "recruiting": []
