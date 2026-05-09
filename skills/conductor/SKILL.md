@@ -130,6 +130,7 @@ fi
 ## 2. 입력 / 출력
 
 **입력**
+- `CONVENTIONS.md` + `.harness/conventions/shared.md` + `.harness/conventions/conductor.md` + `.harness/gotchas/conductor.md` + `.harness/memory.md` (회사 구조/자율 구조/하네스 SoT)
 - `.harness/actions/goals.md` (현재 활성 GOAL)
 - `.harness/progress.json` (현재 상태)
 - `.harness/actions/feature-list.json`

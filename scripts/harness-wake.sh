@@ -100,11 +100,12 @@ Policy:
 - Keep terminal output concise; write evidence to project files.
 
 Tasks:
-1. Read .harness/progress.json and the hourly review above.
+1. Read CONVENTIONS.md if present, .harness/conventions/shared.md, relevant .harness/conventions/<role>.md, .harness/gotchas/<role>.md, .harness/memory.md, .harness/progress.json, and the hourly review above.
 2. If service_ops.requested_mode is monitor, run or trigger one service-ops monitor pass and record last_check. stream_active may be true only during the pass and must be false when finished.
-3. Check conductor state against the current GOAL and route the next department without waiting for Owner.
-4. If there is an active incident or operational warning, make sure meeting-manager has shared context and an action decision.
-5. Append a short factual summary to .harness/progress.log and any normal harness artifacts used by this project.
+3. Treat the hourly review as Executive Meeting Minutes. Verify it contains CEO/COO/CTO/CQO/Service-Ops role positions, discussion, decision JSON, and action items.
+4. Check conductor state against the current GOAL and route the next department without waiting for Owner.
+5. If there is an active incident or operational warning, make sure meeting-manager has shared context and an action decision that names CTO/CQO/Service-Ops responsibilities.
+6. Append a short factual summary to .harness/progress.log and any normal harness artifacts used by this project.
 EOF
 
   case "$mode" in

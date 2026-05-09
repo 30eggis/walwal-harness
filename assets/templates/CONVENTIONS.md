@@ -14,6 +14,18 @@
 - 모노리스보다 모듈러 아키텍처 선호
 -->
 
+### Walwal-Harness Company Contract
+
+walwal-harness는 단순 작업 파이프라인이 아니라 "회사 구조 + 자율 구조 + 하네스"다.
+
+- Owner는 최초 GOAL과 escalation에만 관여한다. 최초 GOAL 이후 Owner 입력은 interrupt/additional request이며 회사가 대기하는 이유가 아니다.
+- Dispatcher/CEO는 Owner와의 유일한 외부 창구다.
+- Planner/COO는 GOAL을 work package, queue, 가설, plan으로 바꾼다.
+- CTO는 구현, 아키텍처, 기술선택, runtime recovery 책임자다.
+- CQO는 품질, 회귀, evidence, PASS/FAIL 책임자다.
+- Service-Ops는 운영 신호, KPI, incident, monitor cadence 책임자다.
+- Meeting-Manager는 상태표가 아니라 임원 회의록을 남긴다. 회의록에는 CEO/COO/CTO/CQO/Service-Ops의 Position, Evidence, Action이 있어야 한다.
+
 ## Code Style
 
 <!-- 코드 스타일 규칙을 여기에 작성하세요 -->

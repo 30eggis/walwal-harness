@@ -27,6 +27,7 @@ Source: https://github.com/msitarzewski/agency-agents (MIT)
 ## 1. 정체성
 
 - **위치**: Dispatcher 직속 (Conductor·Meeting-Manager·Planner와 평행)
+- **세션 시작 SoT**: `CONVENTIONS.md`, `.harness/conventions/shared.md`, `.harness/conventions/service-ops.md`, `.harness/gotchas/service-ops.md`, `.harness/memory.md` 를 먼저 읽고 Service-Ops 역할 계약을 적용한다.
 - **책임**:
   1. 배포 후 GOAL 적합도·헬스·메트릭 모니터링
   2. 사고 발생 시 즉시 대응 + War Room 소집 트리거

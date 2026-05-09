@@ -65,8 +65,8 @@ jq '.agent_status = "completed" | .completed_agents += ["planner"]'   .harness/p
 
 ### On Start
 1. `.harness/progress.json` 읽기 — `next_agent`가 `"dispatcher"`인지 확인
-2. progress.json 업데이트: `current_agent` → `"dispatcher"`, `agent_status` → `"running"`, `updated_at` 갱신
-3. `.harness/memory.md` 읽기 — **프로젝트 공유 학습 규칙 적용**
+2. `CONVENTIONS.md`, `.harness/conventions/shared.md`, `.harness/conventions/dispatcher.md`, `.harness/gotchas/dispatcher.md`, `.harness/memory.md` 읽기 — **회사 구조 + 자율 구조 + 하네스 SoT 적용**
+3. progress.json 업데이트: `current_agent` → `"dispatcher"`, `agent_status` → `"running"`, `updated_at` 갱신
 
 ### On Complete
 1. progress.json 업데이트:

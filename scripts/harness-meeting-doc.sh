@@ -158,33 +158,43 @@ EOF
 
   cat > "$meeting_dir/prep-dispatcher.md" <<'EOF'
 # Prep — Dispatcher/CEO
-- Goal 자체가 흔들렸는가?
-- Owner escalation 이 필요한가?
-- 사업 우선순위 또는 KPI 정의를 바꿔야 하는가?
+- Role: 회사 내부 CEO. Owner와의 유일한 외부 창구이며, Owner 입력은 최초 GOAL 이후 interrupt/additional request로만 취급한다.
+- Must answer: Goal 자체가 흔들렸는가, 아니면 내부 실행/품질/운영 문제인가?
+- Must decide: Owner escalation 이 정말 필요한가, 아니면 내부 임원진이 처리할 수 있는가?
+- Must not: Owner를 기다린다는 결론으로 회의를 끝내지 마라.
+- Evidence to cite: active GOAL, KPI, previous decision, escalation trigger.
 EOF
   cat > "$meeting_dir/prep-planner.md" <<'EOF'
 # Prep — Planner/COO
-- 기획/가설/웹리서치/레퍼런스 보강이 필요한가?
-- planning_drift 또는 goal_drift 근거는 무엇인가?
-- 수정해야 할 plan/feature/api 는 무엇인가?
+- Role: COO. GOAL을 실행 가능한 work package, 가설, queue로 바꾸고 조직이 옆길로 새지 않게 한다.
+- Must answer: planning_drift 또는 goal_drift 인가, 아니면 구현/품질/운영 문제인가?
+- Must decide: 다음 operating cycle에서 어떤 work package를 queue/backlog/track으로 만들 것인가?
+- Must not: "다음 sprint에서", "Owner가 정하면" 같은 대기형 결론을 쓰지 마라.
+- Evidence to cite: feature-list, sprint-contract, queue, hypothesis/report artifacts.
 EOF
   cat > "$meeting_dir/prep-cto.md" <<'EOF'
 # Prep — CTO
-- 구현/아키텍처/기술선택이 원인인가?
-- implementation_drift 근거는 무엇인가?
-- 어떤 generator/evaluator를 다시 태워야 하는가?
+- Role: CTO. 구현, 아키텍처, 기술선택, runtime recovery의 책임자다.
+- Must answer: implementation_drift 인가, 런타임 장애인가, 설계 변경이 필요한가?
+- Must decide: 어떤 generator/devops/hotfix worker를 태우고 어떤 deliverable을 요구할 것인가?
+- Must not: 운영 장애를 단순 Service-Ops 알림으로만 남기지 마라. 복구 owner를 지정하라.
+- Evidence to cite: code path, build/test output, runtime health, cto-review.
 EOF
   cat > "$meeting_dir/prep-cqo.md" <<'EOF'
 # Prep — CQO
-- 품질/회귀/검증 부족이 원인인가?
-- 어떤 evidence가 이 결론을 지지하는가?
-- evidence 없는 추정은 금지한다.
+- Role: CQO. 품질, 회귀, 검증 기준의 최종 감시자다.
+- Must answer: evidence가 충분한가, PASS/FAIL 판정이 방어 가능한가?
+- Must decide: 어떤 evaluator/check가 필요하고, 어떤 주장은 검증 전까지 보류해야 하는가?
+- Must not: evidence 없는 낙관론을 회의 결론으로 통과시키지 마라.
+- Evidence to cite: evaluator reports, regression results, cqo-audit, reproducible checks.
 EOF
   cat > "$meeting_dir/prep-service-ops.md" <<'EOF'
 # Prep — Service-Ops
-- 어떤 KPI/로그/incident가 Goal에서 벗어났는가?
-- ops_drift 여부를 먼저 판단하라.
-- 운영 측 evidence를 문서 경로와 함께 적어라.
+- Role: Service-Ops. 운영 신호, KPI, incident, monitor cadence의 책임자다.
+- Must answer: 어떤 KPI/로그/health/incident가 Goal에서 벗어났는가?
+- Must decide: ops_drift 인가, incident-war-room 이 필요한가, monitor cadence를 바꿔야 하는가?
+- Must not: 서버 down을 혼자 경고만 하고 끝내지 마라. 회의에 올려 CTO/CQO action으로 연결하라.
+- Evidence to cite: ops-report path, health table, incident timeline, last_check.
 EOF
 
   decision_json="$(default_decision_json "$drift")"
@@ -216,6 +226,35 @@ $(jq '.prior_tracks' <<<"$resolved_fork_context")
 - reason: $requested_reason
 - goal_adherence: $goal_adherence
 $fork_section
+
+## Required Role Positions
+
+Meeting-Manager must fill this section before reporting the meeting as complete.
+
+### Dispatcher/CEO
+- Position:
+- Evidence:
+- Escalation needed: yes/no
+
+### Planner/COO
+- Position:
+- Evidence:
+- Proposed work package:
+
+### CTO
+- Position:
+- Evidence:
+- Engineering action:
+
+### CQO
+- Position:
+- Evidence:
+- Quality gate:
+
+### Service-Ops
+- Position:
+- Evidence:
+- Operational action:
 
 ## Decision JSON
 \`\`\`json

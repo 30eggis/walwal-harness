@@ -81,6 +81,20 @@ docmeta:
   - **Planner / CTO / CQO / Generator / Evaluator / Service-Ops**: Owner 와 직접 대화 X. 모든 통신은 Dispatcher 경유.
 - **Why this matters**: 회사가 매 단계 사용자 허락을 구하면 NEXUS 메타포 자체가 무너진다. P3 "Continuous Loop > End-of-Pipeline" 가 약속하는 95% 결함 차단·40~60% 단축은 자율 루프에서만 성립한다.
 
+### [M-SYS-EXEC-ROLE-CONTRACT] 회사 역할 계약은 하네스 SoT에서 자동 적용되어야 한다
+- **Date**: 2026-05-10
+- **Status**: verified
+- **TTL**: 영구
+- **Lesson**: CEO/COO/CTO/CQO/Service-Ops가 무엇을 해야 하고 무엇을 하면 안 되는지는 일회성 wake prompt나 개별 회의 문구가 아니라 하네스의 convention/gotcha/memory SoT에 있어야 한다. 모든 에이전트는 세션 시작 시 `CONVENTIONS.md`, `.harness/conventions/shared.md`, 자기 role convention, 자기 gotcha, `.harness/memory.md` 순서로 읽고 이 계약을 적용한다.
+- **Context**: Owner가 Paperclip과 비교하며 현재 하네스는 각 임원이 자기 역할을 명확히 이해하고 일한다는 느낌이 없다고 지적했다. 원인은 역할 계약이 문서에는 있었지만 hourly/review 실행 경로와 worker prompt가 이를 자동 적용하지 않고 상태 리포트만 만든 데 있었다.
+- **Applies to**:
+  - **Dispatcher/CEO**: Owner-facing 창구와 GOAL/escalation 책임.
+  - **Planner/COO**: GOAL → work package/queue/가설 변환 책임.
+  - **CTO**: 구현/아키텍처/runtime recovery 책임.
+  - **CQO**: evidence/PASS/FAIL/회귀 검증 책임.
+  - **Service-Ops**: 운영 신호를 회의 evidence와 CTO/CQO action으로 연결.
+  - **Meeting-Manager**: 상태표가 아니라 임원 회의록을 남김.
+
 ### [M-002] FE Evaluation은 Playwright 필수
 - **Date**: 2026-04-20
 - **Status**: verified

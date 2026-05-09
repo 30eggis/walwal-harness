@@ -286,7 +286,7 @@ function scaffoldHarness() {
   // accumulated `### [C-NNN]` entries.
   const conventionsSrc = path.join(PKG_ROOT, 'conventions');
   if (fs.existsSync(conventionsSrc)) {
-    const CONV_ENTRY = /^### \[C-\d+\]/m;
+    const CONV_ENTRY = /^### \[C-[A-Z0-9_-]+\]/m;
     const files = fs.readdirSync(conventionsSrc);
     for (const file of files) {
       const destPath = path.join(HARNESS_DIR, 'conventions', file);
@@ -1007,6 +1007,7 @@ function detectMigrationNeeded() {
     configMissingCompanyMode: false,
     memoryMissingSystemEntries: [],
     gotchaMissingEntries: {},   // { "<filename>": [G-IDs...] }
+    conventionMissingEntries: {}, // { "<filename>": [C-IDs...] }
     bundleVersionStale: null,    // { current, installed }
   };
 
@@ -1026,6 +1027,25 @@ function detectMigrationNeeded() {
         const dstIds = new Set(extractGotchaEntryIds(fs.readFileSync(destPath, 'utf8')));
         const missing = srcIds.filter((id) => !dstIds.has(id));
         if (missing.length) flags.gotchaMissingEntries[file] = missing;
+      } catch {}
+    }
+  }
+
+  // Convention entry-level diff: preserve user [C-NNN] entries, append only
+  // bundled system entries such as [C-SYS-*].
+  const conventionsSrc = path.join(PKG_ROOT, 'conventions');
+  const conventionsDest = path.join(HARNESS_DIR, 'conventions');
+  if (fs.existsSync(conventionsSrc) && fs.existsSync(conventionsDest)) {
+    const files = fs.readdirSync(conventionsSrc).filter((f) => f.endsWith('.md') && f !== 'README.md');
+    for (const file of files) {
+      const srcPath = path.join(conventionsSrc, file);
+      const destPath = path.join(conventionsDest, file);
+      if (!fs.existsSync(destPath)) continue;
+      try {
+        const srcIds = extractConventionEntryIds(fs.readFileSync(srcPath, 'utf8'));
+        const dstIds = new Set(extractConventionEntryIds(fs.readFileSync(destPath, 'utf8')));
+        const missing = srcIds.filter((id) => !dstIds.has(id));
+        if (missing.length) flags.conventionMissingEntries[file] = missing;
       } catch {}
     }
   }
@@ -1104,6 +1124,25 @@ function extractGotchaEntryBlock(md, id) {
   return m ? m[1].trimEnd() : null;
 }
 
+// Returns convention entry IDs ("[C-001]", "[C-SYS-*]" etc.) found in markdown.
+function extractConventionEntryIds(md) {
+  const re = /^#{2,3}\s+\[(C-[A-Z0-9_-]+)\]/gm;
+  const ids = [];
+  let m;
+  while ((m = re.exec(md)) !== null) ids.push(m[1]);
+  return ids;
+}
+
+function extractConventionEntryBlock(md, id) {
+  const escId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(
+    `(^#{2,3}\\s+\\[${escId}\\][\\s\\S]*?)(?=^#{2,3}\\s+\\[C-|$(?![\\s\\S]))`,
+    'm',
+  );
+  const m = md.match(re);
+  return m ? m[1].trimEnd() : null;
+}
+
 function showMigrationProposal(flags) {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════╗');
@@ -1126,6 +1165,13 @@ function showMigrationProposal(flags) {
   if (gotchaSummary.length) {
     console.log('  • gotchas/: 시스템 entry 누락 — entry-level append 가능 (사용자 [G-NNN] 보존)');
     for (const [file, ids] of gotchaSummary) {
+      console.log(`    ${file}: [${ids.join(', ')}]`);
+    }
+  }
+  const conventionSummary = Object.entries(flags.conventionMissingEntries || {});
+  if (conventionSummary.length) {
+    console.log('  • conventions/: 시스템 entry 누락 — entry-level append 가능 (사용자 [C-NNN] 보존)');
+    for (const [file, ids] of conventionSummary) {
       console.log(`    ${file}: [${ids.join(', ')}]`);
     }
   }
@@ -1252,6 +1298,30 @@ function runMigrate(opts = {}) {
     log(`  gotchas/${file}: 시스템 entry ${blocks.length}개 append (${missingIds.join(', ')})`);
     if (!dryRun) {
       fs.writeFileSync(path.join(backupDir, `gotchas-${file}`), original);
+      const sep = original.endsWith('\n') ? '\n' : '\n\n';
+      fs.writeFileSync(destPath, original + sep + blocks.join('\n\n') + '\n');
+    }
+  }
+
+  // 4b. convention entry merge — append bundled system [C-*] entries while
+  //     preserving user-authored [C-NNN] history.
+  const conventionMissing = flags.conventionMissingEntries || {};
+  for (const [file, missingIds] of Object.entries(conventionMissing)) {
+    if (!missingIds.length) continue;
+    const srcPath = path.join(PKG_ROOT, 'conventions', file);
+    const destPath = path.join(HARNESS_DIR, 'conventions', file);
+    if (!fs.existsSync(srcPath) || !fs.existsSync(destPath)) continue;
+    const original = fs.readFileSync(destPath, 'utf8');
+    const tpl = fs.readFileSync(srcPath, 'utf8');
+    const blocks = [];
+    for (const id of missingIds) {
+      const block = extractConventionEntryBlock(tpl, id);
+      if (block) blocks.push(block);
+    }
+    if (!blocks.length) continue;
+    log(`  conventions/${file}: 시스템 entry ${blocks.length}개 append (${missingIds.join(', ')})`);
+    if (!dryRun) {
+      fs.writeFileSync(path.join(backupDir, `conventions-${file}`), original);
       const sep = original.endsWith('\n') ? '\n' : '\n\n';
       fs.writeFileSync(destPath, original + sep + blocks.join('\n\n') + '\n');
     }

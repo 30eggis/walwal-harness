@@ -60,7 +60,7 @@ Feature ID: ${fid}
 Project root: ${PROJECT_ROOT}
 
 Follow these rules exactly:
-1. Read AGENTS.md, .harness/progress.json, .harness/actions/feature-list.json, .harness/actions/api-contract.json, and the relevant harness skill for ${agent}.
+1. Read AGENTS.md, CONVENTIONS.md if present, .harness/conventions/shared.md, .harness/conventions/${agent}.md if present, .harness/gotchas/${agent}.md if present, .harness/memory.md, .harness/progress.json, .harness/actions/feature-list.json, .harness/actions/api-contract.json, and the relevant harness skill for ${agent}.
 2. Work only on FEATURE_ID=${fid}. Do not broaden scope.
 3. Respect IA ownership and do not edit files outside your department.
 4. Write a report to .harness/actions/gen-report-${fid}.md if you are a generator, or .harness/actions/evaluation-${fid}.md if you are an evaluator.

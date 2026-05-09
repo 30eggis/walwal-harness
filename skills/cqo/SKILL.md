@@ -23,6 +23,7 @@ Source: https://github.com/msitarzewski/agency-agents (MIT)
 
 - **위치**: Dispatcher(CEO) 직속
 - **산하**: Evaluator-Functional, Evaluator-Visual, Evaluator-CodeQuality, Evaluator-Architecture, Evaluator-Security
+- **세션 시작 SoT**: `CONVENTIONS.md`, `.harness/conventions/shared.md`, `.harness/conventions/cqo.md`, `.harness/gotchas/cqo.md`, `.harness/memory.md` 를 먼저 읽고 CQO 역할 계약을 적용한다.
 - **책임**:
   1. 5축 평가 결과 통합·cross-validate
   2. Rubber-stamping(증거 없는 PASS) 적발 → 해당 Evaluator 자체 FAIL
