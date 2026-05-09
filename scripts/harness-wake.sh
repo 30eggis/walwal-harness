@@ -2,9 +2,9 @@
 # harness-wake.sh — hourly safety wake (v6.2)
 #
 # launchd 가 1시간 주기로 호출. 등록된 모든 walwal-harness 프로젝트에 대해:
-#   1) tmux 세션이 살아있는지 확인
-#   2) idle 한 시간이 임계치 이상이면 (.harness/progress.json mtime 기준, review 실행 전 캡처)
-#   3) tmux 세션에 안전한 continuation prompt 송출
+#   1) idle 한 시간이 임계치 이상이면 (.harness/progress.json mtime 기준, review 실행 전 캡처)
+#   2) deterministic hourly review 를 디스크에 남김
+#   3) 기본값으로 기존 tmux 세션에 긴 prompt 를 주입하지 않고 headless 1-tick Claude 를 실행
 #
 # 등록 방식: ~/.walwal-harness/projects.list 에 한 줄에 하나씩 절대경로 기재.
 # 또는 환경변수 WALWAL_HARNESS_PROJECTS 에 콜론(:)으로 구분된 절대경로 목록.
@@ -32,6 +32,109 @@ in_force_wake_window() {
   # 기본값은 Anthropic 5-hour reset 이 자주 걸리는 06:00 KST 주변.
   # StartInterval=3600 이 몇 분 밀려 실행돼도 복구되도록 20분 창을 둔다.
   [ "$((10#$hhmm))" -ge "$((10#$start))" ] && [ "$((10#$hhmm))" -le "$((10#$end))" ]
+}
+
+find_tmux_session() {
+  local project_root="$1"
+  local base sanitized upper var cand
+
+  base=$(basename "$project_root")
+  sanitized=$(echo "$base" | tr -- '-. ' '___')
+  for cand in "claude_${sanitized}_" "claude_${base}_"; do
+    if tmux has-session -t "$cand" 2>/dev/null; then
+      echo "$cand"
+      return 0
+    fi
+  done
+
+  upper=$(echo "$sanitized" | tr 'a-z' 'A-Z')
+  var="WALWAL_HARNESS_TMUX_${upper}"
+  if [ -n "${!var:-}" ] && tmux has-session -t "${!var}" 2>/dev/null; then
+    echo "${!var}"
+    return 0
+  fi
+
+  return 1
+}
+
+start_headless_tick() {
+  local project_root="$1"
+  local idle="$2"
+  local force="$3"
+  local review_path="$4"
+  local mode stamp wake_dir ops_dir prompt_rel log_rel prompt_path log_path pid_file old_pid pid status tmux_session
+
+  mode="${HARNESS_WAKE_MODE:-headless}"
+  stamp="$(date -u "+%Y%m%dT%H%M%SZ")"
+  wake_dir="$project_root/.harness/actions/wake"
+  ops_dir="$project_root/.harness/ops/wake"
+  mkdir -p "$wake_dir" "$ops_dir"
+
+  prompt_rel=".harness/actions/wake/wake-${stamp}.prompt.md"
+  log_rel=".harness/ops/wake/wake-${stamp}.log"
+  prompt_path="$project_root/$prompt_rel"
+  log_path="$project_root/$log_rel"
+  pid_file="$ops_dir/wake.pid"
+
+  if [ -f "$pid_file" ]; then
+    old_pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -n "$old_pid" ] && kill -0 "$old_pid" 2>/dev/null; then
+      say "skip-headless: $project_root (previous wake pid=$old_pid still running)"
+      return 0
+    fi
+  fi
+
+  cat > "$prompt_path" <<EOF
+You are the walwal-harness autonomous hourly wake tick.
+
+Project root: $project_root
+Wake reason: idle=${idle}s force=${force}
+Hourly review: ${review_path:-"(not available)"}
+
+Policy:
+- Owner input after the initial GOAL is an interrupt or additional request, never a reason to wait.
+- Never set conductor.state to waiting_owner. Normalize any waiting_owner state to waiting_meeting and continue.
+- meeting-manager is the default synchronization loop. Incidents, service warnings, goal drift, and escalations go to meeting-manager first.
+- Keep this to one bounded autonomous tick. Do not run an endless loop.
+- Do not write future timestamps to .harness/progress.log or artifacts.
+- Keep terminal output concise; write evidence to project files.
+
+Tasks:
+1. Read .harness/progress.json and the hourly review above.
+2. If service_ops.requested_mode is monitor, run or trigger one service-ops monitor pass and record last_check. stream_active may be true only during the pass and must be false when finished.
+3. Check conductor state against the current GOAL and route the next department without waiting for Owner.
+4. If there is an active incident or operational warning, make sure meeting-manager has shared context and an action decision.
+5. Append a short factual summary to .harness/progress.log and any normal harness artifacts used by this project.
+EOF
+
+  case "$mode" in
+    record)
+      status="recorded"
+      ;;
+    headless|"")
+      if command -v claude >/dev/null 2>&1; then
+        (
+          cd "$project_root" || exit 1
+          claude -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+        ) &
+        pid=$!
+        echo "$pid" > "$pid_file"
+        status="spawned pid=$pid"
+      else
+        status="recorded claude-not-found"
+      fi
+      ;;
+    *)
+      status="recorded unsupported-mode=$mode"
+      ;;
+  esac
+
+  echo "$(date -u "+%Y-%m-%dT%H:%M:%SZ") | wake | headless | $status | idle=${idle}s | force=${force} | prompt=$prompt_rel | log=$log_rel" >> "$project_root/.harness/progress.log"
+  say "wake-headless: $project_root (idle ${idle}s, force=${force}, mode=${mode}) → $status $log_rel"
+
+  if tmux_session="$(find_tmux_session "$project_root" 2>/dev/null)"; then
+    tmux display-message -t "$tmux_session" "walwal wake headless tick: $status ($log_rel)" 2>/dev/null || true
+  fi
 }
 
 PROJECTS_LIST="${HOME}/.walwal-harness/projects.list"
@@ -106,35 +209,15 @@ for PROJECT_ROOT in "${PROJECTS[@]}"; do
   # Every hourly batch must leave disk-backed evidence, even if Claude/tmux is
   # stopped or busy. This deterministic review runs after the idle snapshot.
   if [ -x "$PROJECT_ROOT/scripts/harness-hourly-review.sh" ]; then
-    review_path=$(bash "$PROJECT_ROOT/scripts/harness-hourly-review.sh" "$PROJECT_ROOT" 2>/dev/null || true)
+    review_output=$(bash "$PROJECT_ROOT/scripts/harness-hourly-review.sh" "$PROJECT_ROOT" 2>/dev/null || true)
+    review_path=$(printf "%s\n" "$review_output" | grep -Eo '(/[^[:space:]]+|[.][^[:space:]]+)\.md' | tail -1)
+    if [ -z "$review_path" ]; then
+      review_path=$(printf "%s\n" "$review_output" | tail -1)
+    fi
     if [ -n "$review_path" ]; then
       say "review: $PROJECT_ROOT → $review_path"
     else
       say "review-fail: $PROJECT_ROOT"
-    fi
-  fi
-
-  # tmux 세션명 추론: claude_<basename>_  (dash/space → underscore)
-  # 예: okx → claude_okx_, walwal-harness → claude_walwal_harness_
-  base=$(basename "$PROJECT_ROOT")
-  sanitized=$(echo "$base" | tr -- '-. ' '___')
-  CANDIDATES=("claude_${sanitized}_" "claude_${base}_")
-  TMUX_SESSION=""
-  for cand in "${CANDIDATES[@]}"; do
-    if tmux has-session -t "$cand" 2>/dev/null; then
-      TMUX_SESSION="$cand"
-      break
-    fi
-  done
-  if [ -z "$TMUX_SESSION" ]; then
-    # WALWAL_HARNESS_TMUX_<UPPER_SANITIZED> 환경변수로 직접 지정 가능
-    upper=$(echo "$sanitized" | tr 'a-z' 'A-Z')
-    var="WALWAL_HARNESS_TMUX_${upper}"
-    if [ -n "${!var:-}" ] && tmux has-session -t "${!var}" 2>/dev/null; then
-      TMUX_SESSION="${!var}"
-    else
-      say "skip: $PROJECT_ROOT (tmux session 추론 실패 — 시도: ${CANDIDATES[*]}; $var 환경변수로 직접 지정 가능)"
-      continue
     fi
   fi
 
@@ -155,13 +238,6 @@ for PROJECT_ROOT in "${PROJECTS[@]}"; do
     fi
   fi
 
-  # tmux 세션이 입력 대기 중일 때만 prompt 송출 (대시보드 첨부 모니터 paneltop 회피)
-  if [ "$PROJECT_FORCE_WAKE" -eq 1 ]; then
-    PROMPT="자율 회사 루프 깨우기 (limit-reset force wake): Anthropic limit reset 이후 정지 복구를 우선 점검하고, conductor 상태 확인 후 다음 부서를 spawn 하라. progress.log 에는 절대 미래 시각을 쓰지 마라."
-  else
-    PROMPT="자율 회사 루프 깨우기 (hourly wake): Owner 입력은 interrupt 로만 취급한다. conductor 가 waiting_owner 여도 대기하지 말고 meeting-manager 를 기본 루프로 삼아 goal 기준 운영 리뷰, service-ops 점검, 다음 부서 spawn 을 진행하라. progress.log 에는 절대 미래 시각을 쓰지 마라."
-  fi
-
   # 발화 직전 service-ops monitor 트리거 partial update.
   # requested_mode 만 set — conductor-tick 이 이걸 보고 service-ops 를 spawn 한다.
   # stream_active 는 service-ops 본인이 spawn 시 §3.1.1 에 따라 직접 set (정직성 룰).
@@ -175,21 +251,7 @@ for PROJECT_ROOT in "${PROJECTS[@]}"; do
       >/dev/null 2>&1 || true
   fi
 
-  # tmux send-keys: Claude CLI 의 입력창에 prompt 입력 + submit.
-  # Claude CLI 는 multi-line 입력을 지원하므로 단일 Enter 는 줄바꿈으로 처리되는 경우가 많다.
-  # 텍스트 → 짧은 대기 → Enter (submit) 의 두 단계로 분리해서 안정적으로 submit.
-  WAKE_PROMPT="$PROMPT 그리고 service-ops 가 monitor 모드로 한 바퀴 돌게 해서 운영 상태를 갱신하라 (last_check, stream_active=true→완료 후 false)."
-  if tmux send-keys -t "$TMUX_SESSION" -l "$WAKE_PROMPT" 2>/dev/null; then
-    sleep 0.3
-    tmux send-keys -t "$TMUX_SESSION" Enter 2>/dev/null
-    if [ "$PROJECT_FORCE_WAKE" -eq 1 ]; then
-      say "wake: $PROJECT_ROOT (idle ${IDLE}s, force=limit-reset) → tmux $TMUX_SESSION (+ service-ops monitor trigger)"
-    else
-      say "wake: $PROJECT_ROOT (idle ${IDLE}s) → tmux $TMUX_SESSION (+ service-ops monitor trigger)"
-    fi
-  else
-    say "wake-fail: $PROJECT_ROOT (tmux send-keys failed)"
-  fi
+  start_headless_tick "$PROJECT_ROOT" "$IDLE" "$PROJECT_FORCE_WAKE" "$review_path"
 done
 
 exit 0
