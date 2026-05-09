@@ -123,7 +123,7 @@ if [ "$mode" = "company" ]; then
 
   echo "# Harness Company Mode active"
   echo "# Queue: ${passed}/${total} passed, ${in_prog} in progress, ${failed} failed"
-  echo "# Company loop runs autonomously with parallel workers. Owner input is only needed for GOAL ambiguity, escalation, or result review."
+  echo "# Company loop runs autonomously with parallel workers. Owner input is an interrupt only; do not wait for Owner after the initial GOAL."
   exit 0
 fi
 
@@ -168,9 +168,14 @@ fi
 # init 상태: 첫 안내
 # ─────────────────────────────────────────
 if [ "$sprint_status" = "init" ]; then
+  if [ "$next_agent" != "null" ] && [ "$next_agent" != "none" ] && [ "$next_agent" != "dispatcher" ]; then
+    echo "# Harness Company Mode active"
+    echo "# Sprint is init, but next_agent=${next_agent}; continue the autonomous loop instead of waiting for Owner."
+  else
   echo "# Harness ready — say \"하네스 엔지니어링 시작\" or /harness-dispatcher"
   echo "# 기본 경로는 회사 루프입니다: dispatch -> CEO meeting -> COO/CTO 분배 -> gen/eval -> CQO -> service-ops -> batch meeting."
   exit 0
+  fi
 fi
 
 # ─────────────────────────────────────────

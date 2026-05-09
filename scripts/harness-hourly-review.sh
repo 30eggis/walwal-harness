@@ -17,6 +17,21 @@ CONFIG="$PROJECT_ROOT/.harness/config.json"
 [ -f "$CONFIG" ] || exit 0
 command -v jq >/dev/null 2>&1 || exit 0
 
+if [ "$(jq -r '.conductor.state // "idle"' "$PROGRESS" 2>/dev/null || echo idle)" = "waiting_owner" ]; then
+  jq '
+    .conductor.state = "waiting_meeting" |
+    .conductor.current_action = "autonomous-normalize-waiting-owner" |
+    .next_agent = "meeting-manager" |
+    .agent_status = "pending" |
+    .meetings.active = ((.meetings.active // []) + ["meeting-manager"] | unique) |
+    .meetings.requested_type = (.meetings.requested_type // "followup-review") |
+    .meetings.requested_reason = (.meetings.requested_reason // "autonomous-normalize-waiting-owner") |
+    .workflow.stage = "ops-monitoring" |
+    .workflow.last_transition = (now | todate) |
+    .workflow.last_reason = "autonomous-normalize-waiting-owner"
+  ' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
+fi
+
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 id="M-$(date -u +%Y%m%dT%H%M%SZ)-hourly"
 meeting_dir="$PROJECT_ROOT/.harness/actions/meetings/$id"
@@ -49,8 +64,10 @@ fi
 verdict="working"
 if [ "$alert_count" -gt 0 ]; then
   verdict="incident"
-elif [ "$conductor_state" = "waiting_owner" ] || [ "$conductor_state" = "escalated" ]; then
+elif [ "$conductor_state" = "escalated" ]; then
   verdict="owner_needed"
+elif [ "$conductor_state" = "waiting_owner" ]; then
+  verdict="autonomous_review"
 elif [ "$current_agent" = "none" ] && [ "$next_agent" = "none" ]; then
   verdict="idle"
 fi
@@ -101,7 +118,10 @@ fi
       echo "Service-Ops found a production alert. Conductor should route incident handling before normal feature work."
       ;;
     owner_needed)
-      echo "Company loop is waiting for Owner input because conductor is $conductor_state."
+      echo "Company loop is escalated and requires explicit intervention because conductor is $conductor_state."
+      ;;
+    autonomous_review)
+      echo "Owner input is treated as an interrupt only. Continue the autonomous company loop through Meeting-Manager and Service-Ops toward the active GOAL."
       ;;
     idle)
       echo "No active company work is visible in progress.json."
@@ -113,13 +133,17 @@ fi
 } > "$meeting_path"
 
 jq --arg ts "$ts" --arg id "$id" --arg rel "$meeting_rel" --arg verdict "$verdict" '
-  .meetings.last_type = "hourly-review" |
-  .meetings.last_reason = $verdict |
-  .meetings.last_review_at = $ts |
-  .meetings.last_review_path = $rel |
-  .meetings.active = [] |
-  .service_ops.monitor.last_hourly_review = $ts
-' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
+	  .meetings.last_type = "hourly-review" |
+	  .meetings.last_reason = $verdict |
+	  .meetings.last_review_at = $ts |
+	  .meetings.last_review_path = $rel |
+	  if $verdict == "incident" or $verdict == "autonomous_review" or $verdict == "idle"
+	  then .meetings.active = ((.meetings.active // []) + ["meeting-manager"] | unique) |
+	       .meetings.requested_type = (.meetings.requested_type // "followup-review") |
+	       .meetings.requested_reason = (.meetings.requested_reason // $verdict)
+	  else . end |
+	  .service_ops.monitor.last_hourly_review = $ts
+	' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
 
 echo "$ts | meeting-manager | hourly-review | $verdict | $id | $meeting_rel" >> "$log_path"
 echo "$meeting_rel"

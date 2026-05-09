@@ -301,7 +301,7 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
       implementation_drift) owner="cto" ;;
       planning_drift) owner="planner" ;;
       ops_drift) owner="service-ops" ;;
-      goal_drift) owner="dispatcher" ;;
+      goal_drift) owner="planner" ;;
       *)
         if [ "$plan_artifacts_ready" = false ]; then owner="planner"; else owner="cto"; fi
         ;;

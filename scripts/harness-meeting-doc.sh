@@ -36,7 +36,7 @@ default_decision_json() {
     implementation_drift) owner="cto"; action_type="implement" ;;
     planning_drift) owner="planner"; action_type="replan" ;;
     ops_drift) owner="service-ops"; action_type="monitor" ;;
-    goal_drift) owner="dispatcher"; action_type="escalate-owner" ;;
+    goal_drift) owner="planner"; action_type="goal-realignment" ;;
   esac
   if [ "$requested_reason" = "goal-intake" ]; then
     owner="planner"
