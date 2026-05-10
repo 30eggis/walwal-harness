@@ -79,7 +79,12 @@ if [ "$live" != "true" ] || [ "${service_count:-0}" -eq 0 ]; then
     .service_ops.monitor.last_check = $ts |
     .service_ops.monitor.stream_active = false |
     .service_ops.monitor.last_report = $report |
-    .service_ops.health = []
+    .service_ops.health = [] |
+    .service_ops.incident.open = [] |
+    .service_ops.incident.signature = "" |
+    .service_ops.incident.repeat_count = 0 |
+    .service_ops.incident.recovery_required = false |
+    .service_ops.incident.last_seen_at = $ts
   ' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
 
   {
@@ -187,15 +192,37 @@ incidents_json="$(jq '
       ts: .ts
     }
   ]' <<<"$results_json")"
+incident_signature="$(jq -r '[.[].id] | sort | join(",")' <<<"$incidents_json")"
+prev_signature="$(jq -r '(.service_ops.incident.signature // "") as $s | if $s != "" then $s else ([.service_ops.incident.open[]?.id] | sort | join(",")) end' "$PROGRESS" 2>/dev/null || echo "")"
+prev_repeat="$(jq -r '.service_ops.incident.repeat_count // 0' "$PROGRESS" 2>/dev/null || echo 0)"
+repeat_count=0
+if [ -n "$incident_signature" ]; then
+  if [ -n "$prev_signature" ] && [ "${prev_repeat:-0}" -lt 1 ]; then
+    prev_repeat=1
+  fi
+  if [ "$incident_signature" = "$prev_signature" ]; then
+    repeat_count=$((prev_repeat + 1))
+  else
+    repeat_count=1
+  fi
+fi
+recovery_required=false
+if [ "$repeat_count" -ge 2 ]; then
+  recovery_required=true
+fi
 
-jq --arg ts "$ts" --arg report "$report_rel" --argjson health "$results_json" --argjson incidents "$incidents_json" --argjson warn "$warn_count" --argjson alert "$down_count" '
+jq --arg ts "$ts" --arg report "$report_rel" --arg signature "$incident_signature" --argjson repeat "$repeat_count" --argjson recovery "$recovery_required" --argjson health "$results_json" --argjson incidents "$incidents_json" --argjson warn "$warn_count" --argjson alert "$down_count" '
   .service_ops.monitor.stream_active = false |
   .service_ops.monitor.last_check = $ts |
   .service_ops.monitor.last_report = $report |
   .service_ops.monitor.warns_this_sprint = ((.service_ops.monitor.warns_this_sprint // 0) + $warn) |
   .service_ops.monitor.alerts_this_sprint = ((.service_ops.monitor.alerts_this_sprint // 0) + $alert) |
   .service_ops.health = $health |
-  .service_ops.incident.open = $incidents
+  .service_ops.incident.open = $incidents |
+  .service_ops.incident.signature = $signature |
+  .service_ops.incident.repeat_count = $repeat |
+  .service_ops.incident.recovery_required = $recovery |
+  .service_ops.incident.last_seen_at = $ts
 ' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
 
 {
@@ -208,6 +235,9 @@ jq --arg ts "$ts" --arg report "$report_rel" --argjson health "$results_json" --
   echo "- ok: $ok_count"
   echo "- warnings: $warn_count"
   echo "- alerts: $down_count"
+  echo "- incident_signature: ${incident_signature:-none}"
+  echo "- repeat_count: $repeat_count"
+  echo "- recovery_required: $recovery_required"
   echo ""
   echo "| Service | Port | Health | Logs | Status |"
   echo "|---|---:|---|---|---|"

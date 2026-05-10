@@ -123,6 +123,7 @@ cmd_install() {
   sed \
     -e "s|{{WAKE_SCRIPT}}|$WAKE_SH|g" \
     -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+    -e "s|{{HOME}}|$HOME|g" \
     "$template" > "$PLIST_PATH"
 
   # 기존 jobs 언로드 (idempotent)

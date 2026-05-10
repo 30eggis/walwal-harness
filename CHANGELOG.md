@@ -29,6 +29,18 @@ docmeta:
 
 # Changelog
 
+## Unreleased
+
+### Added
+- Hourly wake can now run either `claude -p` or `codex exec` via `HARNESS_WAKE_EXECUTOR=claude|codex`.
+- Hourly wake supports `HARNESS_WAKE_MODE=headless|tmux|record`; `tmux` creates a separate time-boxed session per hourly company tick for easier inspection.
+- Deterministic conductor fallback runs after each hourly review so meeting decisions can advance even when the LLM runtime is unavailable.
+- Hourly meeting minutes now split meaningful progress from paperwork-only artifacts and track strategy cadence drift.
+
+### Changed
+- launchd wake PATH now includes `$HOME/.local/bin` so local Claude/Codex installs are found from non-interactive jobs.
+- Service-Ops records repeated incident signatures and marks repeated incidents as `recovery_required`, causing hourly meetings to route to CTO runtime recovery instead of repeating discussion.
+
 ## 6.2.0 — Always-on company runtime + legacy purge (2026-05-08)
 
 ### Why

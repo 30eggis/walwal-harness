@@ -11,6 +11,8 @@
 
 set -uo pipefail
 
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH:-}"
+
 LOG_DIR="${HOME}/.walwal-harness/logs"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/wake.log"
@@ -57,14 +59,73 @@ find_tmux_session() {
   return 1
 }
 
+resolve_agent_bin() {
+  local executor="$1"
+  local env_name cand
+
+  case "$executor" in
+    codex)
+      env_name="${HARNESS_CODEX_BIN:-${CODEX_BIN:-}}"
+      ;;
+    claude|*)
+      env_name="${HARNESS_CLAUDE_BIN:-${CLAUDE_BIN:-}}"
+      executor="claude"
+      ;;
+  esac
+
+  for cand in "$env_name" "$HOME/.local/bin/$executor" "/opt/homebrew/bin/$executor" "/usr/local/bin/$executor"; do
+    [ -n "$cand" ] && [ -x "$cand" ] && { echo "$cand"; return 0; }
+  done
+
+  command -v "$executor" 2>/dev/null && return 0
+  return 1
+}
+
+run_conductor_fallback() {
+  local project_root="$1"
+  local reason="$2"
+  local tick="$project_root/scripts/conductor-tick.sh"
+  local progress="$project_root/.harness/progress.json"
+  local progress_set="$project_root/scripts/harness-progress-set.sh"
+  local before after status
+
+  [ "${HARNESS_WAKE_CONDUCTOR_FALLBACK:-1}" = "1" ] || return 0
+  [ -x "$tick" ] || return 0
+  [ -f "$progress" ] || return 0
+  command -v jq >/dev/null 2>&1 || return 0
+
+  before="$(jq -c '{current_agent,next_agent,agent_status,conductor:(.conductor.state // null),decision:(.meetings.decision // {})}' "$progress" 2>/dev/null || echo '{}')"
+
+  if [ -x "$progress_set" ] && [ "$(jq -r '.current_agent // ""' "$progress")" = "meeting-manager" ] && [ "$(jq -r '.agent_status // ""' "$progress")" != "completed" ] && jq -e '(.meetings.decision.owner // "") != ""' "$progress" >/dev/null 2>&1; then
+    bash "$progress_set" "$project_root" '
+      .agent_status = "completed" |
+      .conductor.state = "running" |
+      .conductor.current_action = "wake-meeting-decision-ready" |
+      .workflow.last_transition = (now | todate) |
+      .workflow.last_reason = "wake-meeting-decision-ready"
+    ' >/dev/null 2>&1 || true
+  fi
+
+  if bash "$tick" "$project_root" >/dev/null 2>&1; then
+    status="ok"
+  else
+    status="failed"
+  fi
+
+  after="$(jq -c '{current_agent,next_agent,agent_status,conductor:(.conductor.state // null),last_action:(.conductor.current_action // null)}' "$progress" 2>/dev/null || echo '{}')"
+  echo "$(date -u "+%Y-%m-%dT%H:%M:%SZ") | wake | conductor-fallback | $status | reason=$reason | before=$before | after=$after" >> "$project_root/.harness/progress.log"
+  say "conductor-fallback: $project_root ($status, reason=$reason)"
+}
+
 start_headless_tick() {
   local project_root="$1"
   local idle="$2"
   local force="$3"
   local review_path="$4"
-  local mode stamp wake_dir ops_dir prompt_rel log_rel prompt_path log_path pid_file old_pid pid status tmux_session
+  local mode executor agent_bin stamp wake_dir ops_dir prompt_rel log_rel prompt_path log_path pid_file old_pid pid status tmux_session session_name session_safe
 
   mode="${HARNESS_WAKE_MODE:-headless}"
+  executor="${HARNESS_WAKE_EXECUTOR:-claude}"
   stamp="$(date -u "+%Y%m%dT%H%M%SZ")"
   wake_dir="$project_root/.harness/actions/wake"
   ops_dir="$project_root/.harness/ops/wake"
@@ -105,7 +166,8 @@ Tasks:
 3. Treat the hourly review as Executive Meeting Minutes. Verify it contains CEO/COO/CTO/CQO/Service-Ops role positions, discussion, decision JSON, and action items.
 4. Check conductor state against the current GOAL and route the next department without waiting for Owner.
 5. If there is an active incident or operational warning, make sure meeting-manager has shared context and an action decision that names CTO/CQO/Service-Ops responsibilities.
-6. Append a short factual summary to .harness/progress.log and any normal harness artifacts used by this project.
+6. Split meaningful progress from paperwork-only artifacts in your summary.
+7. Append a short factual summary to .harness/progress.log and any normal harness artifacts used by this project.
 EOF
 
   case "$mode" in
@@ -113,16 +175,36 @@ EOF
       status="recorded"
       ;;
     headless|"")
-      if command -v claude >/dev/null 2>&1; then
+      if agent_bin="$(resolve_agent_bin "$executor")"; then
         (
           cd "$project_root" || exit 1
-          claude -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+          if [ "$executor" = "codex" ]; then
+            "$agent_bin" exec -C "$project_root" "$(cat "$prompt_path")" > "$log_path" 2>&1
+          else
+            "$agent_bin" -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+          fi
         ) &
         pid=$!
         echo "$pid" > "$pid_file"
-        status="spawned pid=$pid"
+        status="spawned executor=$executor pid=$pid"
       else
-        status="recorded claude-not-found"
+        status="BLOCKED_RUNTIME ${executor}-not-found"
+      fi
+      ;;
+    tmux)
+      if ! command -v tmux >/dev/null 2>&1; then
+        status="BLOCKED_RUNTIME tmux-not-found"
+      elif agent_bin="$(resolve_agent_bin "$executor")"; then
+        session_safe="$(basename "$project_root" | tr -c '[:alnum:]_' '_')"
+        session_name="walwal_${session_safe}_${stamp}"
+        if [ "$executor" = "codex" ]; then
+          tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' exec -C '$project_root' - < '$prompt_path' 2>&1 | tee '$log_path'"
+        else
+          tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_path')\" 2>&1 | tee '$log_path'"
+        fi
+        status="spawned-tmux executor=$executor session=$session_name"
+      else
+        status="BLOCKED_RUNTIME ${executor}-not-found"
       fi
       ;;
     *)
@@ -130,8 +212,10 @@ EOF
       ;;
   esac
 
-  echo "$(date -u "+%Y-%m-%dT%H:%M:%SZ") | wake | headless | $status | idle=${idle}s | force=${force} | prompt=$prompt_rel | log=$log_rel" >> "$project_root/.harness/progress.log"
-  say "wake-headless: $project_root (idle ${idle}s, force=${force}, mode=${mode}) → $status $log_rel"
+  echo "$(date -u "+%Y-%m-%dT%H:%M:%SZ") | wake | agent-tick | $status | idle=${idle}s | force=${force} | mode=${mode} | prompt=$prompt_rel | log=$log_rel" >> "$project_root/.harness/progress.log"
+  say "wake-agent: $project_root (idle ${idle}s, force=${force}, mode=${mode}, executor=${executor}) → $status $log_rel"
+
+  run_conductor_fallback "$project_root" "$status"
 
   if tmux_session="$(find_tmux_session "$project_root" 2>/dev/null)"; then
     tmux display-message -t "$tmux_session" "walwal wake headless tick: $status ($log_rel)" 2>/dev/null || true
