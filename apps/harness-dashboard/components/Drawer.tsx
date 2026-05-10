@@ -7,7 +7,8 @@ export type DrawerTab =
   | "archive-list"
   | "incidents"
   | "hypothesis"
-  | "tracks";
+  | "tracks"
+  | "meeting-detail";
 
 interface DrawerProps {
   open: boolean;
@@ -24,6 +25,7 @@ const TABS: Array<{ id: DrawerTab; label: string }> = [
   { id: "incidents", label: "Incidents" },
   { id: "hypothesis", label: "Hypothesis" },
   { id: "tracks", label: "Tracks" },
+  { id: "meeting-detail", label: "Meetings" },
   { id: "archive-list", label: "Archive" },
 ];
 

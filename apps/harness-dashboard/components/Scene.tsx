@@ -53,11 +53,13 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("agent-log");
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<RoomState | null>(null);
+  const [selectedMeeting, setSelectedMeeting] = useState<MeetingRecord | null>(null);
 
   const handleAgentClick = (id: AgentId) => {
     const a = snapshot.agents.find((x) => x.id === id) ?? null;
     setSelectedAgent(a);
     setSelectedRoom(null);
+    setSelectedMeeting(null);
     setDrawerTab("agent-log");
     setDrawerOpen(true);
   };
@@ -66,6 +68,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     const r = snapshot.rooms.find((x) => x.id === id) ?? null;
     setSelectedRoom(r);
     setSelectedAgent(null);
+    setSelectedMeeting(null);
     // Route the click to the most relevant tab for that room. This way one
     // click on Service-Ops opens the incident list, one click on COO opens
     // the hypothesis list, etc., matching what the wall art is showing.
@@ -78,8 +81,18 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     setDrawerOpen(true);
   };
 
+  const handleMeetingClick = (meeting: MeetingRecord) => {
+    setSelectedMeeting(meeting);
+    setSelectedAgent(null);
+    setSelectedRoom(null);
+    setDrawerTab("meeting-detail");
+    setDrawerOpen(true);
+  };
+
   const drawerTitle = selectedAgent
     ? selectedAgent.name
+    : selectedMeeting
+    ? selectedMeeting.id
     : selectedRoom
     ? `${selectedRoom.label_ko}`
     : "Detail";
@@ -126,7 +139,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       </div>
 
       <section className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr_0.8fr]">
-        <MeetingPanel meetings={snapshot.dashboard.recentMeetings} />
+        <MeetingPanel meetings={snapshot.dashboard.recentMeetings} onSelect={handleMeetingClick} />
         <OpsPanel services={snapshot.dashboard.opsHealth} />
         <EnvPanel envFiles={snapshot.dashboard.envFiles} />
       </section>
@@ -188,6 +201,12 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         )}
         {drawerTab === "tracks" && (
           <TracksTab tracks={snapshot.tracks} />
+        )}
+        {drawerTab === "meeting-detail" && selectedMeeting && (
+          <MeetingDetail meeting={selectedMeeting} />
+        )}
+        {drawerTab === "meeting-detail" && !selectedMeeting && (
+          <div className="text-gray-500">Click a meeting item to view the minutes.</div>
         )}
       </Drawer>
     </div>
@@ -280,6 +299,7 @@ function MissionPanel({ snapshot }: { snapshot: HarnessSnapshot }) {
   const total = snapshot.contract.feature_total;
   const done = snapshot.contract.feature_passed;
   const progress = total > 0 ? Math.round((done / total) * 100) : null;
+  const featurePreview = snapshot.dashboard.features.slice(0, 4);
   return (
     <Panel title="Current Mission" eyebrow="goal / contract">
       <div className="space-y-3">
@@ -311,6 +331,16 @@ function MissionPanel({ snapshot }: { snapshot: HarnessSnapshot }) {
           <StatusLine label="Meeting cadence" value={snapshot.meetings.cadence} />
           <StatusLine label="Next agent" value={snapshot.agents.find((a) => a.lastActivity?.includes("next_agent"))?.name ?? "—"} />
         </div>
+        {featurePreview.length > 0 && (
+          <div className="space-y-1">
+            {featurePreview.map((f) => (
+              <div key={f.id} className="flex items-center justify-between gap-2 rounded bg-black/20 px-2 py-1 font-mono text-[10px]">
+                <span className="min-w-0 truncate text-gray-300">{f.id} · {f.title}</span>
+                <span className={featureTone(f.status)}>{f.passes.length ? `${f.passes.length} pass` : f.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </Panel>
   );
@@ -357,7 +387,13 @@ function WorkerPanel({ workers }: { workers: WorkerSnapshot[] }) {
   );
 }
 
-function MeetingPanel({ meetings }: { meetings: MeetingRecord[] }) {
+function MeetingPanel({
+  meetings,
+  onSelect,
+}: {
+  meetings: MeetingRecord[];
+  onSelect: (meeting: MeetingRecord) => void;
+}) {
   return (
     <Panel title="Recent Meetings" eyebrow="minutes / decisions">
       {meetings.length === 0 ? (
@@ -365,7 +401,12 @@ function MeetingPanel({ meetings }: { meetings: MeetingRecord[] }) {
       ) : (
         <div className="space-y-2">
           {meetings.slice(0, 4).map((m) => (
-            <div key={m.path} className="grid gap-2 rounded border border-gray-700/70 bg-black/20 p-2 md:grid-cols-[150px_1fr]">
+            <button
+              key={m.path}
+              type="button"
+              onClick={() => onSelect(m)}
+              className="grid w-full gap-2 rounded border border-gray-700/70 bg-black/20 p-2 text-left transition-colors hover:border-cyan-300/60 hover:bg-cyan-300/5 md:grid-cols-[150px_1fr]"
+            >
               <div className="font-mono text-[10px] text-gray-500">
                 <div className="truncate text-gray-300">{m.id}</div>
                 <div>{m.ts ? new Date(m.ts).toLocaleString() : "—"}</div>
@@ -376,11 +417,31 @@ function MeetingPanel({ meetings }: { meetings: MeetingRecord[] }) {
                 <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{m.summary}</p>
                 <div className="mt-1 truncate font-mono text-[10px] text-cyan-300/70">{m.path}</div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
     </Panel>
+  );
+}
+
+function MeetingDetail({ meeting }: { meeting: MeetingRecord }) {
+  return (
+    <article className="space-y-3">
+      <div className="rounded border border-brick-wall bg-brick-wall/30 p-2">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-gray-500">
+          {meeting.ts ? new Date(meeting.ts).toLocaleString() : "—"}
+        </div>
+        <h3 className="mt-1 text-sm font-semibold text-gray-100">{meeting.title}</h3>
+        {meeting.verdict && (
+          <div className="mt-1 font-mono text-[10px] text-amber-300">{meeting.verdict}</div>
+        )}
+        <div className="mt-2 break-all font-mono text-[10px] text-cyan-300/70">{meeting.path}</div>
+      </div>
+      <pre className="whitespace-pre-wrap break-words rounded border border-gray-700/70 bg-black/25 p-3 text-[11px] leading-relaxed text-gray-200">
+        {meeting.content || meeting.summary}
+      </pre>
+    </article>
   );
 }
 
@@ -557,6 +618,13 @@ function statusTone(status: WorkerSnapshot["status"]): string {
   if (status === "recorded") return "bg-amber-400/15 text-amber-300";
   if (status === "blocked") return "bg-rose-500/15 text-rose-300";
   return "bg-gray-500/15 text-gray-300";
+}
+
+function featureTone(status: string): string {
+  if (status === "passed") return "text-emerald-300";
+  if (status === "failed" || status === "blocked") return "text-rose-300";
+  if (status === "in_progress" || status === "ready") return "text-cyan-300";
+  return "text-gray-500";
 }
 
 function serviceTone(status: OpsServiceHealth["status"]): string {

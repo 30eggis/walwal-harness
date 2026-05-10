@@ -179,6 +179,13 @@ export interface ContractSnapshot {
   contract_signed: { be: boolean; fe: boolean };
 }
 
+export interface FeatureSummary {
+  id: string;
+  title: string;
+  status: "ready" | "blocked" | "in_progress" | "passed" | "failed" | "unknown";
+  passes: string[];
+}
+
 export interface EvalScores {
   functional?: number | null;
   visual?: number | null;
@@ -215,6 +222,7 @@ export interface MeetingRecord {
   title: string;
   verdict?: string | null;
   summary: string;
+  content: string;
 }
 
 export interface OpsServiceHealth {
@@ -243,6 +251,7 @@ export interface EnvFileSummary {
 
 export interface OperationsDashboard {
   workers: WorkerSnapshot[];
+  features: FeatureSummary[];
   recentMeetings: MeetingRecord[];
   opsHealth: OpsServiceHealth[];
   envFiles: EnvFileSummary[];

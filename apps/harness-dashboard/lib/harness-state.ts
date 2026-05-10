@@ -15,6 +15,7 @@ import type {
   EnvFileSummary,
   EscalationEntry,
   EvalScores,
+  FeatureSummary,
   GoalCard,
   HarnessSnapshot,
   HypothesisEntry,
@@ -139,6 +140,17 @@ interface RawProgress {
       status?: string;
       pid?: number | null;
     }>;
+    last_dispatch?: Array<{
+      team?: number | string;
+      feature?: string;
+      agent?: string;
+      phase?: string;
+      prompt?: string | null;
+      log?: string | null;
+      status?: string;
+      spawn_status?: string;
+      pid?: number | null;
+    }>;
     last_dispatch_at?: string | null;
   };
 }
@@ -188,7 +200,7 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     contract: emptyContract(),
     evalScores: null,
     errorBanner: banner,
-    dashboard: { workers: [], recentMeetings: [], opsHealth: [], envFiles: [] },
+    dashboard: { workers: [], features: [], recentMeetings: [], opsHealth: [], envFiles: [] },
   };
 }
 
@@ -214,12 +226,46 @@ function truncateText(text: string, max = 150): string {
   return `${cleaned.slice(0, max - 1)}…`;
 }
 
-function buildGoal(progress: RawProgress | null): GoalCard | null {
+function titleFromMarkdown(text: string | null): string | null {
+  if (!text) return null;
+  const h1 = text.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (h1) return h1;
+  const mission = text.match(/(?:mission|goal|title)\s*[:=]\s*(.+)$/im)?.[1]?.trim();
+  return mission || null;
+}
+
+function buildGoal(rootDir: string, progress: RawProgress | null): GoalCard | null {
   const list = progress?.goals?.list ?? [];
   const activeId = progress?.goals?.active_id;
-  if (!activeId) return null;
+  const goalFile = readTextSafe(path.join(rootDir, ".harness", "actions", "goals.md"));
+  const mission = (progress?.goals as { mission?: string; title?: string; description?: string } | undefined)?.mission;
+  const topLevelTitle = (progress?.goals as { title?: string } | undefined)?.title;
+  if (!activeId && !mission && !topLevelTitle && !goalFile) return null;
+  if (!activeId) {
+    const title = mission ?? topLevelTitle ?? titleFromMarkdown(goalFile) ?? "Active autonomous company goal";
+    return {
+      id: "goal",
+      title,
+      description_truncated: truncateText(
+        (progress?.goals as { description?: string } | undefined)?.description ?? goalFile ?? "",
+        GOAL_DESC_TRUNCATE,
+      ),
+      adherence: progress?.goals?.current_adherence ?? null,
+    };
+  }
   const found = list.find((g) => g.id === activeId);
-  if (!found) return null;
+  if (!found) {
+    const title = mission ?? topLevelTitle ?? titleFromMarkdown(goalFile) ?? activeId;
+    return {
+      id: activeId,
+      title,
+      description_truncated: truncateText(
+        (progress?.goals as { description?: string } | undefined)?.description ?? goalFile ?? "",
+        GOAL_DESC_TRUNCATE,
+      ),
+      adherence: progress?.goals?.current_adherence ?? null,
+    };
+  }
   const desc = found.description ?? "";
   const truncated =
     desc.length > GOAL_DESC_TRUNCATE
@@ -286,10 +332,82 @@ function buildArchive(harnessRoot: string): ArchiveStat {
   return { sprintCount: all.length, recent: all.slice(0, 3), all };
 }
 
-function buildContract(progress: RawProgress | null): ContractSnapshot {
-  const total = progress?.contracts?.feature_list?.total ?? 0;
-  const passed = progress?.contracts?.feature_list?.passed ?? 0;
-  const failed = progress?.contracts?.feature_list?.failed ?? 0;
+function passAxis(pass: unknown): string | null {
+  if (typeof pass === "string") return pass;
+  if (pass && typeof pass === "object") {
+    const p = pass as { axis?: string; by?: string; status?: string };
+    if (p.status && p.status.toUpperCase() !== "PASS") return null;
+    return p.axis ?? p.by ?? null;
+  }
+  return null;
+}
+
+function buildFeatureSummaries(rootDir: string): FeatureSummary[] {
+  const featurePath = path.join(rootDir, ".harness", "actions", "feature-list.json");
+  const queuePath = path.join(rootDir, ".harness", "actions", "feature-queue.json");
+  const featureResult = readJsonSafe<{
+    features?: Array<{
+      id?: string;
+      title?: string;
+      name?: string;
+      description?: string;
+      status?: string;
+      passes?: unknown[];
+    }>;
+  }>(featurePath);
+  const queueResult = readJsonSafe<{
+    queue?: {
+      ready?: string[];
+      blocked?: Record<string, unknown>;
+      in_progress?: Record<string, unknown>;
+      passed?: string[];
+      failed?: string[];
+    };
+  }>(queuePath);
+  const queue = queueResult.ok ? queueResult.value.queue : undefined;
+  const statusById = new Map<string, FeatureSummary["status"]>();
+  for (const id of queue?.ready ?? []) statusById.set(id, "ready");
+  for (const id of Object.keys(queue?.blocked ?? {})) statusById.set(id, "blocked");
+  for (const id of Object.keys(queue?.in_progress ?? {})) statusById.set(id, "in_progress");
+  for (const id of queue?.passed ?? []) statusById.set(id, "passed");
+  for (const id of queue?.failed ?? []) statusById.set(id, "failed");
+
+  if (!featureResult.ok) {
+    return [...statusById.entries()].map(([id, status]) => ({
+      id,
+      title: id,
+      status,
+      passes: [],
+    }));
+  }
+  return (featureResult.value.features ?? [])
+    .filter((f) => !!f.id)
+    .map((f) => {
+      const passes = (f.passes ?? []).map(passAxis).filter((x): x is string => !!x);
+      const explicitStatus = (f.status ?? "").toLowerCase();
+      const status =
+        explicitStatus === "pass" || explicitStatus === "passed" || explicitStatus === "done"
+          ? "passed"
+          : explicitStatus === "fail" || explicitStatus === "failed"
+          ? "failed"
+          : statusById.get(f.id!) ?? (passes.length > 0 ? "passed" : "unknown");
+      return {
+        id: f.id!,
+        title: f.title ?? f.name ?? f.description ?? f.id!,
+        status,
+        passes,
+      };
+    });
+}
+
+function buildContract(rootDir: string, progress: RawProgress | null, features: FeatureSummary[]): ContractSnapshot {
+  const total = progress?.contracts?.feature_list?.total ?? features.length;
+  const passed =
+    progress?.contracts?.feature_list?.passed ??
+    features.filter((f) => f.status === "passed" || f.passes.length > 0).length;
+  const failed =
+    progress?.contracts?.feature_list?.failed ??
+    features.filter((f) => f.status === "failed").length;
   return {
     sprint_number: progress?.sprint?.number ?? null,
     pipeline: (progress?.pipeline ?? null) as Pipeline,
@@ -647,7 +765,29 @@ function deriveWorkerProgress(worker: RawWorker): number | null {
 
 function buildWorkers(rootDir: string, progress: RawProgress | null): WorkerSnapshot[] {
   const titles = readFeatureTitles(rootDir);
-  const workers = progress?.company_state?.workers ?? [];
+  let workers = progress?.company_state?.workers ?? [];
+  if (workers.length === 0) {
+    const queue = readJsonSafe<{
+      teams?: Record<string, {
+        status?: string;
+        feature?: string | null;
+        pid?: number | null;
+        agent?: string;
+        phase?: string;
+        prompt?: string | null;
+        log?: string | null;
+        spawn_status?: string;
+      }>;
+    }>(path.join(rootDir, ".harness", "actions", "feature-queue.json"));
+    if (queue.ok) {
+      workers = Object.entries(queue.value.teams ?? {})
+        .filter(([, t]) => t.status === "busy" && !!t.feature)
+        .map(([team, t]) => ({ ...t, team, feature: t.feature ?? undefined }));
+    }
+  }
+  if (workers.length === 0) {
+    workers = progress?.company_state?.last_dispatch ?? [];
+  }
   return workers.map((w, idx) => {
     const feature = w.feature ?? `worker-${idx + 1}`;
     const promptText = w.prompt ? readTextSafe(path.join(rootDir, w.prompt)) : null;
@@ -720,6 +860,7 @@ function buildRecentMeetings(rootDir: string): MeetingRecord[] {
       title: meetingTitleFromMarkdown(text, dir),
       verdict: meetingVerdict(text),
       summary: truncateText(summary, 220),
+      content: text,
     });
   }
   records.sort((a, b) => (b.ts ?? "").localeCompare(a.ts ?? ""));
@@ -795,8 +936,10 @@ function buildEnvFiles(rootDir: string): EnvFileSummary[] {
 }
 
 function buildDashboard(rootDir: string, progress: RawProgress | null): OperationsDashboard {
+  const features = buildFeatureSummaries(rootDir);
   return {
     workers: buildWorkers(rootDir, progress),
+    features,
     recentMeetings: buildRecentMeetings(rootDir),
     opsHealth: buildOpsHealth(progress),
     envFiles: buildEnvFiles(rootDir),
@@ -845,7 +988,8 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
   const incidents = buildIncidents(progress);
   const hypothesisList = buildHypothesis(progress);
   const escalations = buildEscalations(progress);
-  const contract = buildContract(progress);
+  const features = buildFeatureSummaries(rootDir);
+  const contract = buildContract(rootDir, progress, features);
   const evalScores = progress.cqo?.last_scores ?? null;
   const dashboard = buildDashboard(rootDir, progress);
 
@@ -865,7 +1009,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
       contract,
       evalScores,
     ),
-    goal: buildGoal(progress),
+    goal: buildGoal(rootDir, progress),
     archive: buildArchive(rootDir),
     meetings,
     tracks,
