@@ -84,6 +84,9 @@ if [ "$live" != "true" ] || [ "${service_count:-0}" -eq 0 ]; then
     .service_ops.incident.signature = "" |
     .service_ops.incident.repeat_count = 0 |
     .service_ops.incident.recovery_required = false |
+    .service_ops.incident.partial_recovery = false |
+    .service_ops.incident.close_candidate = false |
+    .service_ops.incident.closed = false |
     .service_ops.incident.last_seen_at = $ts
   ' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
 
@@ -210,8 +213,15 @@ recovery_required=false
 if [ "$repeat_count" -ge 2 ]; then
   recovery_required=true
 fi
+partial_recovery=false
+close_candidate=false
+if [ "$ok_count" -gt 0 ] && [ "$down_count" -gt 0 ]; then
+  partial_recovery=true
+elif [ "$down_count" -eq 0 ] && [ "$warn_count" -eq 0 ]; then
+  close_candidate=true
+fi
 
-jq --arg ts "$ts" --arg report "$report_rel" --arg signature "$incident_signature" --argjson repeat "$repeat_count" --argjson recovery "$recovery_required" --argjson health "$results_json" --argjson incidents "$incidents_json" --argjson warn "$warn_count" --argjson alert "$down_count" '
+jq --arg ts "$ts" --arg report "$report_rel" --arg signature "$incident_signature" --argjson repeat "$repeat_count" --argjson recovery "$recovery_required" --argjson partial "$partial_recovery" --argjson close_candidate "$close_candidate" --argjson health "$results_json" --argjson incidents "$incidents_json" --argjson warn "$warn_count" --argjson alert "$down_count" '
   .service_ops.monitor.stream_active = false |
   .service_ops.monitor.last_check = $ts |
   .service_ops.monitor.last_report = $report |
@@ -222,6 +232,9 @@ jq --arg ts "$ts" --arg report "$report_rel" --arg signature "$incident_signatur
   .service_ops.incident.signature = $signature |
   .service_ops.incident.repeat_count = $repeat |
   .service_ops.incident.recovery_required = $recovery |
+  .service_ops.incident.partial_recovery = $partial |
+  .service_ops.incident.close_candidate = $close_candidate |
+  .service_ops.incident.closed = (if $close_candidate then true else false end) |
   .service_ops.incident.last_seen_at = $ts
 ' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS"
 
@@ -238,6 +251,8 @@ jq --arg ts "$ts" --arg report "$report_rel" --arg signature "$incident_signatur
   echo "- incident_signature: ${incident_signature:-none}"
   echo "- repeat_count: $repeat_count"
   echo "- recovery_required: $recovery_required"
+  echo "- partial_recovery: $partial_recovery"
+  echo "- close_candidate: $close_candidate"
   echo ""
   echo "| Service | Port | Health | Logs | Status |"
   echo "|---|---:|---|---|---|"

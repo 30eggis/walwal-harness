@@ -96,8 +96,16 @@ run_conductor_fallback() {
 
   before="$(jq -c '{current_agent,next_agent,agent_status,conductor:(.conductor.state // null),decision:(.meetings.decision // {})}' "$progress" 2>/dev/null || echo '{}')"
 
-  if [ -x "$progress_set" ] && [ "$(jq -r '.current_agent // ""' "$progress")" = "meeting-manager" ] && [ "$(jq -r '.agent_status // ""' "$progress")" != "completed" ] && jq -e '(.meetings.decision.owner // "") != ""' "$progress" >/dev/null 2>&1; then
+  if [ -x "$progress_set" ] &&
+    jq -e '
+      (.meetings.decision.owner // "") != "" and
+      ((((.meetings.active // []) | length) > 0) or ((.meetings.decision.required_execution // null) != null))
+    ' "$progress" >/dev/null 2>&1 && {
+      [ "$(jq -r '.current_agent // ""' "$progress")" != "meeting-manager" ] ||
+      [ "$(jq -r '.agent_status // ""' "$progress")" != "completed" ];
+    }; then
     bash "$progress_set" "$project_root" '
+      .current_agent = "meeting-manager" |
       .agent_status = "completed" |
       .conductor.state = "running" |
       .conductor.current_action = "wake-meeting-decision-ready" |

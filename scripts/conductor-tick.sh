@@ -33,6 +33,7 @@ planner_requested_mode=$(jq -r '.planner.requested_mode // "null"' "$PROGRESS")
 planner_last_brief=$(jq -r '.planner.last_brief // "null"' "$PROGRESS")
 goal_adherence=$(jq -r '.goals.current_adherence // "null"' "$PROGRESS")
 meetings_active_count=$(jq -r '(.meetings.active | length) // 0' "$PROGRESS")
+pending_required_execution=$(jq -r 'if (.meetings.decision.required_execution // null) != null then "true" else "false" end' "$PROGRESS")
 cqo_verdict=$(jq -r '.cqo.sprint_verdict // "pending"' "$PROGRESS")
 ops_report=$(jq -r '.service_ops.auto_retro.last_report // "null"' "$PROGRESS")
 cto_hotfixes=$(jq -r '.cto.open_hotfixes // 0' "$PROGRESS")
@@ -120,6 +121,10 @@ ensure_team_queue() {
 
 load_meeting_decision() {
   local decision
+  if jq -e '(.meetings.decision.required_execution // null) != null' "$PROGRESS" >/dev/null 2>&1; then
+    jq -c '.meetings.decision' "$PROGRESS"
+    return 0
+  fi
   decision=$(bash "$SCRIPT_DIR/harness-meeting-doc.sh" "$PROJECT_ROOT" read-decision 2>/dev/null || true)
   if [ -n "$decision" ]; then
     echo "$decision"
@@ -133,6 +138,47 @@ dispatch_company_workers() {
   [ -f "$FEATURES" ] || { echo "[]"; return 0; }
   [ -x "$SCRIPT_DIR/harness-worker-dispatch.sh" ] || { echo "[]"; return 0; }
   bash "$SCRIPT_DIR/harness-worker-dispatch.sh" "$PROJECT_ROOT" 2>/dev/null || echo "[]"
+}
+
+ensure_strategy_work_package() {
+  local required_json="$1"
+  local deliverable_path="$2"
+  local target_path="$PROJECT_ROOT/$deliverable_path"
+  local stamp
+  stamp="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  [ -n "$deliverable_path" ] && [ "$deliverable_path" != "null" ] || return 0
+  mkdir -p "$(dirname "$target_path")"
+  if [ ! -f "$target_path" ]; then
+    {
+      echo "# Strategy Cadence Recovery Work Package"
+      echo ""
+      echo "- created_at: $stamp"
+      echo "- owner: Planner/COO"
+      echo "- source_decision: $(jq -r '.source_path // "unknown"' <<<"$required_json")"
+      echo "- required_execution_id: $(jq -r '.id // "unknown"' <<<"$required_json")"
+      echo "- status: opened"
+      echo ""
+      echo "## Candidate Idea"
+      echo ""
+      echo "Planner/COO must define one concrete strategy candidate for this hour. A restatement of the goal is not sufficient."
+      echo ""
+      echo "## Data Source"
+      echo ""
+      echo "Name the market data source, lookback window, and any filters used by the candidate."
+      echo ""
+      echo "## Backtest Command"
+      echo ""
+      echo '```bash'
+      echo "# Fill with the exact command that produces a backtest result artifact."
+      echo '```'
+      echo ""
+      echo "## CQO Acceptance"
+      echo ""
+      echo "- PASS requires a generated candidate artifact and a backtest/evaluation artifact."
+      echo "- If no candidate is generated before the next hourly review, classify the cycle as paperwork_only_failure."
+    } > "$target_path"
+  fi
 }
 
 effective_mode="$(normalize_company_mode)"
@@ -260,7 +306,7 @@ elif [ "$parallel_pending_count" -gt 0 ] && [ "$agent_status" = "completed" ] &&
       .conductor.rendezvous = null"
   fi
 
-elif [ "$requested_mode" != "null" ] && [ -n "$requested_mode" ] && [ "$current_agent" != "service-ops" ]; then
+elif [ "$pending_required_execution" != "true" ] && [ "$requested_mode" != "null" ] && [ -n "$requested_mode" ] && [ "$current_agent" != "service-ops" ]; then
   next="service-ops"
   action="spawn:service-ops:${requested_mode}"
 
@@ -292,6 +338,8 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
   evidence=$(jq -c '.evidence // []' <<<"$meeting_decision")
   decision_drift=$(jq -r '.drift_classification // "unknown"' <<<"$meeting_decision")
   source_path=$(jq -r '.source_path // "null"' <<<"$meeting_decision")
+  required_execution=$(jq -c '.required_execution // null' <<<"$meeting_decision")
+  required_deliverable=$(jq -r '.required_execution.deliverable_path // "null"' <<<"$meeting_decision")
   # v6.2 — tracks length >= 2 → fork-join, else single. mode 필드 없음.
   decision_tracks=$(jq -c '.tracks // []' <<<"$meeting_decision")
   decision_rendezvous=$(jq -c '.rendezvous // null' <<<"$meeting_decision")
@@ -355,6 +403,10 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
       .conductor.rendezvous = $decision_rendezvous |
       .conductor.fork_meeting_id = (.meetings.current_id // null)"
   else
+    if [ "$action_type" = "strategy-cadence-recovery" ]; then
+      ensure_strategy_work_package "$required_execution" "$required_deliverable"
+      owner="planner"
+    fi
     next="$owner"
     action="dispatch:${owner}:${action_type}"
     new_workflow_stage="$(meeting_stage_for_owner "$owner")"
@@ -377,6 +429,7 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
         \"evidence\": $evidence,
         \"drift_classification\": $(escape_json_string "$decision_drift"),
         \"source_path\": $(escape_json_string "$source_path"),
+        \"required_execution\": $required_execution,
         \"tracks\": [],
         \"rendezvous\": null
       } |
@@ -440,7 +493,17 @@ elif [ "$current_agent" = "coo-developer" ] && [ "$agent_status" = "completed" ]
   fi
 
 elif [ "$current_agent" = "cto" ]; then
-  if [ "${cto_hotfixes:-0}" -gt 0 ] || [ "${ops_recommendations:-0}" -gt 0 ]; then
+  cto_step_b_status=$(jq -r '.cto.step_b_status // ""' "$PROGRESS")
+  if [ "$agent_status" = "step-B-code-edited" ] || [[ "$cto_step_b_status" == *deferred* ]]; then
+    next="cqo"
+    action="spawn:cqo:gateway-typecheck-verify"
+    new_workflow_stage="quality-review"
+    meeting_filter='
+      .cqo.requested_mode = "gateway-typecheck-verify" |
+      .meetings.active = ["cqo"] |
+      .meetings.requested_type = null |
+      .meetings.requested_reason = null'
+  elif [ "${cto_hotfixes:-0}" -gt 0 ] || [ "${ops_recommendations:-0}" -gt 0 ]; then
     next="planner"
     action="dispatch:planner:execution-plan"
     new_workflow_stage="coo-replan"
@@ -548,7 +611,13 @@ if [ "$next" = "meeting-manager" ] && [ "$workflow_stage" = "ops-review" ]; then
 fi
 
 worker_dispatches="[]"
-if [ "$new_conductor_state" = "running" ] && [ "$next" != "meeting-manager" ] && [ "$next" != "service-ops" ] && [ "$next" != "archive" ]; then
+if [ "$new_conductor_state" = "running" ] &&
+  [ "$next" != "meeting-manager" ] &&
+  [ "$next" != "service-ops" ] &&
+  [ "$next" != "planner" ] &&
+  [ "$next" != "cto" ] &&
+  [ "$next" != "cqo" ] &&
+  [ "$next" != "archive" ]; then
   worker_dispatches="$(dispatch_company_workers)"
   if jq -e 'type == "array" and length > 0' >/dev/null 2>&1 <<<"$worker_dispatches"; then
     dispatch_count="$(jq 'length' <<<"$worker_dispatches")"

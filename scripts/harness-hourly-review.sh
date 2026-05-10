@@ -34,6 +34,7 @@ fi
 
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 id="M-$(date -u +%Y%m%dT%H%M%SZ)-hourly"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 meeting_dir="$PROJECT_ROOT/.harness/actions/meetings/$id"
 meeting_rel=".harness/actions/meetings/$id/meeting-$id.md"
 meeting_path="$PROJECT_ROOT/$meeting_rel"
@@ -68,6 +69,28 @@ cto_review="$(jq -r '.cto.review_path // empty' "$PROGRESS" 2>/dev/null || true)
 open_incidents="$(jq -r '(.service_ops.incident.open // []) | length' "$PROGRESS" 2>/dev/null || echo 0)"
 incident_repeat_count="$(jq -r '.service_ops.incident.repeat_count // 0' "$PROGRESS" 2>/dev/null || echo 0)"
 incident_recovery_required="$(jq -r '.service_ops.incident.recovery_required // false' "$PROGRESS" 2>/dev/null || echo false)"
+prev_required_json="$(jq -c '.meetings.decision.required_execution // .meetings.required_execution // null' "$PROGRESS" 2>/dev/null || echo null)"
+prev_required_action="$(jq -r '(.meetings.decision.required_execution // .meetings.required_execution // {}).action // "none"' "$PROGRESS" 2>/dev/null || echo none)"
+prev_required_owner="$(jq -r '(.meetings.decision.required_execution // .meetings.required_execution // {}).owner // "none"' "$PROGRESS" 2>/dev/null || echo none)"
+prev_required_deliverable="$(jq -r '(.meetings.decision.required_execution // .meetings.required_execution // {}).deliverable_path // ""' "$PROGRESS" 2>/dev/null || true)"
+prev_execution_result="none"
+prev_execution_detail="no prior required_execution"
+if [ "$prev_required_json" != "null" ]; then
+  if [ -n "$prev_required_deliverable" ] && [ -f "$PROJECT_ROOT/$prev_required_deliverable" ]; then
+    prev_execution_result="executed_unverified"
+    prev_execution_detail="deliverable exists: $prev_required_deliverable"
+    if [ "$prev_required_action" = "runtime-recovery-runbook" ] && [ "${open_incidents:-0}" -eq 0 ] && [ "$alert_count" -eq 0 ]; then
+      prev_execution_result="executed_and_verified"
+      prev_execution_detail="deliverable exists and Service-Ops has no open incident"
+    fi
+  elif [ "$prev_required_action" = "runtime-recovery-runbook" ] && [ "$(jq -r '.cto.step_b_status // .cto.step_a_status // ""' "$PROGRESS" 2>/dev/null || true)" != "" ]; then
+    prev_execution_result="attempted_blocked"
+    prev_execution_detail="CTO recovery state advanced but required deliverable missing: ${prev_required_deliverable:-unset}"
+  else
+    prev_execution_result="paperwork_only_failure"
+    prev_execution_detail="required deliverable missing: ${prev_required_deliverable:-unset}"
+  fi
+fi
 owner_escalation="false"
 strategy_total_signals=0
 strategy_previous_signals="$(jq -r '.goals.strategy_cadence.total_signals // 0' "$PROGRESS" 2>/dev/null || echo 0)"
@@ -82,9 +105,12 @@ if grep -Eiq 'strategy|algo|backtest|신규.?전략|시간당.?1|일.?6|daily.?6
   strategy_required=true
   strategy_target_per_hour=1
   strategy_target_per_day=6
-  strategy_total_signals="$(grep -Eic 'new strategy|strategy generated|algos?_candidate|backtest job|backtest_jobs|신규.?전략|전략.?생성' "$log_path" 2>/dev/null || echo 0)"
-  strategy_last_signal="$(grep -Ei 'new strategy|strategy generated|algos?_candidate|backtest job|backtest_jobs|신규.?전략|전략.?생성' "$log_path" 2>/dev/null | tail -1 || true)"
+  strategy_total_signals="$(grep -Eic '(^|[|[:space:]])(new-strategy|strategy-generated|algos?_candidate|backtest-jobs?|backtest_enqueue|신규.?전략|전략.?생성)([|[:space:]]|$)' "$log_path" 2>/dev/null || echo 0)"
+  strategy_last_signal="$(grep -Ei '(^|[|[:space:]])(new-strategy|strategy-generated|algos?_candidate|backtest-jobs?|backtest_enqueue|신규.?전략|전략.?생성)([|[:space:]]|$)' "$log_path" 2>/dev/null | tail -1 || true)"
   [ -n "$strategy_last_signal" ] || strategy_last_signal="none"
+  if [ "$strategy_total_signals" -lt "$strategy_previous_signals" ]; then
+    strategy_previous_signals="$strategy_total_signals"
+  fi
   strategy_delta=$((strategy_total_signals - strategy_previous_signals))
   if [ "$strategy_delta" -ge "$strategy_target_per_hour" ]; then
     strategy_status="on_track"
@@ -111,6 +137,7 @@ decision_owner="planner"
 decision_action="execution-plan"
 decision_rationale="정기 회의에서 active GOAL 대비 현재 작업과 운영 신호를 재정렬하고 다음 work package를 명확히 한다."
 progress_meaningful_json='[]'
+required_execution_json='null'
 case "$next_agent" in
   planner|cto|cqo|service-ops|dispatcher)
     decision_owner="$next_agent"
@@ -125,10 +152,30 @@ if [ "$verdict" = "incident" ]; then
     decision_action="runtime-recovery-runbook"
     decision_rationale="동일 운영 장애가 ${incident_repeat_count}회 연속 감지됐다. 반복 회의가 아니라 CTO가 복구 runbook을 실행하고 CQO가 evidence를 검증한다."
     progress_meaningful_json='["runtime-recovery-runbook required"]'
+    required_execution_json="$(jq -n --arg id "RE-$stamp-runtime-recovery" --arg source "$meeting_rel" '{
+      id:$id,
+      owner:"cto",
+      action:"runtime-recovery-runbook",
+      deliverable_path:".harness/actions/cto-runbook-runtime-recovery-current.md",
+      verifier:"cqo+service-ops",
+      due:"next_tick",
+      source_path:$source,
+      success_condition:"Service-Ops verifies every configured production service as ok; partial recovery remains incident."
+    }')"
   else
     decision_action="runtime-recovery"
     decision_rationale="Service-Ops가 down/degraded 신호를 발견했으므로 CTO가 복구 경로를 정하고 CQO가 복구 evidence를 검증한다."
     progress_meaningful_json='["runtime-recovery decision"]'
+    required_execution_json="$(jq -n --arg id "RE-$stamp-runtime-recovery" --arg source "$meeting_rel" '{
+      id:$id,
+      owner:"cto",
+      action:"runtime-recovery",
+      deliverable_path:".harness/actions/cto-action-runtime-recovery-current.md",
+      verifier:"service-ops",
+      due:"next_tick",
+      source_path:$source,
+      success_condition:"Service-Ops health improves or records a concrete blocker."
+    }')"
   fi
 elif [ "$verdict" = "idle" ] || [ "$verdict" = "autonomous_review" ]; then
   meeting_type="followup-review"
@@ -141,6 +188,16 @@ elif [ "$verdict" = "goal_drift" ]; then
   decision_action="strategy-cadence-recovery"
   decision_rationale="전략 생성 cadence가 목표보다 뒤처졌다. COO가 다음 시간의 전략 후보 생성/백테스트 work package를 즉시 재배정한다."
   progress_meaningful_json='["strategy cadence recovery decision"]'
+  required_execution_json="$(jq -n --arg id "RE-$stamp-strategy-cadence" --arg source "$meeting_rel" --arg deliverable ".harness/actions/strategy-work-package-${stamp}.md" '{
+    id:$id,
+    owner:"planner",
+    action:"create-strategy-work-package",
+    deliverable_path:$deliverable,
+    verifier:"cqo",
+    due:"next_tick",
+    source_path:$source,
+    success_condition:"A strategy work package exists with candidate idea, data source, backtest command, and CQO acceptance criteria."
+  }')"
 elif [ "$verdict" = "owner_needed" ]; then
   meeting_type="all-hands"
   decision_owner="dispatcher"
@@ -159,6 +216,7 @@ decision_json="$(jq -n \
   --arg cqo_audit "$cqo_audit" \
   --arg cto_review "$cto_review" \
   --argjson progress_meaningful "$progress_meaningful_json" \
+  --argjson required_execution "$required_execution_json" \
   --argjson owner_escalation "$owner_escalation" '
   {
     owner: $owner,
@@ -178,6 +236,7 @@ decision_json="$(jq -n \
       meaningful_actions: $progress_meaningful,
       paperwork_only: ["hourly-review", "service-ops-monitor"]
     },
+    required_execution: $required_execution,
     tracks: [],
     rendezvous: null
   }')"
@@ -211,6 +270,9 @@ meeting_json="$(jq -n \
   echo "- drift_classification: $drift"
   echo "- previous_decision: $last_decision"
   echo "- previous_meeting: $last_meeting"
+  echo "- previous_required_execution: $prev_required_owner/$prev_required_action"
+  echo "- previous_execution_result: $prev_execution_result"
+  echo "- previous_execution_detail: $prev_execution_detail"
   if [ -n "$ops_report" ]; then
     echo "- service_ops_report: $ops_report"
   fi
@@ -223,6 +285,8 @@ meeting_json="$(jq -n \
   echo ""
   echo "## Progress Classification"
   echo ""
+  echo "- previous_required_execution_result: $prev_execution_result"
+  echo "- previous_required_execution_detail: $prev_execution_detail"
   if [ "$verdict" = "incident" ] && { [ "$incident_recovery_required" = "true" ] || [ "${incident_repeat_count:-0}" -ge 2 ]; }; then
     echo "- meaningful_actions: runtime-recovery-runbook required"
     echo "- paperwork_only: hourly meeting minutes, Service-Ops monitor report"
@@ -361,6 +425,14 @@ meeting_json="$(jq -n \
       echo "- Conductor: 다음 autonomous tick에서 decision.owner/action_type 기준으로 handoff한다."
       ;;
   esac
+  echo ""
+  echo "## Required Execution"
+  echo ""
+  if [ "$required_execution_json" = "null" ]; then
+    echo "- none"
+  else
+    jq -r '"- owner: \(.owner)\n- action: \(.action)\n- deliverable_path: \(.deliverable_path)\n- verifier: \(.verifier)\n- due: \(.due)\n- success_condition: \(.success_condition)"' <<<"$required_execution_json"
+  fi
 } > "$meeting_path"
 
 jq \
@@ -371,6 +443,8 @@ jq \
   --arg type "$meeting_type" \
   --arg strategy_status "$strategy_status" \
   --arg strategy_last_signal "$strategy_last_signal" \
+  --arg prev_execution_result "$prev_execution_result" \
+  --arg prev_execution_detail "$prev_execution_detail" \
   --argjson strategy_required "$strategy_required" \
   --argjson strategy_target_per_hour "$strategy_target_per_hour" \
   --argjson strategy_target_per_day "$strategy_target_per_day" \
@@ -387,6 +461,9 @@ jq \
 	  .meetings.current_record_path = $rel |
 	  .meetings.last_attendees = ["dispatcher","planner","cto","cqo","service-ops","meeting-manager"] |
 	  .meetings.decision = $decision |
+	  .meetings.previous_required_execution_result = $prev_execution_result |
+	  .meetings.previous_required_execution_detail = $prev_execution_detail |
+	  .meetings.required_execution = $decision.required_execution |
 	  .goals.strategy_cadence = {
 	    "required": $strategy_required,
 	    "status": $strategy_status,
