@@ -141,7 +141,7 @@ cmd_init() {
         }) | from_entries
       )
     }
-  ' "$FEATURES" > "$QUEUE"
+  ' "$FEATURES" > "${QUEUE}.tmp.$$" && mv "${QUEUE}.tmp.$$" "$QUEUE"
 
   local ready_count blocked_count passed_count
   ready_count=$(jq '.queue.ready | length' "$QUEUE")

@@ -11,6 +11,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/harness-render-progress.sh"
+source "$SCRIPT_DIR/lib/harness-agent-resolver.sh"
 
 PROJECT_ROOT="$(resolve_harness_root "${1:-.}")" || exit 0
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
@@ -19,6 +20,8 @@ FEATURES="$PROJECT_ROOT/.harness/actions/feature-list.json"
 QUEUE="$PROJECT_ROOT/.harness/actions/feature-queue.json"
 WORKER_DIR="$PROJECT_ROOT/.harness/actions/workers"
 LOG_DIR="$PROJECT_ROOT/.harness/ops/workers"
+DISPATCH_LOCK="$PROJECT_ROOT/.harness/.worker-dispatch-lock"
+DISPATCH_LOCK_STALE_SEC="${DISPATCH_LOCK_STALE_SEC:-900}"
 
 [ -f "$PROGRESS" ] || exit 0
 [ -f "$CONFIG" ] || exit 0
@@ -28,26 +31,40 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 mkdir -p "$WORKER_DIR" "$LOG_DIR"
 
+acquire_dispatch_lock() {
+  if mkdir "$DISPATCH_LOCK" 2>/dev/null; then
+    printf '%s\n' "$$" > "$DISPATCH_LOCK/pid"
+    printf '%s\n' "$(date +%s)" > "$DISPATCH_LOCK/created_at"
+    trap 'rm -rf "$DISPATCH_LOCK" 2>/dev/null || true' EXIT INT TERM
+    return 0
+  fi
+
+  local now created age holder
+  now="$(date +%s)"
+  created="$(cat "$DISPATCH_LOCK/created_at" 2>/dev/null || echo "$now")"
+  holder="$(cat "$DISPATCH_LOCK/pid" 2>/dev/null || echo unknown)"
+  age=$((now - created))
+  if [ "$age" -ge "$DISPATCH_LOCK_STALE_SEC" ]; then
+    rm -rf "$DISPATCH_LOCK" 2>/dev/null || true
+    if mkdir "$DISPATCH_LOCK" 2>/dev/null; then
+      printf '%s\n' "$$" > "$DISPATCH_LOCK/pid"
+      printf '%s\n' "$now" > "$DISPATCH_LOCK/created_at"
+      trap 'rm -rf "$DISPATCH_LOCK" 2>/dev/null || true' EXIT INT TERM
+      return 0
+    fi
+  fi
+
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | conductor | worker-dispatch | skipped-locked | holder=${holder} age=${age}s" >> "$PROJECT_ROOT/.harness/progress.log"
+  echo "[]"
+  exit 0
+}
+
+acquire_dispatch_lock
+
 spawn_mode="$(jq -r '.company_mode.worker_spawn // "claude"' "$CONFIG" 2>/dev/null || echo claude)"
 pipeline="$(jq -r '.pipeline // "FULLSTACK"' "$PROGRESS" 2>/dev/null || echo FULLSTACK)"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-
-agent_for_feature() {
-  local fid="$1"
-  local layer service title
-  layer="$(jq -r --arg id "$fid" '.features[]? | select(.id == $id) | (.layer // .type // "")' "$FEATURES" 2>/dev/null | head -1)"
-  service="$(jq -r --arg id "$fid" '.features[]? | select(.id == $id) | (.service // "")' "$FEATURES" 2>/dev/null | head -1)"
-  title="$(jq -r --arg id "$fid" '.features[]? | select(.id == $id) | (.title // .name // .description // "")' "$FEATURES" 2>/dev/null | head -1)"
-  case "$(printf '%s %s %s' "$layer" "$service" "$title" | tr '[:upper:]' '[:lower:]')" in
-    *frontend*|*ui*|*web*|*react*|*next*) echo "generator-frontend" ;;
-    *design*|*token*|*component-spec*) echo "generator-designer" ;;
-    *devops*|*infra*|*deploy*|*ci*) echo "generator-devops" ;;
-    *)
-      if [ "$pipeline" = "FE-ONLY" ]; then echo "generator-frontend"; else echo "generator-backend"; fi
-      ;;
-  esac
-}
 
 build_prompt() {
   local team="$1" fid="$2" agent="$3" prompt_path="$4" log_path="$5"
@@ -103,11 +120,23 @@ i=0
 while [ "$i" -lt "$count" ]; do
   team="$(jq -r ".[$i].team" <<<"$pairs")"
   fid="$(jq -r ".[$i].feature" <<<"$pairs")"
-  agent="$(agent_for_feature "$fid")"
+  phase="$(jq -r --arg fid "$fid" '.queue.in_progress[$fid].phase // "gen"' "$QUEUE" 2>/dev/null || echo gen)"
+  agent="$(resolve_feature_agent "$PROJECT_ROOT" "$fid" "$phase" "$pipeline" 2>/dev/null || true)"
   prompt_rel=".harness/actions/workers/T${team}-${fid}-${stamp}.prompt.md"
   log_rel=".harness/ops/workers/T${team}-${fid}-${stamp}.log"
   prompt_path="$PROJECT_ROOT/$prompt_rel"
   log_path="$PROJECT_ROOT/$log_rel"
+
+  if [ -z "$agent" ]; then
+    reason="agent_resolution_failed phase=${phase}"
+    bash "$SCRIPT_DIR/harness-queue-manager.sh" fail "$fid" "$PROJECT_ROOT" >/dev/null 2>&1 || true
+    printf '%s\n' "$reason" > "$log_path"
+    jq -n --argjson team "$team" --arg feature "$fid" --arg phase "$phase" --arg status "blocked" --arg reason "$reason" \
+      '{team:$team, feature:$feature, phase:$phase, agent:null, prompt:null, log:null, status:$status, reason:$reason, pid:null}' >> "$dispatches_file"
+    echo "$ts | conductor | worker-dispatch | blocked | T${team}/${fid} | ${reason}" >> "$PROJECT_ROOT/.harness/progress.log"
+    i=$((i + 1))
+    continue
+  fi
 
   build_prompt "$team" "$fid" "$agent" "$prompt_path" "$log_path"
 
@@ -123,22 +152,24 @@ while [ "$i" -lt "$count" ]; do
   fi
 
   tmpq="${QUEUE}.tmp.$$.$i"
-  jq --arg tid "$team" --arg agent "$agent" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --arg ts "$ts" '
+  jq --arg tid "$team" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --arg ts "$ts" '
     .teams[$tid].pid = $pid |
     .teams[$tid].agent = $agent |
+    .teams[$tid].phase = $phase |
     .teams[$tid].prompt = $prompt |
     .teams[$tid].log = $log |
     .teams[$tid].spawn_status = $status |
     .teams[$tid].started_at = $ts |
     .queue.in_progress[.teams[$tid].feature].agent = $agent |
+    .queue.in_progress[.teams[$tid].feature].phase = $phase |
     .queue.in_progress[.teams[$tid].feature].prompt = $prompt |
     .queue.in_progress[.teams[$tid].feature].log = $log |
     .queue.in_progress[.teams[$tid].feature].pid = $pid
   ' "$QUEUE" > "$tmpq" && mv "$tmpq" "$QUEUE"
 
-  jq -n --argjson team "$team" --arg feature "$fid" --arg agent "$agent" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" \
-    '{team:$team, feature:$feature, agent:$agent, prompt:$prompt, log:$log, status:$status, pid:$pid}' >> "$dispatches_file"
-  echo "$ts | conductor | worker-dispatch | $status | T${team}/${fid} | $agent pid=$pid" >> "$PROJECT_ROOT/.harness/progress.log"
+  jq -n --argjson team "$team" --arg feature "$fid" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" \
+    '{team:$team, feature:$feature, agent:$agent, phase:$phase, prompt:$prompt, log:$log, status:$status, pid:$pid}' >> "$dispatches_file"
+  echo "$ts | conductor | worker-dispatch | $status | T${team}/${fid} | $agent phase=$phase pid=$pid" >> "$PROJECT_ROOT/.harness/progress.log"
   i=$((i + 1))
 done
 

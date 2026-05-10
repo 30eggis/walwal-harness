@@ -1357,6 +1357,7 @@ function runVerify() {
     'generator-backend', 'generator-frontend', 'generator-designer', 'generator-devops',
     'evaluator-code-quality', 'evaluator-functional', 'evaluator-visual',
     'evaluator-architecture', 'evaluator-security',
+    'coo-developer', 'documentationer',
     'brainstorming',
   ];
   const requiredFrontmatter = ['name', 'description'];
