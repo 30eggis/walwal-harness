@@ -23,6 +23,24 @@ docmeta:
 
 <!-- 항목이 추가되면 아래에 기록됩니다 -->
 
+### [C-SYS-AUTONOMOUS-DEPLOY-AFTER-FIX] 코드 수정 후 운영 반영은 회사가 자율 처리
+
+- **Status**: verified
+- **Date**: 2026-05-10
+- **Scope**: all agents
+- **Rule**: 어떤 에이전트든 코드를 수정한 직후 운영 반영이 필요하면 build, restart, migration, cron/launchd 재등록, health check, ops-report까지 회사가 자율 처리한다. CTO, Service-Ops, Generator-DevOps 사이 협의는 내부 handoff로 처리하고 Owner에게는 시작 통지와 결과 보고만 한다.
+- **Why**: Owner 입력은 GOAL/사고/결과 확인용이지 운영 펌프 신호가 아니다. 최초 GOAL 이후 회사는 내부 owner를 정해 복구와 배포를 진행해야 한다.
+- **Apply**: 코드/설정 변경 후 운영 반영이 필요하면 Meeting-Manager 또는 Conductor는 `required_execution`에 owner, deliverable, verifier를 명시하고, Service-Ops가 health evidence를 갱신할 때까지 `waiting_owner`로 멈추지 않는다.
+
+### [C-SYS-HOURLY-REPORT-AS-MEETING-MINUTES] hourly 보고서는 부서 회의록 형식이다
+
+- **Status**: verified
+- **Date**: 2026-05-10
+- **Scope**: meeting-manager, service-ops, conductor
+- **Rule**: `harness-hourly-review.sh`가 작성하는 md 및 Telegram 송신 대상은 단순 service health/KPI dump가 아니라 CEO/COO/CTO/CQO/Service-Ops의 role position, discussion, decision JSON, action items, required execution을 포함한 회의록이어야 한다.
+- **Why**: Owner가 확인하려는 것은 서버 운용현황 자체가 아니라 회사가 GOAL을 향해 어떤 상황을 어떻게 타진하고 어떤 실행 결정을 내렸는지다.
+- **Anti-pattern**: health table만 있고 `required_execution`, owner, verifier, next-tick deliverable이 없으면 회의가 아니라 paperwork로 분류한다.
+
 ### [C-SYS-EXEC-ROLE-CONTRACT] 회사 구조와 임원 역할 계약은 하네스 공통 규칙이다
 
 - **Status**: verified

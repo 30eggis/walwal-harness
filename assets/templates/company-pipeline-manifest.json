@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "description": "Canonical walwal company pipeline surface. Project-specific services, goals, tokens, and domain scripts may differ; company-loop mechanics must not.",
+  "identical_files": [
+    "scripts/conductor-tick.sh",
+    "scripts/harness-hourly-review.sh",
+    "scripts/harness-service-ops-monitor.sh",
+    "scripts/harness-wake.sh",
+    "scripts/harness-meeting-doc.sh",
+    "scripts/harness-next.sh",
+    "scripts/harness-worker-dispatch.sh",
+    "scripts/harness-stop.sh",
+    "scripts/harness-session-start.sh",
+    "scripts/harness-progress-set.sh",
+    "scripts/harness-queue-manager.sh",
+    "scripts/lib/harness-render-progress.sh",
+    "scripts/lib/harness-progress-migrate.sh",
+    "scripts/lib/harness-guardrail.sh",
+    "scripts/lib/harness-audit.sh",
+    "scripts/lib/harness-keywait.sh",
+    "conventions/conductor.md",
+    "conventions/meeting-manager.md",
+    "conventions/planner.md",
+    "conventions/cto.md",
+    "conventions/cqo.md",
+    "conventions/service-ops.md",
+    "conventions/dispatcher.md",
+    "gotchas/conductor.md",
+    "gotchas/meeting-manager.md",
+    "gotchas/planner.md",
+    "gotchas/cto.md",
+    "gotchas/cqo.md",
+    "gotchas/service-ops.md"
+  ],
+  "template_mappings": [
+    {
+      "source": "assets/templates/HARNESS.md",
+      "target": ".harness/HARNESS.md",
+      "mode": "identical"
+    }
+  ],
+  "config_core_delete_paths": [
+    ".project",
+    ".name",
+    ".description",
+    ".paths",
+    ".production",
+    ".telegram",
+    ".services",
+    ".owners",
+    ".runtime",
+    ".tech_stack",
+    ".integrations"
+  ],
+  "allowed_project_overrides": [
+    ".harness/actions/**",
+    ".harness/archive/**",
+    ".harness/ops/**",
+    ".harness/progress.json",
+    ".harness/config.json project/service paths",
+    ".harness/conventions/shared.md project-domain additions",
+    ".harness/gotchas/* project-domain additions",
+    "scripts/harness-coo-research.sh",
+    "scripts/harness-coo-cadence-check.sh",
+    "scripts/harness-telegram-report.sh",
+    "scripts/harness-telegram-send.sh",
+    "scripts/check-real-time-logs.sh",
+    "scripts/test-*.sh",
+    "scripts/tests/**"
+  ]
+}

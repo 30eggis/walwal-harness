@@ -356,10 +356,34 @@ elif [ "$current_agent" = "meeting-manager" ] && [ "$agent_status" = "completed"
     esac
   fi
 
+  if [ "$required_execution" = "null" ]; then
+    case "$owner:$action_type" in
+      planner:continue-current-handoff|planner:execution-plan|cto:continue-current-handoff|cqo:continue-current-handoff|generator-*:continue-current-handoff|evaluator-*:continue-current-handoff)
+        next="meeting-manager"
+        action="convene:followup-review:execution-contract-missing"
+        new_conductor_state="waiting_meeting"
+        new_workflow_stage="followup-review"
+        meeting_prepare=true
+        meeting_filter="
+          .meetings.active = [\"meeting-manager\"] |
+          .meetings.requested_type = \"followup-review\" |
+          .meetings.requested_reason = \"execution-contract-missing\" |
+          .meetings.contract_missing = {
+            \"owner\": \"$owner\",
+            \"action_type\": \"$action_type\",
+            \"source_path\": $(escape_json_string "$source_path"),
+            \"detected_at\": (now | todate)
+          }"
+        ;;
+    esac
+  fi
+
   # v6.2 — Parallel fork: if 2+ tracks, materialize all tracks as running.
   # `next_agent` keeps the first owner only for backward-compatible handoff display;
   # the fork state itself must expose every track as active in the same tick.
-  if [ "$(jq 'length' <<<"$decision_tracks")" -gt 1 ]; then
+  if [ "$action" = "convene:followup-review:execution-contract-missing" ]; then
+    :
+  elif [ "$(jq 'length' <<<"$decision_tracks")" -gt 1 ]; then
     first_track_owner=$(jq -r '.[0].owner' <<<"$decision_tracks")
     first_track_action=$(jq -r '.[0].action_type // "triage"' <<<"$decision_tracks")
     first_track_id=$(jq -r '.[0].id // "track-1"' <<<"$decision_tracks")

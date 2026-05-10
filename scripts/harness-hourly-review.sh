@@ -53,6 +53,7 @@ current_agent="$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null || ech
 next_agent="$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null || echo none)"
 agent_status="$(jq -r '.agent_status // "unknown"' "$PROGRESS" 2>/dev/null || echo unknown)"
 conductor_state="$(jq -r '.conductor.state // "idle"' "$PROGRESS" 2>/dev/null || echo idle)"
+conductor_action="$(jq -r '.conductor.current_action // "none"' "$PROGRESS" 2>/dev/null || echo none)"
 tick_count="$(jq -r '.conductor.tick_count // 0' "$PROGRESS" 2>/dev/null || echo 0)"
 health_count="$(jq -r '(.service_ops.health // []) | length' "$PROGRESS" 2>/dev/null || echo 0)"
 alert_count="$(jq -r '[.service_ops.health[]? | select(.status == "down" or .status == "degraded")] | length' "$PROGRESS" 2>/dev/null || echo 0)"
@@ -138,6 +139,23 @@ decision_action="execution-plan"
 decision_rationale="정기 회의에서 active GOAL 대비 현재 작업과 운영 신호를 재정렬하고 다음 work package를 명확히 한다."
 progress_meaningful_json='[]'
 required_execution_json='null'
+handoff_requires_execution=false
+handoff_feature="$(printf "%s" "$conductor_action" | awk -F: '{print $NF}')"
+case "$handoff_feature" in
+  ""|none|null|pass-through|monitor|completed|running|ready|execution-plan|continue-current-handoff|goal-alignment)
+    handoff_feature="$stamp"
+    ;;
+esac
+safe_handoff_feature="$(printf "%s" "$handoff_feature" | tr -cs 'A-Za-z0-9._-' '-' | sed 's/^-//; s/-$//')"
+[ -n "$safe_handoff_feature" ] || safe_handoff_feature="$stamp"
+
+case "$next_agent" in
+  planner|cto|cqo|generator-*|evaluator-*|documentationer|coo-developer)
+    if [ "$next_agent" != "$current_agent" ] || [[ "$conductor_action" == *handoff* ]] || [[ "$conductor_action" == advance:* ]] || [[ "$conductor_action" == spawn:* ]] || [[ "$conductor_action" == dispatch:* ]]; then
+      handoff_requires_execution=true
+    fi
+    ;;
+esac
 case "$next_agent" in
   planner|cto|cqo|service-ops|dispatcher)
     decision_owner="$next_agent"
@@ -204,6 +222,82 @@ elif [ "$verdict" = "owner_needed" ]; then
   decision_action="escalate-owner"
   decision_rationale="conductor가 escalated 상태이므로 CEO가 Owner escalation 필요성을 판정한다."
   owner_escalation="true"
+fi
+
+if [ "$verdict" = "working" ] && [ "$handoff_requires_execution" = "true" ]; then
+  decision_owner="$next_agent"
+  case "$next_agent" in
+    planner)
+      decision_action="execution-plan"
+      deliverable_path=".harness/actions/planner-execution-plan-${safe_handoff_feature}.md"
+      verifier="cto+cqo"
+      success_condition="Planner creates a concrete execution plan that reconciles the current handoff with GOAL, queue priority, non-goals, owner, and verifier."
+      ;;
+    cto)
+      decision_action="technical-handoff"
+      deliverable_path=".harness/actions/cto-action-${safe_handoff_feature}.md"
+      verifier="cqo"
+      success_condition="CTO records implementation scope, affected files, validation commands, blocker status, and the next execution owner."
+      ;;
+    cqo)
+      decision_action="quality-verification"
+      deliverable_path=".harness/actions/cqo-audit-${safe_handoff_feature}.md"
+      verifier="meeting-manager"
+      success_condition="CQO records PASS/FAIL with evidence, regressions, and the next routing decision."
+      ;;
+    generator-*)
+      decision_action="implement-${safe_handoff_feature}"
+      deliverable_path=".harness/actions/gen-report-${safe_handoff_feature}.md"
+      verifier="cqo+evaluator-code-quality"
+      success_condition="Generator produces the named implementation report, changed-file list, validation output, and handoff to CQO/evaluator."
+      ;;
+    evaluator-*)
+      decision_action="verify-${safe_handoff_feature}"
+      deliverable_path=".harness/actions/evaluation-${safe_handoff_feature}.md"
+      verifier="cqo"
+      success_condition="Evaluator writes an evidence-backed PASS/FAIL report and does not rubber-stamp missing evidence."
+      ;;
+    documentationer)
+      decision_action="document-${safe_handoff_feature}"
+      deliverable_path=".harness/actions/documentation-${safe_handoff_feature}.md"
+      verifier="planner"
+      success_condition="Documentationer writes the requested brief/report with source paths and decision impact."
+      ;;
+    coo-developer)
+      decision_action="spike-${safe_handoff_feature}"
+      deliverable_path=".harness/actions/hypothesis/${safe_handoff_feature}/spike/report.md"
+      verifier="planner+cqo"
+      success_condition="COO developer records spike result, repro/evidence, and verdict input for Planner."
+      ;;
+    *)
+      decision_action="execute-${safe_handoff_feature}"
+      deliverable_path=".harness/actions/execution-${safe_handoff_feature}.md"
+      verifier="meeting-manager"
+      success_condition="The owner writes a concrete deliverable and next-step evidence before the following hourly review."
+      ;;
+  esac
+  decision_rationale="working 상태라도 현재 handoff는 산출물 없는 '계속 진행'으로 통과할 수 없다. 다음 tick까지 owner가 deliverable을 남기고 verifier가 검증한다."
+  progress_meaningful_json="$(jq -n --arg item "execution contract required: $next_agent/$decision_action" '[$item]')"
+  required_execution_json="$(jq -n \
+    --arg id "RE-$stamp-handoff" \
+    --arg owner "$decision_owner" \
+    --arg action "$decision_action" \
+    --arg deliverable "$deliverable_path" \
+    --arg verifier "$verifier" \
+    --arg source "$meeting_rel" \
+    --arg success "$success_condition" \
+    --arg conductor_action "$conductor_action" \
+    '{
+      id:$id,
+      owner:$owner,
+      action:$action,
+      deliverable_path:$deliverable,
+      verifier:$verifier,
+      due:"next_tick",
+      source_path:$source,
+      source_conductor_action:$conductor_action,
+      success_condition:$success
+    }')"
 fi
 
 decision_json="$(jq -n \
