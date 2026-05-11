@@ -1,58 +1,26 @@
----
-docmeta:
-  id: conventions-shared
-  title: Conventions — shared
-  type: input
-  createdAt: 2026-04-22T00:00:00Z
-  updatedAt: 2026-04-22T00:00:00Z
-  source:
-    producer: user
-    skillId: harness-dispatcher
-  tags:
-    - conventions
-    - shared
----
+# Shared Conventions
 
-# Conventions — shared
+## V7 Runtime Boundary
 
-> **세션 시작 시 이 파일이 비어있더라도 루트 `CONVENTIONS.md` 는 반드시 먼저 읽으시오.**
-> 여기(`.harness/conventions/shared.md`)는 역할 국한 규범만 누적되며, 프로젝트 전체 원칙은 루트에 있습니다.
->
-> Dispatcher 가 긍정 가이드를 감지해 여기에 `### [C-NNN]` 엔트리를 추가합니다.
-> 사용자가 직접 편집해도 무방합니다. 항목 형식은 `.harness/conventions/README.md` 참고.
+- This package repository must not contain project runtime `.harness/` state.
+- `walwal-harness init` creates `.harness/` in the target project.
+- `.claude/commands` and `.codex/commands` contain only `/goal` and `/hot-fix`.
+- CXX and worker execution uses installed agents/skills, not slash commands.
 
-<!-- 항목이 추가되면 아래에 기록됩니다 -->
+## Hiring Boundary
 
-### [C-SYS-AUTONOMOUS-DEPLOY-AFTER-FIX] 코드 수정 후 운영 반영은 회사가 자율 처리
+- A missing specialist must not be replaced by a generic default AI engine.
+- Use `harness-resource-manager` to find already hired workers.
+- Use `harness-hiring` to hire from `.harness/shared/HR-Resource/`.
+- Record hired workers in `.harness/shared/hr-roster.json`.
 
-- **Status**: verified
-- **Date**: 2026-05-10
-- **Scope**: all agents
-- **Rule**: 어떤 에이전트든 코드를 수정한 직후 운영 반영이 필요하면 build, restart, migration, cron/launchd 재등록, health check, ops-report까지 회사가 자율 처리한다. CTO, Service-Ops, Generator-DevOps 사이 협의는 내부 handoff로 처리하고 Owner에게는 시작 통지와 결과 보고만 한다.
-- **Why**: Owner 입력은 GOAL/사고/결과 확인용이지 운영 펌프 신호가 아니다. 최초 GOAL 이후 회사는 내부 owner를 정해 복구와 배포를 진행해야 한다.
-- **Apply**: 코드/설정 변경 후 운영 반영이 필요하면 Meeting-Manager 또는 Conductor는 `required_execution`에 owner, deliverable, verifier를 명시하고, Service-Ops가 health evidence를 갱신할 때까지 `waiting_owner`로 멈추지 않는다.
+## Mission Documents
 
-### [C-SYS-HOURLY-REPORT-AS-MEETING-MINUTES] hourly 보고서는 부서 회의록 형식이다
+- Mission records live under `.harness/documents/{mission_name}/`.
+- CXX decisions use `{cxx}.md`.
+- Worker reports use `workers/{worker-name}.md`.
 
-- **Status**: verified
-- **Date**: 2026-05-10
-- **Scope**: meeting-manager, service-ops, conductor
-- **Rule**: `harness-hourly-review.sh`가 작성하는 md 및 Telegram 송신 대상은 단순 service health/KPI dump가 아니라 CEO/COO/CTO/CQO/Service-Ops의 role position, discussion, decision JSON, action items, required execution을 포함한 회의록이어야 한다.
-- **Why**: Owner가 확인하려는 것은 서버 운용현황 자체가 아니라 회사가 GOAL을 향해 어떤 상황을 어떻게 타진하고 어떤 실행 결정을 내렸는지다.
-- **Anti-pattern**: health table만 있고 `required_execution`, owner, verifier, next-tick deliverable이 없으면 회의가 아니라 paperwork로 분류한다.
+## DDD
 
-### [C-SYS-EXEC-ROLE-CONTRACT] 회사 구조와 임원 역할 계약은 하네스 공통 규칙이다
-
-- **Status**: verified
-- **Date**: 2026-05-10
-- **Scope**: all agents
-- **Rule**: walwal-harness는 "회사 구조 + 자율 구조 + 하네스"를 구현한다. CEO/COO/CTO/CQO/Service-Ops의 역할, 해야 할 일, 하면 안 되는 일은 개별 회의 프롬프트의 장식이 아니라 모든 에이전트가 세션 시작 시 적용해야 하는 하네스 공통 규칙이다.
-- **Role contract**:
-  - `Dispatcher/CEO`: Owner와의 유일한 외부 창구. GOAL, 사업 우선순위, Owner escalation 필요성을 판정한다. 내부 해결 가능한 일을 Owner 대기로 끝내지 않는다.
-  - `Planner/COO`: GOAL을 work package, queue, 가설, plan으로 바꾼다. planning_drift/goal_drift를 판정하고 다음 operating cycle을 정의한다.
-  - `CTO`: 구현, 아키텍처, 기술선택, runtime recovery 책임자다. 서버 down이나 구현 drift를 Service-Ops 알림으로 방치하지 않고 복구/핫픽스 owner를 지정한다.
-  - `CQO`: 품질, 회귀, 검증 기준 책임자다. evidence 없는 PASS, 낙관론, 미검증 복구 주장을 통과시키지 않는다.
-  - `Service-Ops`: 운영 신호, KPI, incident, monitor cadence 책임자다. 경고를 혼자 남기고 끝내지 않고 meeting-manager를 통해 CTO/CQO action으로 연결한다.
-  - `Meeting-Manager`: 임원 회의를 소집/기록/디스패치한다. 회의록에는 각 role의 Position, Evidence, Action이 있어야 한다.
-- **Autonomy rule**: 최초 GOAL 이후 Owner 입력은 interrupt/additional request다. 회사는 `waiting_owner`로 멈추지 않고 `meeting-manager`와 `conductor`를 통해 다음 내부 owner로 진행한다.
-- **Evidence rule**: "회의했다"는 `.harness/actions/meetings/<id>/meeting-<id>.md`에 임원별 입장, 토론, decision JSON, action items가 있을 때만 말할 수 있다.
+- Keep domain, application, interface, and infrastructure decisions distinct.
+- CXX agents define responsibility boundaries before assigning workers.

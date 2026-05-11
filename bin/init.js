@@ -53,6 +53,9 @@ function resolveProjectRoot() {
 const PROJECT_ROOT = resolveProjectRoot();
 const HARNESS_DIR = path.join(PROJECT_ROOT, '.harness');
 const CLAUDE_SKILLS_DIR = path.join(PROJECT_ROOT, '.claude', 'skills');
+const CLAUDE_COMMANDS_DIR = path.join(PROJECT_ROOT, '.claude', 'commands');
+const CODEX_SKILLS_DIR = path.join(PROJECT_ROOT, '.codex', 'skills');
+const CODEX_COMMANDS_DIR = path.join(PROJECT_ROOT, '.codex', 'commands');
 
 // ─────────────────────────────────────────
 // Utility
@@ -90,6 +93,39 @@ function log(msg) {
   console.log(`[walwal-harness] ${msg}`);
 }
 
+const V7_REMOVED_CONVENTION_FILES = [
+  'conductor.md',
+  'coo-developer.md',
+  'dispatcher.md',
+  'documentationer.md',
+  'evaluator-architecture.md',
+  'evaluator-code-quality.md',
+  'evaluator-functional.md',
+  'evaluator-security.md',
+  'evaluator-visual.md',
+  'generator-backend.md',
+  'generator-designer.md',
+  'generator-devops.md',
+  'generator-frontend.md',
+  'meeting-manager.md',
+  'planner.md',
+  'service-ops.md',
+];
+
+const V7_REMOVED_GOTCHA_FILES = [
+  ...V7_REMOVED_CONVENTION_FILES,
+  'generator-backend-laravel.md',
+];
+
+function removeLegacyV7Files(dir, files) {
+  for (const file of files) {
+    const target = path.join(dir, file);
+    if (fs.existsSync(target)) {
+      fs.rmSync(target, { force: true });
+    }
+  }
+}
+
 // ─────────────────────────────────────────
 // First-install migration — extract Convention/Gotcha-shaped sections from
 // existing CLAUDE.md / AGENTS.md into .harness/conventions and .harness/gotchas.
@@ -114,12 +150,15 @@ function migrateExistingDocs() {
 
   const scopeFor = (body) => {
     const b = body.toLowerCase();
-    if (/\b(backend|api|nestjs|controller|dto|service|msa|repository)\b/.test(b)) return 'generator-backend';
-    if (/\b(frontend|react|next\.?js|ui|component|tsx|tailwind|hook)\b/.test(b)) return 'generator-frontend';
-    if (/\b(planner|plan\.md|sprint|feature-list|api-contract)\b/.test(b)) return 'planner';
-    if (/\b(playwright|e2e|functional test)\b/.test(b)) return 'evaluator-functional';
-    if (/\b(visual|layout|screenshot|a11y|accessibility|responsive)\b/.test(b)) return 'evaluator-visual';
-    if (/\b(code quality|lint|tsc|architecture|typescript strict)\b/.test(b)) return 'evaluator-code-quality';
+    if (/\b(ceo|dispatcher|owner|goal|hot-?fix|mission)\b/.test(b)) return 'ceo';
+    if (/\b(coo|planning|research|hypothesis|backtest|reference)\b/.test(b)) return 'coo';
+    if (/\b(cdo|design|brand|ui|ux|mock|visual)\b/.test(b)) return 'cdo';
+    if (/\b(cto|architecture|backend|frontend|api|platform|account|devops|implementation)\b/.test(b)) return 'cto';
+    if (/\b(cqo|quality|regression|e2e|test|archive|memory|gotcha)\b/.test(b)) return 'cqo';
+    if (/\b(ops|operation|service|log|incident|deploy|launch)\b/.test(b)) return 'ops';
+    if (/\b(hiring|hire|recruit|hr-resource|worker)\b/.test(b)) return 'hiring';
+    if (/\b(resource-manager|resource manager|alias|keyword|wording)\b/.test(b)) return 'resource-manager';
+    if (/\b(brick-office|dashboard)\b/.test(b)) return 'brick-office';
     return 'shared';
   };
 
@@ -187,13 +226,12 @@ function migrateExistingDocs() {
         report.push(`[${id}] "${sec.title}" → conventions/${scope}.md  (from ${sourceRef})`);
       } else {
         const scope = scopeFor(sec.title + '\n' + body);
-        const agent = scope === 'shared' ? 'planner' : scope;  // default shared-gotchas to planner
         extractedGotcha.counter += 1;
         const id = `G-${String(extractedGotcha.counter).padStart(3, '0')}`;
-        const target = path.join(HARNESS_DIR, 'gotchas', `${agent}.md`);
+        const target = path.join(HARNESS_DIR, 'gotchas', `${scope}.md`);
         appendEntry(target, id, 'gotcha', sec.title, body, sourceRef);
-        extractedGotcha.byAgent[agent] = (extractedGotcha.byAgent[agent] || 0) + 1;
-        report.push(`[${id}] "${sec.title}" → gotchas/${agent}.md  (from ${sourceRef})`);
+        extractedGotcha.byAgent[scope] = (extractedGotcha.byAgent[scope] || 0) + 1;
+        report.push(`[${id}] "${sec.title}" → gotchas/${scope}.md  (from ${sourceRef})`);
       }
     }
   }
@@ -246,6 +284,30 @@ function scaffoldHarness() {
   ensureDir(path.join(HARNESS_DIR, 'archive'));
   ensureDir(path.join(HARNESS_DIR, 'gotchas'));
   ensureDir(path.join(HARNESS_DIR, 'conventions'));
+  ensureDir(path.join(HARNESS_DIR, 'documents'));
+  ensureDir(path.join(HARNESS_DIR, 'logs'));
+  ensureDir(path.join(HARNESS_DIR, 'memories'));
+  ensureDir(path.join(HARNESS_DIR, 'shared'));
+
+  removeLegacyV7Files(path.join(HARNESS_DIR, 'conventions'), V7_REMOVED_CONVENTION_FILES);
+  removeLegacyV7Files(path.join(HARNESS_DIR, 'gotchas'), V7_REMOVED_GOTCHA_FILES);
+
+  const hrResourceSrc = path.join(PKG_ROOT, 'HR-Resource');
+  const hrResourceDest = path.join(HARNESS_DIR, 'shared', 'HR-Resource');
+  if (fs.existsSync(hrResourceSrc) && (!fs.existsSync(hrResourceDest) || isForce)) {
+    copyDir(hrResourceSrc, hrResourceDest);
+    log('HR-Resource copied to .harness/shared/HR-Resource');
+  }
+
+  const rosterPath = path.join(HARNESS_DIR, 'shared', 'hr-roster.json');
+  if (!fileExists(rosterPath) || isForce) {
+    fs.writeFileSync(rosterPath, JSON.stringify({ hired: [] }, null, 2) + '\n');
+  }
+
+  const resourceIndexPath = path.join(HARNESS_DIR, 'shared', 'resource-index.json');
+  if (!fileExists(resourceIndexPath) || isForce) {
+    fs.writeFileSync(resourceIndexPath, JSON.stringify({ aliases: {}, keywords: {} }, null, 2) + '\n');
+  }
 
   // Copy gotchas — preserve any existing file that has accumulated entries.
   // Dispatcher appends `### [G-NNN] ...` entries directly; we must NEVER overwrite
@@ -447,34 +509,35 @@ function scaffoldHarness() {
 // 2. Skills → .claude/skills/
 // ─────────────────────────────────────────
 function installSkills() {
-  log('Installing skills to .claude/skills/...');
+  log('Installing skills to .claude/skills/ and .codex/skills/...');
 
-  const skillsSrc = path.join(PKG_ROOT, 'skills');
-  if (!fs.existsSync(skillsSrc)) {
-    log('WARNING: skills/ directory not found in package');
-    return;
-  }
+  const hrSrc = path.join(PKG_ROOT, 'HR-Resource');
+  const destinations = [CLAUDE_SKILLS_DIR, CODEX_SKILLS_DIR];
 
-  // harness- 프리픽스 스킬 전체 삭제 후 재복사 — 잔류 방지
-  if (fs.existsSync(CLAUDE_SKILLS_DIR)) {
-    const existing = fs.readdirSync(CLAUDE_SKILLS_DIR, { withFileTypes: true });
+  for (const destRoot of destinations) {
+    ensureDir(destRoot);
+    const existing = fs.readdirSync(destRoot, { withFileTypes: true });
     for (const entry of existing) {
       if (entry.isDirectory() && entry.name.startsWith('harness-')) {
-        fs.rmSync(path.join(CLAUDE_SKILLS_DIR, entry.name), { recursive: true, force: true });
+        fs.rmSync(path.join(destRoot, entry.name), { recursive: true, force: true });
       }
     }
-    log('  Cleared existing harness-* skills');
   }
+  log('  Cleared existing harness-* skills');
 
-  const skills = fs.readdirSync(skillsSrc, { withFileTypes: true })
-    .filter(d => d.isDirectory())
-    .map(d => d.name);
+  const installSkillDir = (src, destName) => {
+    for (const destRoot of destinations) {
+      copyDir(src, path.join(destRoot, destName));
+    }
+    log(`  Installed: ${destName}`);
+  };
 
-  for (const skill of skills) {
-    const src = path.join(skillsSrc, skill);
-    const dest = path.join(CLAUDE_SKILLS_DIR, `harness-${skill}`);
-    copyDir(src, dest);
-    log(`  Installed: harness-${skill}`);
+  const coreHrSkills = ['ceo', 'coo', 'cdo', 'cto', 'cqo', 'ops', 'hiring', 'resource-manager', 'brick-office'];
+  if (fs.existsSync(hrSrc)) {
+    for (const skill of coreHrSkills) {
+      const src = path.join(hrSrc, skill);
+      if (fs.existsSync(src)) installSkillDir(src, `harness-${skill}`);
+    }
   }
 
   log('Skills installation complete');
@@ -520,7 +583,7 @@ function installScripts() {
 // 3a. Commands → .claude/commands/
 // ─────────────────────────────────────────
 function installCommands() {
-  log('Installing commands to .claude/commands/...');
+  log('Installing commands to .claude/commands/ and .codex/commands/...');
 
   const commandsSrc = path.join(PKG_ROOT, 'commands');
   if (!fs.existsSync(commandsSrc)) {
@@ -528,24 +591,26 @@ function installCommands() {
     return;
   }
 
-  const commandsDest = path.join(PROJECT_ROOT, '.claude', 'commands');
-  ensureDir(commandsDest);
+  const commandDests = [CLAUDE_COMMANDS_DIR, CODEX_COMMANDS_DIR];
+  commandDests.forEach(ensureDir);
 
   // Remove existing harness-* commands to prevent stale files
-  if (fs.existsSync(commandsDest)) {
+  for (const commandsDest of commandDests) {
     const existing = fs.readdirSync(commandsDest);
     for (const f of existing) {
-      if (f.startsWith('harness-')) {
+      if (f.startsWith('harness-') || ['goal.md', 'hot-fix.md', 'brick-office.md', 'hiring.md', 'resource-manager.md', 'ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md'].includes(f)) {
         fs.unlinkSync(path.join(commandsDest, f));
       }
     }
-    log('  Cleared existing harness-* commands');
   }
+  log('  Cleared existing harness commands');
 
   // Copy all command files
   const files = fs.readdirSync(commandsSrc).filter(f => f.endsWith('.md'));
   for (const file of files) {
-    copyFile(path.join(commandsSrc, file), path.join(commandsDest, file));
+    for (const commandsDest of commandDests) {
+      copyFile(path.join(commandsSrc, file), path.join(commandsDest, file));
+    }
     log(`  Installed: /${file.replace('.md', '')}`);
   }
 
@@ -957,8 +1022,8 @@ function showHelp() {
 ╚══════════════════════════════════════╝
 
 Usage:
-  npx walwal-harness                       Initialize project for harness engineering
-  npx walwal-harness --force               Re-initialize (overwrites existing files)
+  npx walwal-harness init                  Initialize project for harness engineering
+  npx walwal-harness init --force          Re-initialize (overwrites existing harness files)
   npx walwal-harness migrate               Apply migration (always-on company mode)
   npx walwal-harness migrate --dry-run     Preview migration changes without applying
   npx walwal-harness verify                Verify install integrity
@@ -971,18 +1036,18 @@ Runtime (always-on company mode):
   - Owner 입력은 GOAL 모호성, escalation, 결과 보고에만 필요합니다.
 
 What it does:
-  1. Scaffolds .harness/ directory (actions, archive, gotchas, config)
-  2. Installs skills to .claude/skills/ (dispatcher, planner, generators, evaluators)
-  3. Copies helper scripts to scripts/
+  1. Scaffolds project-local .harness/ runtime state
+  2. Installs commands to .claude/commands/ and .codex/commands/
+  3. Installs CXX and harness skills to .claude/skills/ and .codex/skills/
+  4. Copies HR-Resource to .harness/shared/HR-Resource for hiring
   4. Registers SessionStart + UserPromptSubmit + Stop hooks
   5. Installs statusline (persistent 1-line status bar)
-  6. Creates AGENTS.md + CLAUDE.md symlink
+  6. Creates AGENTS.md + CLAUDE.md symlink when needed
 
 After init:
-  1. Restart Claude Code session (/exit → re-enter directory)
-  2. Say "하네스 엔지니어링 시작" or /harness-dispatcher
-  3. After GOAL intake, Conductor runs the company loop autonomously.
-  4. (선택) bash scripts/harness-wake-install.sh install . — 1시간마다 자동 wake.
+  1. Restart Claude/Codex session if command discovery needs refresh.
+  2. Use /goal or /hot-fix.
+  3. Internal agents must call hired agents/skills, not slash commands.
 `);
 }
 
@@ -1539,7 +1604,6 @@ function main() {
   console.log('╚══════════════════════════════════════════════════════════╝');
   console.log('  bash scripts/harness-dashboard-up.sh');
   console.log('  → http://localhost:3001 에서 .harness/ 상태 실시간 시각화');
-  console.log('  → 첫 실행 시 git sparse-checkout 으로 ~5MB 만 가져옵니다.');
   console.log('');
 
   console.log('');
@@ -1557,9 +1621,9 @@ function main() {
     log('╚═══════════════════════════════════════════════════════════╝');
   } else {
     log('Next steps:');
-    log('  1. Restart Claude Code session (/exit → re-enter directory)');
-    log('  2. Say "하네스 엔지니어링 시작" or /harness-dispatcher');
-    log('  3. 회사모드가 자동으로 병렬 실행합니다. 진행 여부를 묻지 않습니다.');
+    log('  1. Restart Claude/Codex if command discovery needs refresh.');
+    log('  2. Use /goal or /hot-fix.');
+    log('  3. Internal agents call hired agents/skills, not slash commands.');
   }
   console.log('');
 }
