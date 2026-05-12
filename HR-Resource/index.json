@@ -1,0 +1,747 @@
+{
+  "source": "/Users/ted/Downloads/agency-agents-main",
+  "imported_at": "2026-05-11T08:05:46.803Z",
+  "count": 185,
+  "resources": [
+    {
+      "sourceRel": "academic/academic-anthropologist.md",
+      "skillName": "academic-academic-anthropologist"
+    },
+    {
+      "sourceRel": "academic/academic-geographer.md",
+      "skillName": "academic-academic-geographer"
+    },
+    {
+      "sourceRel": "academic/academic-historian.md",
+      "skillName": "academic-academic-historian"
+    },
+    {
+      "sourceRel": "academic/academic-narratologist.md",
+      "skillName": "academic-academic-narratologist"
+    },
+    {
+      "sourceRel": "academic/academic-psychologist.md",
+      "skillName": "academic-academic-psychologist"
+    },
+    {
+      "sourceRel": "design/design-brand-guardian.md",
+      "skillName": "design-design-brand-guardian"
+    },
+    {
+      "sourceRel": "design/design-image-prompt-engineer.md",
+      "skillName": "design-design-image-prompt-engineer"
+    },
+    {
+      "sourceRel": "design/design-inclusive-visuals-specialist.md",
+      "skillName": "design-design-inclusive-visuals-specialist"
+    },
+    {
+      "sourceRel": "design/design-ui-designer.md",
+      "skillName": "design-design-ui-designer"
+    },
+    {
+      "sourceRel": "design/design-ux-architect.md",
+      "skillName": "design-design-ux-architect"
+    },
+    {
+      "sourceRel": "design/design-ux-researcher.md",
+      "skillName": "design-design-ux-researcher"
+    },
+    {
+      "sourceRel": "design/design-visual-storyteller.md",
+      "skillName": "design-design-visual-storyteller"
+    },
+    {
+      "sourceRel": "design/design-whimsy-injector.md",
+      "skillName": "design-design-whimsy-injector"
+    },
+    {
+      "sourceRel": "engineering/engineering-ai-data-remediation-engineer.md",
+      "skillName": "engineering-engineering-ai-data-remediation-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-ai-engineer.md",
+      "skillName": "engineering-engineering-ai-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-autonomous-optimization-architect.md",
+      "skillName": "engineering-engineering-autonomous-optimization-architect"
+    },
+    {
+      "sourceRel": "engineering/engineering-backend-architect.md",
+      "skillName": "engineering-engineering-backend-architect"
+    },
+    {
+      "sourceRel": "engineering/engineering-cms-developer.md",
+      "skillName": "engineering-engineering-cms-developer"
+    },
+    {
+      "sourceRel": "engineering/engineering-code-reviewer.md",
+      "skillName": "engineering-engineering-code-reviewer"
+    },
+    {
+      "sourceRel": "engineering/engineering-codebase-onboarding-engineer.md",
+      "skillName": "engineering-engineering-codebase-onboarding-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-data-engineer.md",
+      "skillName": "engineering-engineering-data-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-database-optimizer.md",
+      "skillName": "engineering-engineering-database-optimizer"
+    },
+    {
+      "sourceRel": "engineering/engineering-devops-automator.md",
+      "skillName": "engineering-engineering-devops-automator"
+    },
+    {
+      "sourceRel": "engineering/engineering-email-intelligence-engineer.md",
+      "skillName": "engineering-engineering-email-intelligence-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-embedded-firmware-engineer.md",
+      "skillName": "engineering-engineering-embedded-firmware-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-feishu-integration-developer.md",
+      "skillName": "engineering-engineering-feishu-integration-developer"
+    },
+    {
+      "sourceRel": "engineering/engineering-filament-optimization-specialist.md",
+      "skillName": "engineering-engineering-filament-optimization-specialist"
+    },
+    {
+      "sourceRel": "engineering/engineering-frontend-developer.md",
+      "skillName": "engineering-engineering-frontend-developer"
+    },
+    {
+      "sourceRel": "engineering/engineering-git-workflow-master.md",
+      "skillName": "engineering-engineering-git-workflow-master"
+    },
+    {
+      "sourceRel": "engineering/engineering-incident-response-commander.md",
+      "skillName": "engineering-engineering-incident-response-commander"
+    },
+    {
+      "sourceRel": "engineering/engineering-minimal-change-engineer.md",
+      "skillName": "engineering-engineering-minimal-change-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-mobile-app-builder.md",
+      "skillName": "engineering-engineering-mobile-app-builder"
+    },
+    {
+      "sourceRel": "engineering/engineering-rapid-prototyper.md",
+      "skillName": "engineering-engineering-rapid-prototyper"
+    },
+    {
+      "sourceRel": "engineering/engineering-security-engineer.md",
+      "skillName": "engineering-engineering-security-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-senior-developer.md",
+      "skillName": "engineering-engineering-senior-developer"
+    },
+    {
+      "sourceRel": "engineering/engineering-software-architect.md",
+      "skillName": "engineering-engineering-software-architect"
+    },
+    {
+      "sourceRel": "engineering/engineering-solidity-smart-contract-engineer.md",
+      "skillName": "engineering-engineering-solidity-smart-contract-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-sre.md",
+      "skillName": "engineering-engineering-sre"
+    },
+    {
+      "sourceRel": "engineering/engineering-technical-writer.md",
+      "skillName": "engineering-engineering-technical-writer"
+    },
+    {
+      "sourceRel": "engineering/engineering-threat-detection-engineer.md",
+      "skillName": "engineering-engineering-threat-detection-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-voice-ai-integration-engineer.md",
+      "skillName": "engineering-engineering-voice-ai-integration-engineer"
+    },
+    {
+      "sourceRel": "engineering/engineering-wechat-mini-program-developer.md",
+      "skillName": "engineering-engineering-wechat-mini-program-developer"
+    },
+    {
+      "sourceRel": "finance/finance-bookkeeper-controller.md",
+      "skillName": "finance-finance-bookkeeper-controller"
+    },
+    {
+      "sourceRel": "finance/finance-financial-analyst.md",
+      "skillName": "finance-finance-financial-analyst"
+    },
+    {
+      "sourceRel": "finance/finance-fpa-analyst.md",
+      "skillName": "finance-finance-fpa-analyst"
+    },
+    {
+      "sourceRel": "finance/finance-investment-researcher.md",
+      "skillName": "finance-finance-investment-researcher"
+    },
+    {
+      "sourceRel": "finance/finance-tax-strategist.md",
+      "skillName": "finance-finance-tax-strategist"
+    },
+    {
+      "sourceRel": "game-development/blender/blender-addon-engineer.md",
+      "skillName": "game-development-blender-blender-addon-engineer"
+    },
+    {
+      "sourceRel": "game-development/game-audio-engineer.md",
+      "skillName": "game-development-game-audio-engineer"
+    },
+    {
+      "sourceRel": "game-development/game-designer.md",
+      "skillName": "game-development-game-designer"
+    },
+    {
+      "sourceRel": "game-development/godot/godot-gameplay-scripter.md",
+      "skillName": "game-development-godot-godot-gameplay-scripter"
+    },
+    {
+      "sourceRel": "game-development/godot/godot-multiplayer-engineer.md",
+      "skillName": "game-development-godot-godot-multiplayer-engineer"
+    },
+    {
+      "sourceRel": "game-development/godot/godot-shader-developer.md",
+      "skillName": "game-development-godot-godot-shader-developer"
+    },
+    {
+      "sourceRel": "game-development/level-designer.md",
+      "skillName": "game-development-level-designer"
+    },
+    {
+      "sourceRel": "game-development/narrative-designer.md",
+      "skillName": "game-development-narrative-designer"
+    },
+    {
+      "sourceRel": "game-development/roblox-studio/roblox-avatar-creator.md",
+      "skillName": "game-development-roblox-studio-roblox-avatar-creator"
+    },
+    {
+      "sourceRel": "game-development/roblox-studio/roblox-experience-designer.md",
+      "skillName": "game-development-roblox-studio-roblox-experience-designer"
+    },
+    {
+      "sourceRel": "game-development/roblox-studio/roblox-systems-scripter.md",
+      "skillName": "game-development-roblox-studio-roblox-systems-scripter"
+    },
+    {
+      "sourceRel": "game-development/technical-artist.md",
+      "skillName": "game-development-technical-artist"
+    },
+    {
+      "sourceRel": "game-development/unity/unity-architect.md",
+      "skillName": "game-development-unity-unity-architect"
+    },
+    {
+      "sourceRel": "game-development/unity/unity-editor-tool-developer.md",
+      "skillName": "game-development-unity-unity-editor-tool-developer"
+    },
+    {
+      "sourceRel": "game-development/unity/unity-multiplayer-engineer.md",
+      "skillName": "game-development-unity-unity-multiplayer-engineer"
+    },
+    {
+      "sourceRel": "game-development/unity/unity-shader-graph-artist.md",
+      "skillName": "game-development-unity-unity-shader-graph-artist"
+    },
+    {
+      "sourceRel": "game-development/unreal-engine/unreal-multiplayer-architect.md",
+      "skillName": "game-development-unreal-engine-unreal-multiplayer-architect"
+    },
+    {
+      "sourceRel": "game-development/unreal-engine/unreal-systems-engineer.md",
+      "skillName": "game-development-unreal-engine-unreal-systems-engineer"
+    },
+    {
+      "sourceRel": "game-development/unreal-engine/unreal-technical-artist.md",
+      "skillName": "game-development-unreal-engine-unreal-technical-artist"
+    },
+    {
+      "sourceRel": "game-development/unreal-engine/unreal-world-builder.md",
+      "skillName": "game-development-unreal-engine-unreal-world-builder"
+    },
+    {
+      "sourceRel": "integrations/mcp-memory/backend-architect-with-memory.md",
+      "skillName": "integrations-mcp-memory-backend-architect-with-memory"
+    },
+    {
+      "sourceRel": "marketing/marketing-agentic-search-optimizer.md",
+      "skillName": "marketing-marketing-agentic-search-optimizer"
+    },
+    {
+      "sourceRel": "marketing/marketing-ai-citation-strategist.md",
+      "skillName": "marketing-marketing-ai-citation-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-app-store-optimizer.md",
+      "skillName": "marketing-marketing-app-store-optimizer"
+    },
+    {
+      "sourceRel": "marketing/marketing-baidu-seo-specialist.md",
+      "skillName": "marketing-marketing-baidu-seo-specialist"
+    },
+    {
+      "sourceRel": "marketing/marketing-bilibili-content-strategist.md",
+      "skillName": "marketing-marketing-bilibili-content-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-book-co-author.md",
+      "skillName": "marketing-marketing-book-co-author"
+    },
+    {
+      "sourceRel": "marketing/marketing-carousel-growth-engine.md",
+      "skillName": "marketing-marketing-carousel-growth-engine"
+    },
+    {
+      "sourceRel": "marketing/marketing-china-ecommerce-operator.md",
+      "skillName": "marketing-marketing-china-ecommerce-operator"
+    },
+    {
+      "sourceRel": "marketing/marketing-china-market-localization-strategist.md",
+      "skillName": "marketing-marketing-china-market-localization-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-content-creator.md",
+      "skillName": "marketing-marketing-content-creator"
+    },
+    {
+      "sourceRel": "marketing/marketing-cross-border-ecommerce.md",
+      "skillName": "marketing-marketing-cross-border-ecommerce"
+    },
+    {
+      "sourceRel": "marketing/marketing-douyin-strategist.md",
+      "skillName": "marketing-marketing-douyin-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-growth-hacker.md",
+      "skillName": "marketing-marketing-growth-hacker"
+    },
+    {
+      "sourceRel": "marketing/marketing-instagram-curator.md",
+      "skillName": "marketing-marketing-instagram-curator"
+    },
+    {
+      "sourceRel": "marketing/marketing-kuaishou-strategist.md",
+      "skillName": "marketing-marketing-kuaishou-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-linkedin-content-creator.md",
+      "skillName": "marketing-marketing-linkedin-content-creator"
+    },
+    {
+      "sourceRel": "marketing/marketing-livestream-commerce-coach.md",
+      "skillName": "marketing-marketing-livestream-commerce-coach"
+    },
+    {
+      "sourceRel": "marketing/marketing-podcast-strategist.md",
+      "skillName": "marketing-marketing-podcast-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-private-domain-operator.md",
+      "skillName": "marketing-marketing-private-domain-operator"
+    },
+    {
+      "sourceRel": "marketing/marketing-reddit-community-builder.md",
+      "skillName": "marketing-marketing-reddit-community-builder"
+    },
+    {
+      "sourceRel": "marketing/marketing-seo-specialist.md",
+      "skillName": "marketing-marketing-seo-specialist"
+    },
+    {
+      "sourceRel": "marketing/marketing-short-video-editing-coach.md",
+      "skillName": "marketing-marketing-short-video-editing-coach"
+    },
+    {
+      "sourceRel": "marketing/marketing-social-media-strategist.md",
+      "skillName": "marketing-marketing-social-media-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-tiktok-strategist.md",
+      "skillName": "marketing-marketing-tiktok-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-twitter-engager.md",
+      "skillName": "marketing-marketing-twitter-engager"
+    },
+    {
+      "sourceRel": "marketing/marketing-video-optimization-specialist.md",
+      "skillName": "marketing-marketing-video-optimization-specialist"
+    },
+    {
+      "sourceRel": "marketing/marketing-wechat-official-account.md",
+      "skillName": "marketing-marketing-wechat-official-account"
+    },
+    {
+      "sourceRel": "marketing/marketing-weibo-strategist.md",
+      "skillName": "marketing-marketing-weibo-strategist"
+    },
+    {
+      "sourceRel": "marketing/marketing-xiaohongshu-specialist.md",
+      "skillName": "marketing-marketing-xiaohongshu-specialist"
+    },
+    {
+      "sourceRel": "marketing/marketing-zhihu-strategist.md",
+      "skillName": "marketing-marketing-zhihu-strategist"
+    },
+    {
+      "sourceRel": "paid-media/paid-media-auditor.md",
+      "skillName": "paid-media-paid-media-auditor"
+    },
+    {
+      "sourceRel": "paid-media/paid-media-creative-strategist.md",
+      "skillName": "paid-media-paid-media-creative-strategist"
+    },
+    {
+      "sourceRel": "paid-media/paid-media-paid-social-strategist.md",
+      "skillName": "paid-media-paid-media-paid-social-strategist"
+    },
+    {
+      "sourceRel": "paid-media/paid-media-ppc-strategist.md",
+      "skillName": "paid-media-paid-media-ppc-strategist"
+    },
+    {
+      "sourceRel": "paid-media/paid-media-programmatic-buyer.md",
+      "skillName": "paid-media-paid-media-programmatic-buyer"
+    },
+    {
+      "sourceRel": "paid-media/paid-media-search-query-analyst.md",
+      "skillName": "paid-media-paid-media-search-query-analyst"
+    },
+    {
+      "sourceRel": "paid-media/paid-media-tracking-specialist.md",
+      "skillName": "paid-media-paid-media-tracking-specialist"
+    },
+    {
+      "sourceRel": "product/product-behavioral-nudge-engine.md",
+      "skillName": "product-product-behavioral-nudge-engine"
+    },
+    {
+      "sourceRel": "product/product-feedback-synthesizer.md",
+      "skillName": "product-product-feedback-synthesizer"
+    },
+    {
+      "sourceRel": "product/product-manager.md",
+      "skillName": "product-product-manager"
+    },
+    {
+      "sourceRel": "product/product-sprint-prioritizer.md",
+      "skillName": "product-product-sprint-prioritizer"
+    },
+    {
+      "sourceRel": "product/product-trend-researcher.md",
+      "skillName": "product-product-trend-researcher"
+    },
+    {
+      "sourceRel": "project-management/project-management-experiment-tracker.md",
+      "skillName": "project-management-project-management-experiment-tracker"
+    },
+    {
+      "sourceRel": "project-management/project-management-jira-workflow-steward.md",
+      "skillName": "project-management-project-management-jira-workflow-steward"
+    },
+    {
+      "sourceRel": "project-management/project-management-project-shepherd.md",
+      "skillName": "project-management-project-management-project-shepherd"
+    },
+    {
+      "sourceRel": "project-management/project-management-studio-operations.md",
+      "skillName": "project-management-project-management-studio-operations"
+    },
+    {
+      "sourceRel": "project-management/project-management-studio-producer.md",
+      "skillName": "project-management-project-management-studio-producer"
+    },
+    {
+      "sourceRel": "project-management/project-manager-senior.md",
+      "skillName": "project-management-project-manager-senior"
+    },
+    {
+      "sourceRel": "sales/sales-account-strategist.md",
+      "skillName": "sales-sales-account-strategist"
+    },
+    {
+      "sourceRel": "sales/sales-coach.md",
+      "skillName": "sales-sales-coach"
+    },
+    {
+      "sourceRel": "sales/sales-deal-strategist.md",
+      "skillName": "sales-sales-deal-strategist"
+    },
+    {
+      "sourceRel": "sales/sales-discovery-coach.md",
+      "skillName": "sales-sales-discovery-coach"
+    },
+    {
+      "sourceRel": "sales/sales-engineer.md",
+      "skillName": "sales-sales-engineer"
+    },
+    {
+      "sourceRel": "sales/sales-outbound-strategist.md",
+      "skillName": "sales-sales-outbound-strategist"
+    },
+    {
+      "sourceRel": "sales/sales-pipeline-analyst.md",
+      "skillName": "sales-sales-pipeline-analyst"
+    },
+    {
+      "sourceRel": "sales/sales-proposal-strategist.md",
+      "skillName": "sales-sales-proposal-strategist"
+    },
+    {
+      "sourceRel": "spatial-computing/macos-spatial-metal-engineer.md",
+      "skillName": "spatial-computing-macos-spatial-metal-engineer"
+    },
+    {
+      "sourceRel": "spatial-computing/terminal-integration-specialist.md",
+      "skillName": "spatial-computing-terminal-integration-specialist"
+    },
+    {
+      "sourceRel": "spatial-computing/visionos-spatial-engineer.md",
+      "skillName": "spatial-computing-visionos-spatial-engineer"
+    },
+    {
+      "sourceRel": "spatial-computing/xr-cockpit-interaction-specialist.md",
+      "skillName": "spatial-computing-xr-cockpit-interaction-specialist"
+    },
+    {
+      "sourceRel": "spatial-computing/xr-immersive-developer.md",
+      "skillName": "spatial-computing-xr-immersive-developer"
+    },
+    {
+      "sourceRel": "spatial-computing/xr-interface-architect.md",
+      "skillName": "spatial-computing-xr-interface-architect"
+    },
+    {
+      "sourceRel": "specialized/accounts-payable-agent.md",
+      "skillName": "specialized-accounts-payable-agent"
+    },
+    {
+      "sourceRel": "specialized/agentic-identity-trust.md",
+      "skillName": "specialized-agentic-identity-trust"
+    },
+    {
+      "sourceRel": "specialized/agents-orchestrator.md",
+      "skillName": "specialized-agents-orchestrator"
+    },
+    {
+      "sourceRel": "specialized/automation-governance-architect.md",
+      "skillName": "specialized-automation-governance-architect"
+    },
+    {
+      "sourceRel": "specialized/blockchain-security-auditor.md",
+      "skillName": "specialized-blockchain-security-auditor"
+    },
+    {
+      "sourceRel": "specialized/compliance-auditor.md",
+      "skillName": "specialized-compliance-auditor"
+    },
+    {
+      "sourceRel": "specialized/corporate-training-designer.md",
+      "skillName": "specialized-corporate-training-designer"
+    },
+    {
+      "sourceRel": "specialized/customer-service.md",
+      "skillName": "specialized-customer-service"
+    },
+    {
+      "sourceRel": "specialized/data-consolidation-agent.md",
+      "skillName": "specialized-data-consolidation-agent"
+    },
+    {
+      "sourceRel": "specialized/government-digital-presales-consultant.md",
+      "skillName": "specialized-government-digital-presales-consultant"
+    },
+    {
+      "sourceRel": "specialized/healthcare-customer-service.md",
+      "skillName": "specialized-healthcare-customer-service"
+    },
+    {
+      "sourceRel": "specialized/healthcare-marketing-compliance.md",
+      "skillName": "specialized-healthcare-marketing-compliance"
+    },
+    {
+      "sourceRel": "specialized/hospitality-guest-services.md",
+      "skillName": "specialized-hospitality-guest-services"
+    },
+    {
+      "sourceRel": "specialized/hr-onboarding.md",
+      "skillName": "specialized-hr-onboarding"
+    },
+    {
+      "sourceRel": "specialized/identity-graph-operator.md",
+      "skillName": "specialized-identity-graph-operator"
+    },
+    {
+      "sourceRel": "specialized/language-translator.md",
+      "skillName": "specialized-language-translator"
+    },
+    {
+      "sourceRel": "specialized/legal-billing-time-tracking.md",
+      "skillName": "specialized-legal-billing-time-tracking"
+    },
+    {
+      "sourceRel": "specialized/legal-client-intake.md",
+      "skillName": "specialized-legal-client-intake"
+    },
+    {
+      "sourceRel": "specialized/legal-document-review.md",
+      "skillName": "specialized-legal-document-review"
+    },
+    {
+      "sourceRel": "specialized/loan-officer-assistant.md",
+      "skillName": "specialized-loan-officer-assistant"
+    },
+    {
+      "sourceRel": "specialized/lsp-index-engineer.md",
+      "skillName": "specialized-lsp-index-engineer"
+    },
+    {
+      "sourceRel": "specialized/real-estate-buyer-seller.md",
+      "skillName": "specialized-real-estate-buyer-seller"
+    },
+    {
+      "sourceRel": "specialized/recruitment-specialist.md",
+      "skillName": "specialized-recruitment-specialist"
+    },
+    {
+      "sourceRel": "specialized/report-distribution-agent.md",
+      "skillName": "specialized-report-distribution-agent"
+    },
+    {
+      "sourceRel": "specialized/retail-customer-returns.md",
+      "skillName": "specialized-retail-customer-returns"
+    },
+    {
+      "sourceRel": "specialized/sales-data-extraction-agent.md",
+      "skillName": "specialized-sales-data-extraction-agent"
+    },
+    {
+      "sourceRel": "specialized/sales-outreach.md",
+      "skillName": "specialized-sales-outreach"
+    },
+    {
+      "sourceRel": "specialized/specialized-chief-of-staff.md",
+      "skillName": "specialized-specialized-chief-of-staff"
+    },
+    {
+      "sourceRel": "specialized/specialized-civil-engineer.md",
+      "skillName": "specialized-specialized-civil-engineer"
+    },
+    {
+      "sourceRel": "specialized/specialized-cultural-intelligence-strategist.md",
+      "skillName": "specialized-specialized-cultural-intelligence-strategist"
+    },
+    {
+      "sourceRel": "specialized/specialized-developer-advocate.md",
+      "skillName": "specialized-specialized-developer-advocate"
+    },
+    {
+      "sourceRel": "specialized/specialized-document-generator.md",
+      "skillName": "specialized-specialized-document-generator"
+    },
+    {
+      "sourceRel": "specialized/specialized-french-consulting-market.md",
+      "skillName": "specialized-specialized-french-consulting-market"
+    },
+    {
+      "sourceRel": "specialized/specialized-korean-business-navigator.md",
+      "skillName": "specialized-specialized-korean-business-navigator"
+    },
+    {
+      "sourceRel": "specialized/specialized-mcp-builder.md",
+      "skillName": "specialized-specialized-mcp-builder"
+    },
+    {
+      "sourceRel": "specialized/specialized-model-qa.md",
+      "skillName": "specialized-specialized-model-qa"
+    },
+    {
+      "sourceRel": "specialized/specialized-salesforce-architect.md",
+      "skillName": "specialized-specialized-salesforce-architect"
+    },
+    {
+      "sourceRel": "specialized/specialized-workflow-architect.md",
+      "skillName": "specialized-specialized-workflow-architect"
+    },
+    {
+      "sourceRel": "specialized/study-abroad-advisor.md",
+      "skillName": "specialized-study-abroad-advisor"
+    },
+    {
+      "sourceRel": "specialized/supply-chain-strategist.md",
+      "skillName": "specialized-supply-chain-strategist"
+    },
+    {
+      "sourceRel": "specialized/zk-steward.md",
+      "skillName": "specialized-zk-steward"
+    },
+    {
+      "sourceRel": "support/support-analytics-reporter.md",
+      "skillName": "support-support-analytics-reporter"
+    },
+    {
+      "sourceRel": "support/support-executive-summary-generator.md",
+      "skillName": "support-support-executive-summary-generator"
+    },
+    {
+      "sourceRel": "support/support-finance-tracker.md",
+      "skillName": "support-support-finance-tracker"
+    },
+    {
+      "sourceRel": "support/support-infrastructure-maintainer.md",
+      "skillName": "support-support-infrastructure-maintainer"
+    },
+    {
+      "sourceRel": "support/support-legal-compliance-checker.md",
+      "skillName": "support-support-legal-compliance-checker"
+    },
+    {
+      "sourceRel": "support/support-support-responder.md",
+      "skillName": "support-support-support-responder"
+    },
+    {
+      "sourceRel": "testing/testing-accessibility-auditor.md",
+      "skillName": "testing-testing-accessibility-auditor"
+    },
+    {
+      "sourceRel": "testing/testing-api-tester.md",
+      "skillName": "testing-testing-api-tester"
+    },
+    {
+      "sourceRel": "testing/testing-evidence-collector.md",
+      "skillName": "testing-testing-evidence-collector"
+    },
+    {
+      "sourceRel": "testing/testing-performance-benchmarker.md",
+      "skillName": "testing-testing-performance-benchmarker"
+    },
+    {
+      "sourceRel": "testing/testing-reality-checker.md",
+      "skillName": "testing-testing-reality-checker"
+    },
+    {
+      "sourceRel": "testing/testing-test-results-analyzer.md",
+      "skillName": "testing-testing-test-results-analyzer"
+    },
+    {
+      "sourceRel": "testing/testing-tool-evaluator.md",
+      "skillName": "testing-testing-tool-evaluator"
+    },
+    {
+      "sourceRel": "testing/testing-workflow-optimizer.md",
+      "skillName": "testing-testing-workflow-optimizer"
+    }
+  ]
+}

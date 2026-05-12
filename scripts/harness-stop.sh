@@ -22,10 +22,28 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 PROGRESS="$CWD/.harness/progress.json"
 CONFIG="$CWD/.harness/config.json"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Opt-out
 AUTO_CHAIN=$(jq -r '.behavior.auto_chain_on_stop // true' "$CONFIG" 2>/dev/null || echo "true")
 if [ "$AUTO_CHAIN" != "true" ]; then exit 0; fi
+
+# CXX direct-execution guard:
+# If a mission has CXX documents but no worker reports, block the stop so the
+# company loop must hire/dispatch workers instead of ending with CXX-only work.
+if [ -x "$SCRIPT_DIR/harness-worker-evidence-validate.sh" ]; then
+  WORKER_EVIDENCE_JSON=$("$SCRIPT_DIR/harness-worker-evidence-validate.sh" "$CWD" json 2>/dev/null || true)
+  WORKER_EVIDENCE_OK=$(echo "$WORKER_EVIDENCE_JSON" | jq -r 'if has("ok") then .ok else true end' 2>/dev/null || echo true)
+  if [ "$WORKER_EVIDENCE_OK" != "true" ]; then
+    REASON=$(echo "$WORKER_EVIDENCE_JSON" | jq -r '
+      "CXX 직접 실행 차단: " +
+      ([.violations[] | "\(.mission) has CXX docs without worker reports: \(.docs | join(","))"] | join("; ")) +
+      ". harness-hiring/resource-manager로 전문 worker를 고용 또는 배정하고 .harness/documents/{mission}/workers/{worker-name}.md 를 남긴 뒤 계속하라."
+    ' 2>/dev/null || echo "CXX 직접 실행 차단: worker report가 없는 mission이 있습니다. hired worker 보고서를 먼저 생성하세요.")
+    jq -nc --arg reason "$REASON" '{decision:"block", reason:$reason}'
+    exit 0
+  fi
+fi
 
 # 무한루프 방지: 한 sprint 안에서 stop_chain_count 가 상한을 넘으면 중단
 STOP_CHAIN_MAX=$(jq -r '.behavior.auto_chain_max_per_sprint // 200' "$CONFIG" 2>/dev/null || echo 200)

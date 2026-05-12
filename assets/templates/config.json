@@ -364,17 +364,51 @@
     "parallel_by_default": true
   },
   "runtime": {
+    "ports": {
+      "comment": "CEO가 Owner와 합의한 {xx}000 base port. .env 의 HARNESS_BASE_PORT 가 설정되지 않으면 OPS monitor 가 에러로 종료된다. CXX 는 이 값을 읽고 서비스별 포트를 base 이상 범위에서 배정한다.",
+      "base_env": "HARNESS_BASE_PORT",
+      "base": null,
+      "range_size": 1000
+    },
+    "build": {
+      "comment": "command 기반 build/dev 환경. flutter run, npm run dev 같은 실행 명령과 예상 포트/로그를 OPS 가 감시한다. live=true 로 바꾸기 전에 HARNESS_BASE_PORT 를 먼저 설정해야 한다.",
+      "live": false,
+      "commands": [
+        {
+          "name": "example-dev",
+          "cwd": ".",
+          "command": "npm run dev",
+          "expected_port": null,
+          "log_path": null,
+          "owner": "cto",
+          "cadence_seconds": 3600
+        }
+      ]
+    },
+    "play": {
+      "comment": "/play-harness 가 실행하는 play mode command. release mode 와 공존할 수 없으며, scripts/play.sh 가 상호 배타 상태를 강제한다.",
+      "cwd": ".",
+      "command": ""
+    },
+    "release": {
+      "comment": "/release-harness 가 실행하는 release operation command. play mode 와 공존할 수 없으며, scripts/release.sh 가 상호 배타 상태를 강제한다.",
+      "cwd": ".",
+      "command": ""
+    },
     "production": {
-      "comment": "Owner+CEO+CTO 합의로만 services[] 를 수정한다. live=true 이고 services[] 가 있으면 Service-Ops 는 매 hourly review 마다 port/health/log 상태를 운영보고서에 남긴다.",
+      "comment": "Owner+CEO+CTO 합의로만 services[] 를 수정한다. local/docker/vm/aws/cloud 등 운영 서버 매핑을 Owner에게 받아 기록한다. live=true 이고 services[] 가 있으면 OPS 는 매 hourly review 마다 port/health/log 상태를 운영보고서에 남긴다.",
       "live": false,
       "services": [
         {
           "name": "example-api",
+          "environment": "local",
           "host": "127.0.0.1",
-          "port": 3000,
+          "port": null,
           "health_path": "/health",
           "expected_status": 200,
           "log_path": null,
+          "owner": "cto",
+          "source": "owner-provided",
           "cadence_seconds": 3600
         }
       ]

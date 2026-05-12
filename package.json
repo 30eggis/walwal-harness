@@ -1,14 +1,14 @@
 {
   "name": "@walwal-harness/cli",
-  "version": "6.1.6",
-  "description": "Production harness for AI agent engineering — NEXUS-adapted company metaphor (Dispatcher/CEO + Conductor + Meeting-Manager + COO/Planner + CTO + CQO + Service-Ops). Always-on company mode, parallel worker pool, Brainstormer, Planner, Generator(BE/FE/Designer/DevOps), Evaluator chain (Code-Quality → Functional → Visual + Architecture/Security). Supports React, Next.js, and Flutter FE stacks.",
+  "version": "7.1.0",
+  "description": "Company-style AI agent harness for Claude and Codex. Installs commands, CXX agents, skills, HR-Resource hiring pool, and project-local .harness runtime state.",
   "bin": {
     "walwal-harness": "bin/init.js"
   },
   "scripts": {
-    "postinstall": "node bin/init.js --auto",
     "init": "node bin/init.js",
     "scan": "bash scripts/scan-project.sh .",
+    "import:agency-agents": "node scripts/import-agency-agents.js",
     "reset": "node bin/init.js --force"
   },
   "keywords": [
@@ -19,22 +19,16 @@
     "skill",
     "command",
     "company-mode",
-    "parallel-workers",
-    "brainstorming",
-    "planner",
-    "generator",
-    "evaluator",
-    "nexus",
+    "hr-resource",
+    "hiring",
+    "resource-manager",
     "ceo",
+    "coo",
+    "cdo",
     "cto",
     "cqo",
-    "conductor",
-    "meeting-manager",
-    "service-ops",
-    "nestjs",
-    "react",
-    "flutter",
-    "playwright"
+    "ops",
+    "brick-office"
   ],
   "author": "",
   "license": "MIT",
@@ -48,7 +42,7 @@
   },
   "files": [
     "bin/",
-    "skills/",
+    "HR-Resource/",
     "scripts/",
     "commands/",
     "assets/",
