@@ -165,12 +165,91 @@ const V7_REMOVED_GOTCHA_FILES = [
   'generator-backend-laravel.md',
 ];
 
+const LEGACY_V7_FILE_OWNER = {
+  'conductor.md': 'ceo.md',
+  'dispatcher.md': 'ceo.md',
+  'coo-developer.md': 'coo.md',
+  'planner.md': 'coo.md',
+  'documentationer.md': 'coo.md',
+  'generator-frontend.md': 'cto.md',
+  'generator-backend.md': 'cto.md',
+  'generator-backend-laravel.md': 'cto.md',
+  'generator-devops.md': 'cto.md',
+  'evaluator-architecture.md': 'cto.md',
+  'generator-designer.md': 'cdo.md',
+  'evaluator-visual.md': 'cdo.md',
+  'evaluator-functional.md': 'cqo.md',
+  'evaluator-code-quality.md': 'cqo.md',
+  'evaluator-security.md': 'cqo.md',
+  'meeting-manager.md': 'ops.md',
+  'service-ops.md': 'ops.md',
+};
+
 function removeLegacyV7Files(dir, files) {
   for (const file of files) {
     const target = path.join(dir, file);
     if (fs.existsSync(target)) {
       fs.rmSync(target, { force: true });
     }
+  }
+}
+
+function extractMarkdownEntryBlocks(md, prefix) {
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(
+    `^#{2,3}\\s+\\[(${escapedPrefix}-[A-Z0-9_-]+)\\][\\s\\S]*?(?=^#{2,3}\\s+\\[${escapedPrefix}-|$(?![\\s\\S]))`,
+    'gm',
+  );
+  const blocks = [];
+  let match;
+  while ((match = re.exec(md)) !== null) {
+    blocks.push({ id: match[1], body: match[0].trimEnd() });
+  }
+  return blocks;
+}
+
+function migrateLegacyRoleEntries(dir, files, kind) {
+  const prefix = kind === 'gotchas' ? 'G' : 'C';
+  const migrated = [];
+  const backupDir = path.join(HARNESS_DIR, 'archive', 'pre-v7-role-migration');
+  for (const file of files) {
+    const sourcePath = path.join(dir, file);
+    if (!fs.existsSync(sourcePath)) continue;
+
+    const content = fs.readFileSync(sourcePath, 'utf8');
+    const blocks = extractMarkdownEntryBlocks(content, prefix);
+    if (!blocks.length) continue;
+
+    const targetFile = LEGACY_V7_FILE_OWNER[file] || 'shared.md';
+    const targetPath = path.join(dir, targetFile);
+    const targetOriginal = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : '';
+    const targetIds = new Set(
+      kind === 'gotchas'
+        ? extractGotchaEntryIds(targetOriginal)
+        : extractConventionEntryIds(targetOriginal),
+    );
+    const appendBlocks = [];
+    for (const block of blocks) {
+      if (targetIds.has(block.id)) continue;
+      appendBlocks.push([
+        block.body,
+        '',
+        `- **Migration source**: ${kind}/${file}`,
+      ].join('\n'));
+      targetIds.add(block.id);
+    }
+    if (!appendBlocks.length) continue;
+
+    ensureDir(backupDir);
+    fs.writeFileSync(path.join(backupDir, `${kind}-${file}`), content);
+    const sep = targetOriginal.trim() ? '\n\n' : '';
+    fs.writeFileSync(targetPath, targetOriginal.replace(/\s*$/, '') + sep + appendBlocks.join('\n\n') + '\n');
+    migrated.push(`${file} → ${targetFile} (${appendBlocks.length})`);
+  }
+
+  if (migrated.length) {
+    log(`${kind} legacy role entries migrated: ${migrated.join(', ')}`);
+    log(`Legacy role migration backup: ${backupDir}`);
   }
 }
 
@@ -337,6 +416,9 @@ function scaffoldHarness() {
   ensureDir(path.join(HARNESS_DIR, 'memories'));
   ensureDir(path.join(HARNESS_DIR, 'shared'));
 
+  migrateLegacyRoleEntries(path.join(HARNESS_DIR, 'conventions'), V7_REMOVED_CONVENTION_FILES, 'conventions');
+  migrateLegacyRoleEntries(path.join(HARNESS_DIR, 'gotchas'), V7_REMOVED_GOTCHA_FILES, 'gotchas');
+
   removeLegacyV7Files(path.join(HARNESS_DIR, 'conventions'), V7_REMOVED_CONVENTION_FILES);
   removeLegacyV7Files(path.join(HARNESS_DIR, 'gotchas'), V7_REMOVED_GOTCHA_FILES);
 
@@ -362,7 +444,7 @@ function scaffoldHarness() {
   // a file that has such entries, or user learning history is lost.
   const gotchasSrc = path.join(PKG_ROOT, 'gotchas');
   if (fs.existsSync(gotchasSrc)) {
-    const ENTRY_PATTERN = /^### \[G-\d+\]/m;  // Gotcha entry heading
+    const ENTRY_PATTERN = /^### \[G-[A-Z0-9_-]+\]/m;  // Gotcha entry heading
     const CUSTOM_MARKER = '## Custom Gotchas'; // Legacy marker still supported
     const files = fs.readdirSync(gotchasSrc);
     for (const file of files) {
@@ -1291,11 +1373,13 @@ function runMigrate(opts = {}) {
   const dryRun = opts.dryRun || false;
   const flags = detectMigrationNeeded();
   const gotchaMissingTotal = Object.values(flags.gotchaMissingEntries || {}).reduce((n, a) => n + a.length, 0);
+  const conventionMissingTotal = Object.values(flags.conventionMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   if (
     !flags.progressV3toV4 &&
     !flags.configMissingCompanyMode &&
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
     gotchaMissingTotal === 0 &&
+    conventionMissingTotal === 0 &&
     !flags.bundleVersionStale
   ) {
     console.log('');

@@ -34,3 +34,14 @@ You are the only direct conversation channel with the Owner.
 - Before CTO/CDO/OPS allocate runnable services, agree with the Owner on a `{xx}000` base port and write it to project `.env` as `HARNESS_BASE_PORT={xx}000`. Mentioning the value in `ceo.md` is not sufficient.
 - After writing `.env`, verify with `grep '^HARNESS_BASE_PORT=' .env` before routing service work.
 - For service monitoring, collect the Owner's server mapping first: local PC, Docker, VM, AWS/cloud, host, port, health path, log path, and contact/source.
+
+## Worktree Isolation Failure — No git Repo
+
+When an Agent spawn fails with a worktree or git error (e.g., "Cannot create agent worktree: not in a git repository"), this is an **isolation constraint**, not a hiring failure. The correct response is:
+
+1. **Do not skip `harness-hiring`.** Run `harness-hiring` as normal to register the worker in `hr-roster.json`.
+2. **Do not replace hired workers with inline "You are a…" prompts.** That is impersonation, not hiring.
+3. **Spawn the hired worker as a plain `Agent()` call** (no `subagent_type`, no worktree) and set the prompt to read the worker's SKILL.md from `.harness/shared/HR-Resource/{worker-name}/SKILL.md` before executing the task.
+4. **Report the isolation constraint to the Owner** in the final summary: state that worktree isolation was unavailable and workers ran without isolation.
+
+The worktree error only affects **isolation**. `harness-hiring`, `harness-resource-manager`, and `hr-roster.json` registration are independent of git and must always run.
