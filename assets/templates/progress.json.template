@@ -2,10 +2,10 @@
   "version": 4,
   "mode": "company",
   "mode_decision": {
-    "owner": "conductor",
+    "owner": "ceo",
     "decided_at": null,
-    "rationale": "company mode is always-on",
-    "policy": "always_company_parallel"
+    "rationale": "v7 company mode is CEO-led",
+    "policy": "owner_goal_to_ceo_cxx_workers"
   },
   "project_name": "",
   "pipeline": null,
@@ -21,7 +21,7 @@
   "current_agent": null,
   "agent_status": "pending",
   "completed_agents": [],
-  "next_agent": "dispatcher",
+  "next_agent": "ceo",
   "failure": {
     "agent": null,
     "location": null,

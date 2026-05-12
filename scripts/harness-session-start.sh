@@ -168,24 +168,24 @@ fi
 # init 상태: 첫 안내
 # ─────────────────────────────────────────
 if [ "$sprint_status" = "init" ]; then
-  if [ "$next_agent" != "null" ] && [ "$next_agent" != "none" ] && [ "$next_agent" != "dispatcher" ]; then
+  if [ "$next_agent" != "null" ] && [ "$next_agent" != "none" ] && [ "$next_agent" != "ceo" ]; then
     echo "# Harness Company Mode active"
     echo "# Sprint is init, but next_agent=${next_agent}; continue the autonomous loop instead of waiting for Owner."
   else
-  echo "# Harness ready — say \"하네스 엔지니어링 시작\" or /harness-dispatcher"
-  echo "# 기본 경로는 회사 루프입니다: dispatch -> CEO meeting -> COO/CTO 분배 -> gen/eval -> CQO -> service-ops -> batch meeting."
+  echo "# Harness ready — use /goal or /hot-fix"
+  echo "# 기본 경로는 v7 회사 루프입니다: CEO -> 필요한 CXX -> resource-manager/hiring -> worker reports -> CXX review -> CEO report."
   exit 0
   fi
 fi
 
 # ─────────────────────────────────────────
-# Audit lifecycle: Planner/Dispatcher 시작 시 리셋
+# Audit lifecycle: CEO 시작 시 리셋
 # ─────────────────────────────────────────
 init_audit "$PROJECT_ROOT"
-if [ "$next_agent" = "planner" ] || [ "$next_agent" = "dispatcher" ]; then
+if [ "$next_agent" = "ceo" ]; then
   # 새 사이클 — 이전 audit을 archive로 이동하고 새로 시작
   reset_audit "$PROJECT_ROOT" "$sprint_num"
-  audit_log "system" "cycle" "start" "sprint-${sprint_num}" "new plan/dispatch cycle"
+  audit_log "system" "cycle" "start" "sprint-${sprint_num}" "new CEO mission cycle"
 fi
 
 # ─────────────────────────────────────────

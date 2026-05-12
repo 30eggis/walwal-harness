@@ -859,10 +859,10 @@ function installStatusline() {
 }
 
 // ─────────────────────────────────────────
-// 3d. UserPromptSubmit hook (auto dispatcher routing)
+// 3d. UserPromptSubmit hook (v7 CEO routing guidance)
 // ─────────────────────────────────────────
 function installUserPromptSubmitHook() {
-  log('Installing UserPromptSubmit hook (auto dispatcher routing)...');
+  log('Installing UserPromptSubmit hook (v7 CEO routing guidance)...');
 
   const settingsDir = path.join(PROJECT_ROOT, '.claude');
 
@@ -896,9 +896,9 @@ function installUserPromptSubmitHook() {
     });
     writeClaudeSettings(settings);
     log('UserPromptSubmit hook installed in .claude/settings.json');
-    log('  → All prompts will be routed through harness-dispatcher');
+    log('  → /goal and /hot-fix are guided through harness-ceo and CXX workflow');
     log('  → Opt-out per message: say "harness skip" or "without harness"');
-    log('  → Disable globally: set .harness/config.json behavior.auto_route_dispatcher = false');
+    log('  → Disable globally: set .harness/config.json behavior.auto_route_ceo = false');
   } else {
     log('UserPromptSubmit hook already installed');
   }
@@ -1185,7 +1185,9 @@ function detectMigrationNeeded() {
   const memoryTplPath = path.join(PKG_ROOT, 'assets', 'templates', 'memory.md');
   const flags = {
     progressV3toV4: false,
+    progressLegacyRouting: false,
     configMissingCompanyMode: false,
+    configLegacyRouting: false,
     memoryMissingSystemEntries: [],
     gotchaMissingEntries: {},   // { "<filename>": [G-IDs...] }
     conventionMissingEntries: {}, // { "<filename>": [C-IDs...] }
@@ -1246,12 +1248,22 @@ function detectMigrationNeeded() {
     try {
       const p = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
       if ((p.version ?? 0) < TARGET_PROGRESS_VERSION) flags.progressV3toV4 = true;
+      if (
+        ['dispatcher', 'planner', 'generator-backend', 'generator-frontend', 'evaluator-functional', 'evaluator-visual', 'service-ops'].includes(p.next_agent) ||
+        p.mode_decision?.owner === 'conductor'
+      ) flags.progressLegacyRouting = true;
     } catch {}
   }
   if (fs.existsSync(configPath)) {
     try {
       const c = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       if (!c.company_mode || c.mode_selection) flags.configMissingCompanyMode = true;
+      if (
+        c.behavior?.auto_route_dispatcher !== undefined ||
+        c.behavior?.auto_route_dispatcher_description ||
+        c.company_mode?.owner === 'conductor' ||
+        c.agents?.dispatcher?.skill === 'harness-dispatcher'
+      ) flags.configLegacyRouting = true;
     } catch {}
   }
   if (fs.existsSync(memoryPath) && fs.existsSync(memoryTplPath)) {
@@ -1327,15 +1339,21 @@ function extractConventionEntryBlock(md, id) {
 function showMigrationProposal(flags) {
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════╗');
-  console.log('║  walwal-harness v6 — 자동 마이그레이션 사용 가능         ║');
+  console.log('║  walwal-harness v7 — 자동 마이그레이션 사용 가능         ║');
   console.log('╚══════════════════════════════════════════════════════════╝');
   if (flags.progressV3toV4) {
     console.log('  • progress.json: legacy mode → "company"');
     console.log('    legacy mode 값은 보존하지 않고 회사모드로 정규화됩니다.');
   }
+  if (flags.progressLegacyRouting) {
+    console.log('  • progress.json: legacy dispatcher/conductor routing → v7 CEO routing');
+  }
   if (flags.configMissingCompanyMode) {
     console.log('  • config.json: company_mode 섹션 동기화 가능');
-    console.log('    사용자 모드 선택 없이 회사모드 병렬 실행으로 고정합니다.');
+    console.log('    Owner /goal, /hot-fix → CEO/CXX/worker 흐름으로 고정합니다.');
+  }
+  if (flags.configLegacyRouting) {
+    console.log('  • config.json: legacy dispatcher/conductor wording → v7 CEO/CXX wording');
   }
   if (flags.memoryMissingSystemEntries && flags.memoryMissingSystemEntries.length) {
     console.log('  • memory.md: 시스템 entry 누락 — append 가능');
@@ -1376,7 +1394,9 @@ function runMigrate(opts = {}) {
   const conventionMissingTotal = Object.values(flags.conventionMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   if (
     !flags.progressV3toV4 &&
+    !flags.progressLegacyRouting &&
     !flags.configMissingCompanyMode &&
+    !flags.configLegacyRouting &&
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
     gotchaMissingTotal === 0 &&
     conventionMissingTotal === 0 &&
@@ -1385,7 +1405,7 @@ function runMigrate(opts = {}) {
     console.log('');
     let pkgVer = 'unknown';
     try { pkgVer = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version; } catch {}
-    log(`이미 최신 — bundle v${pkgVer} 일치, progress v${TARGET_PROGRESS_VERSION}, config.company_mode, memory 시스템 entry, gotcha entry 모두 sync.`);
+    log(`이미 최신 — bundle v${pkgVer} 일치, progress v${TARGET_PROGRESS_VERSION} v7 routing, config.company_mode, memory 시스템 entry, gotcha entry 모두 sync.`);
     return;
   }
 
@@ -1398,7 +1418,7 @@ function runMigrate(opts = {}) {
 
   // 1. progress.json
   const progressPath = path.join(HARNESS_DIR, 'progress.json');
-  if (flags.progressV3toV4 && fs.existsSync(progressPath)) {
+  if ((flags.progressV3toV4 || flags.progressLegacyRouting) && fs.existsSync(progressPath)) {
     const original = fs.readFileSync(progressPath, 'utf8');
     const p = JSON.parse(original);
     const oldMode = p.mode ?? 'company';
@@ -1407,14 +1427,17 @@ function runMigrate(opts = {}) {
       version: TARGET_PROGRESS_VERSION,
       mode: 'company',
       mode_decision: {
-        owner: 'conductor',
+        owner: 'ceo',
         decided_at: null,
-        rationale: `migration — legacy mode="${oldMode}" normalized to company`,
-        policy: 'always_company_parallel',
+        rationale: `migration — legacy mode="${oldMode}" normalized to v7 CEO-led company`,
+        policy: 'owner_goal_to_ceo_cxx_workers',
         user_override: null,
       },
+      next_agent: ['dispatcher', 'planner', 'generator-backend', 'generator-frontend', 'evaluator-functional', 'evaluator-visual', 'service-ops'].includes(p.next_agent)
+        ? 'ceo'
+        : (p.next_agent ?? 'ceo'),
     };
-    log(`  progress.json: version 3 → ${TARGET_PROGRESS_VERSION}, mode "${oldMode}" → "company"`);
+    log(`  progress.json: v7 routing normalized, mode "${oldMode}" → "company", next_agent="${p.next_agent ?? 'null'}" → "${newP.next_agent}"`);
     if (!dryRun) {
       fs.writeFileSync(path.join(backupDir, 'progress.json'), original);
       fs.writeFileSync(progressPath, JSON.stringify(newP, null, 2) + '\n');
@@ -1424,14 +1447,26 @@ function runMigrate(opts = {}) {
   // 2. config.json — inject company_mode from template if missing
   const configPath = path.join(HARNESS_DIR, 'config.json');
   const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
-  if (flags.configMissingCompanyMode && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
+  if ((flags.configMissingCompanyMode || flags.configLegacyRouting) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
     const original = fs.readFileSync(configPath, 'utf8');
     const c = JSON.parse(original);
     const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
     if (tpl.company_mode) {
-      c.company_mode = tpl.company_mode;
+      c.company_mode = {
+        ...tpl.company_mode,
+        comment: 'v7 — 회사모드는 CEO/CXX/worker 문서 흐름으로 운영된다.',
+        owner: 'ceo',
+      };
+      c.harness = tpl.harness || c.harness;
+      c.agents = tpl.agents || c.agents;
+      c.flow = tpl.flow || c.flow;
+      c.behavior = c.behavior || {};
+      c.behavior.auto_route_ceo = c.behavior.auto_route_ceo ?? c.behavior.auto_route_dispatcher ?? true;
+      c.behavior.auto_route_ceo_description = 'true 이면 /goal 또는 /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다.';
+      delete c.behavior.auto_route_dispatcher;
+      delete c.behavior.auto_route_dispatcher_description;
       delete c.mode_selection;
-      log('  config.json: company_mode 섹션 주입 (always-on company parallel)');
+      log('  config.json: v7 CEO/CXX routing 섹션 동기화');
       if (!dryRun) {
         fs.writeFileSync(path.join(backupDir, 'config.json'), original);
         fs.writeFileSync(configPath, JSON.stringify(c, null, 2) + '\n');
@@ -1524,60 +1559,90 @@ function runMigrate(opts = {}) {
     log('Dry-run 완료 — 실제 변경 적용하려면 `npx walwal-harness migrate` 실행');
   } else {
     log(`Migration 완료. 백업: ${backupDir}`);
-    log('Conductor 가 다음 sprint 시작 시 자동으로 모드 결정합니다.');
+    log('v7 routing 기준으로 /goal 또는 /hot-fix 가 CEO/CXX/worker 흐름을 시작합니다.');
     log('회사모드는 기본값이며 사용자 override 는 사용하지 않습니다.');
   }
   console.log('');
 }
 
 // ─────────────────────────────────────────
-// Verify — 14 SKILL invariants + spawn whitelist + progress schema
+// Verify — v7 CXX/core skill invariants + progress schema
 // ─────────────────────────────────────────
 function runVerify() {
   const expectedSkills = [
-    'dispatcher', 'conductor', 'meeting-manager', 'planner',
-    'cto', 'cqo', 'service-ops',
-    'generator-backend', 'generator-frontend', 'generator-designer', 'generator-devops',
-    'evaluator-code-quality', 'evaluator-functional', 'evaluator-visual',
-    'evaluator-architecture', 'evaluator-security',
-    'coo-developer', 'documentationer',
-    'brainstorming',
+    'ceo', 'coo', 'cdo', 'cto', 'cqo', 'ops',
+    'hiring', 'resource-manager', 'brick-office',
   ];
   const requiredFrontmatter = ['name', 'description'];
 
   console.log('');
-  log('=== Verify: skill invariants + spawn whitelist + progress schema ===');
+  log('=== Verify: v7 command/skill invariants + progress schema ===');
   let pass = 0;
   let fail = 0;
   const issues = [];
 
   // 1) skill files
+  const skillRoots = [
+    ['.claude', CLAUDE_SKILLS_DIR],
+    ['.codex', CODEX_SKILLS_DIR],
+  ];
   for (const s of expectedSkills) {
-    const local = path.join(CLAUDE_SKILLS_DIR, `harness-${s}`, 'SKILL.md');
-    const exists = fs.existsSync(local);
-    if (!exists) {
-      issues.push(`  ✗ skills/harness-${s}/SKILL.md MISSING`);
-      fail++;
-      continue;
+    for (const [toolName, root] of skillRoots) {
+      const local = path.join(root, `harness-${s}`, 'SKILL.md');
+      const exists = fs.existsSync(local);
+      if (!exists) {
+        issues.push(`  ✗ ${toolName}/skills/harness-${s}/SKILL.md MISSING`);
+        fail++;
+        continue;
+      }
+      const body = fs.readFileSync(local, 'utf8');
+      const fmMatch = body.match(/^---\n([\s\S]*?)\n---/);
+      if (!fmMatch) {
+        issues.push(`  ✗ ${toolName}/skills/harness-${s}: frontmatter 누락`);
+        fail++;
+        continue;
+      }
+      const missing = requiredFrontmatter.filter((k) => !new RegExp(`^${k}:`, 'm').test(fmMatch[1]));
+      if (missing.length) {
+        issues.push(`  ✗ ${toolName}/skills/harness-${s}: frontmatter [${missing.join(',')}] 누락`);
+        fail++;
+        continue;
+      }
+      pass++;
     }
-    const body = fs.readFileSync(local, 'utf8');
-    const fmMatch = body.match(/^---\n([\s\S]*?)\n---/);
-    if (!fmMatch) {
-      issues.push(`  ✗ harness-${s}: frontmatter 누락`);
-      fail++;
-      continue;
-    }
-    const missing = requiredFrontmatter.filter((k) => !new RegExp(`^${k}:`, 'm').test(fmMatch[1]));
-    if (missing.length) {
-      issues.push(`  ✗ harness-${s}: frontmatter [${missing.join(',')}] 누락`);
-      fail++;
-      continue;
-    }
-    pass++;
   }
-  log(`  skills: ${pass}/${expectedSkills.length} OK`);
+  log(`  skills: ${pass}/${expectedSkills.length * skillRoots.length} OK`);
 
-  // 2) progress.json schema (v6 = version 4 + mode_decision)
+  // 2) owner-facing commands
+  const allowedCommands = new Set(['goal.md', 'hot-fix.md']);
+  const forbiddenCommands = new Set(['ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md', 'hiring.md', 'resource-manager.md', 'brick-office.md']);
+  const commandRoots = [
+    ['.claude', CLAUDE_COMMANDS_DIR],
+    ['.codex', CODEX_COMMANDS_DIR],
+  ];
+  for (const [toolName, root] of commandRoots) {
+    for (const cmd of allowedCommands) {
+      if (!fs.existsSync(path.join(root, cmd))) {
+        issues.push(`  ✗ ${toolName}/commands/${cmd} MISSING`);
+        fail++;
+      } else {
+        pass++;
+      }
+    }
+    if (fs.existsSync(root)) {
+      for (const cmd of fs.readdirSync(root).filter(f => f.endsWith('.md'))) {
+        if (forbiddenCommands.has(cmd)) {
+          issues.push(`  ✗ ${toolName}/commands/${cmd} forbidden in v7`);
+          fail++;
+        } else if (!allowedCommands.has(cmd)) {
+          issues.push(`  ⚠ ${toolName}/commands/${cmd} is outside walwal v7 owner-facing command set`);
+        }
+      }
+    }
+  }
+  log(`  commands: /goal + /hot-fix checked`);
+
+  // 3) progress.json schema (v6+ = version 4 + mode_decision)
   const progressPath = path.join(HARNESS_DIR, 'progress.json');
   if (fs.existsSync(progressPath)) {
     try {
@@ -1586,6 +1651,10 @@ function runVerify() {
       if ((p.version ?? 0) < 4) schemaIssues.push(`version=${p.version} (<4)`);
       if (!p.mode_decision) schemaIssues.push('mode_decision 누락');
       if (!p.dispatch) schemaIssues.push('dispatch 누락');
+      if (p.mode_decision?.owner === 'conductor') schemaIssues.push('mode_decision.owner=conductor legacy');
+      if (['dispatcher', 'planner', 'generator-backend', 'generator-frontend', 'evaluator-functional', 'evaluator-visual', 'service-ops'].includes(p.next_agent)) {
+        schemaIssues.push(`next_agent=${p.next_agent} legacy`);
+      }
       if (schemaIssues.length) {
         issues.push(`  ✗ progress.json schema: ${schemaIssues.join(', ')} → npx walwal-harness migrate`);
         fail++;
@@ -1606,6 +1675,13 @@ function runVerify() {
       const c = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       if (!c.company_mode) {
         issues.push('  ✗ config.json: company_mode 누락 → npx walwal-harness migrate');
+        fail++;
+      } else if (
+        c.company_mode.owner === 'conductor' ||
+        c.behavior?.auto_route_dispatcher !== undefined ||
+        c.agents?.dispatcher?.skill === 'harness-dispatcher'
+      ) {
+        issues.push('  ✗ config.json: legacy dispatcher/conductor routing → npx walwal-harness migrate');
         fail++;
       } else {
         pass++;
@@ -1634,6 +1710,20 @@ function runVerify() {
   const deprecated = path.join(PROJECT_ROOT, '.claude', 'commands', 'harness-next.md');
   if (fs.existsSync(deprecated)) {
     issues.push('  ⚠ .claude/commands/harness-next.md 존재 — v6.0.3 부터 회사 내부 도구로 전환됨. `npx walwal-harness --force` 또는 직접 삭제 권장');
+  }
+
+  // 6) installed script guidance must not claim removed dispatcher/planner flow.
+  const routeScript = path.join(PROJECT_ROOT, 'scripts', 'harness-user-prompt-submit.sh');
+  const sessionScript = path.join(PROJECT_ROOT, 'scripts', 'harness-session-start.sh');
+  for (const scriptPath of [routeScript, sessionScript]) {
+    if (!fs.existsSync(scriptPath)) continue;
+    const body = fs.readFileSync(scriptPath, 'utf8');
+    if (/harness-dispatcher|pipeline=none\/dispatcher|dispatch -> CEO meeting|planner\(COO\)|gen\/eval/.test(body)) {
+      issues.push(`  ✗ ${path.relative(PROJECT_ROOT, scriptPath)}: legacy dispatcher/planner guidance → npx walwal-harness init migrate --force`);
+      fail++;
+    } else {
+      pass++;
+    }
   }
 
   console.log('');
@@ -1702,7 +1792,9 @@ function main() {
   const gotchaMissing = Object.keys(migFlags.gotchaMissingEntries || {}).length > 0;
   const hasContentDrift =
     migFlags.progressV3toV4 ||
+    migFlags.progressLegacyRouting ||
     migFlags.configMissingCompanyMode ||
+    migFlags.configLegacyRouting ||
     (migFlags.memoryMissingSystemEntries && migFlags.memoryMissingSystemEntries.length) ||
     gotchaMissing;
   if (hasContentDrift) {
@@ -1715,7 +1807,7 @@ function main() {
     } catch {}
   }
 
-  // v6.0 — Brick Office dashboard one-liner
+  // Brick Office dashboard one-liner
   console.log('');
   console.log('╔══════════════════════════════════════════════════════════╗');
   console.log('║  Brick Office — 라이브 운영 대시보드 (선택)              ║');
@@ -1732,8 +1824,7 @@ function main() {
     log('╔═══════════════════════════════════════════════════════════╗');
     log('║  Restart Claude Code for skills & commands to activate!  ║');
     log('║                                                          ║');
-    log('║  Then say: "하네스 엔지니어링 시작"                        ║');
-    log('║  Or invoke: /harness-dispatcher                          ║');
+    log('║  Then invoke /goal or /hot-fix                           ║');
     log('║                                                          ║');
     log('║  기본은 회사모드: 병렬 · 자율 진행. 추가 입력 불필요.     ║');
     log('╚═══════════════════════════════════════════════════════════╝');
@@ -1744,6 +1835,10 @@ function main() {
     log('  3. Internal agents call hired agents/skills, not slash commands.');
   }
   console.log('');
+
+  if (subcommand === 'init' && subcommandArgs.includes('migrate')) {
+    runMigrate({ dryRun: args.includes('--dry-run') });
+  }
 }
 
 main();
