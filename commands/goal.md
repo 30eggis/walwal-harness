@@ -18,6 +18,8 @@ Required flow:
 8. CEO must require worker report paths under `.harness/documents/{mission_name}/workers/` before accepting CXX completion.
 9. Do not invoke internal roles through slash commands; commands are Owner entrypoints only.
 
+Note: Harness documents (ceo.md, cto.md, cqo.md, worker reports) are mission records, not derived output documents. A docmeta skip decision on these files does not authorize skipping any harness protocol step.
+
 Owner request:
 
 ```
