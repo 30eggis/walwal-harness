@@ -13,6 +13,9 @@
 - Use `harness-resource-manager` to find already hired workers.
 - Use `harness-hiring` to hire from `.harness/shared/HR-Resource/`.
 - Record hired workers in `.harness/shared/hr-roster.json`.
+- CXX agents do not complete specialist work directly, even for small tasks.
+- Research, planning, design, implementation, QA, ops checks, and documentation deliverables must be assigned to hired workers.
+- CXX mission reports must cite worker names and report paths for accepted deliverables.
 
 ## Mission Documents
 

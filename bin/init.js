@@ -89,8 +89,56 @@ function fileExists(p) {
   return fs.existsSync(p);
 }
 
+function deepMerge(base, override) {
+  if (!override || typeof override !== 'object' || Array.isArray(override)) return base;
+  const out = { ...(base || {}) };
+  for (const [key, value] of Object.entries(override)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      out[key] = deepMerge(out[key] || {}, value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 function log(msg) {
   console.log(`[walwal-harness] ${msg}`);
+}
+
+function readClaudeSettings() {
+  const settingsPath = path.join(PROJECT_ROOT, '.claude', 'settings.json');
+  if (!fileExists(settingsPath)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  } catch (e) {
+    log('WARNING: Could not parse existing .claude/settings.json, creating new');
+    return {};
+  }
+}
+
+function writeClaudeSettings(settings) {
+  const settingsPath = path.join(PROJECT_ROOT, '.claude', 'settings.json');
+  ensureDir(path.dirname(settingsPath));
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+}
+
+function mergeClaudePermissionAllow(settings, entries) {
+  if (!settings.permissions || typeof settings.permissions !== 'object') {
+    settings.permissions = {};
+  }
+  if (!Array.isArray(settings.permissions.allow)) {
+    settings.permissions.allow = [];
+  }
+
+  let changed = false;
+  for (const entry of entries) {
+    if (!settings.permissions.allow.includes(entry)) {
+      settings.permissions.allow.push(entry);
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 const V7_REMOVED_CONVENTION_FILES = [
@@ -434,6 +482,7 @@ function scaffoldHarness() {
         // Preserve user customizations
         const userPreserve = {
           behavior: existing.behavior,
+          runtime: existing.runtime,
           'flow.pre_eval_gate.frontend_cwd': existing?.flow?.pre_eval_gate?.frontend_cwd,
           'flow.pre_eval_gate.backend_cwd': existing?.flow?.pre_eval_gate?.backend_cwd,
           'flow.pre_eval_gate.frontend_checks': existing?.flow?.pre_eval_gate?.frontend_checks,
@@ -444,6 +493,9 @@ function scaffoldHarness() {
         // Re-apply preserved user settings
         const merged = JSON.parse(fs.readFileSync(configDest, 'utf8'));
         if (userPreserve.behavior) merged.behavior = userPreserve.behavior;
+        if (userPreserve.runtime) {
+          merged.runtime = deepMerge(merged.runtime || {}, userPreserve.runtime);
+        }
         if (userPreserve['flow.pre_eval_gate.frontend_cwd']) {
           merged.flow.pre_eval_gate.frontend_cwd = userPreserve['flow.pre_eval_gate.frontend_cwd'];
         }
@@ -466,6 +518,8 @@ function scaffoldHarness() {
       copyFile(configSrc, configDest);
     }
   }
+
+  ensureHarnessEnv();
 
   // HARNESS.md — ALWAYS update
   const harnessMdSrc = path.join(PKG_ROOT, 'assets', 'templates', 'HARNESS.md');
@@ -503,6 +557,24 @@ function scaffoldHarness() {
   }
 
   log('.harness/ scaffolding complete');
+}
+
+function ensureHarnessEnv() {
+  const envPath = path.join(PROJECT_ROOT, '.env');
+  const marker = 'HARNESS_BASE_PORT';
+  const re = new RegExp(`^${marker}`, 'm');
+
+  let content = '';
+  if (fileExists(envPath)) {
+    content = fs.readFileSync(envPath, 'utf8');
+  }
+
+  if (re.test(content)) return;
+
+  const prefix = content && !content.endsWith('\n') ? '\n' : '';
+  const block = `${prefix}${content ? '\n' : ''}# Walwal Harness — CEO must agree on a {xx}000 base port with the Owner.\n# Set HARNESS_BASE_PORT before CXX agents allocate any service ports.\n# HARNESS_BASE_PORT=\n`;
+  fs.writeFileSync(envPath, content + block);
+  log('.env: HARNESS_BASE_PORT placeholder added — set value with Owner approval before starting services');
 }
 
 // ─────────────────────────────────────────
@@ -598,7 +670,7 @@ function installCommands() {
   for (const commandsDest of commandDests) {
     const existing = fs.readdirSync(commandsDest);
     for (const f of existing) {
-      if (f.startsWith('harness-') || ['goal.md', 'hot-fix.md', 'brick-office.md', 'hiring.md', 'resource-manager.md', 'ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md'].includes(f)) {
+      if (f.startsWith('harness-') || ['goal.md', 'hot-fix.md', 'play-harness.md', 'release-harness.md', 'stop-harness.md', 'brick-office.md', 'hiring.md', 'resource-manager.md', 'ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md'].includes(f)) {
         fs.unlinkSync(path.join(commandsDest, f));
       }
     }
@@ -624,18 +696,10 @@ function installSessionHook() {
   log('Installing SessionStart hook...');
 
   const settingsDir = path.join(PROJECT_ROOT, '.claude');
-  const settingsFile = path.join(settingsDir, 'settings.json');
 
   ensureDir(settingsDir);
 
-  let settings = {};
-  if (fileExists(settingsFile)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    } catch (e) {
-      log('WARNING: Could not parse existing .claude/settings.json, creating new');
-    }
-  }
+  let settings = readClaudeSettings();
 
   // Ensure hooks.SessionStart array exists
   if (!settings.hooks) settings.hooks = {};
@@ -673,10 +737,10 @@ function installSessionHook() {
       matcher: '',
       hooks: [{ type: 'command', command: hookCmd }]
     });
-    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    writeClaudeSettings(settings);
     log('SessionStart hook installed in .claude/settings.json');
   } else if (migrated) {
-    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    writeClaudeSettings(settings);
     log('SessionStart hook migrated to matcher + hooks-array format');
   } else {
     log('SessionStart hook already installed');
@@ -690,18 +754,10 @@ function installStatusline() {
   log('Installing statusline...');
 
   const settingsDir = path.join(PROJECT_ROOT, '.claude');
-  const settingsFile = path.join(settingsDir, 'settings.json');
 
   ensureDir(settingsDir);
 
-  let settings = {};
-  if (fileExists(settingsFile)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    } catch (e) {
-      log('WARNING: Could not parse existing .claude/settings.json, creating new');
-    }
-  }
+  let settings = readClaudeSettings();
 
   // Check if statusLine is already configured
   if (settings.statusLine && settings.statusLine.command &&
@@ -716,7 +772,7 @@ function installStatusline() {
     refreshInterval: 3
   };
 
-  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+  writeClaudeSettings(settings);
   log('Statusline installed — persistent status bar at terminal bottom');
 }
 
@@ -727,18 +783,10 @@ function installUserPromptSubmitHook() {
   log('Installing UserPromptSubmit hook (auto dispatcher routing)...');
 
   const settingsDir = path.join(PROJECT_ROOT, '.claude');
-  const settingsFile = path.join(settingsDir, 'settings.json');
 
   ensureDir(settingsDir);
 
-  let settings = {};
-  if (fileExists(settingsFile)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    } catch (e) {
-      log('WARNING: Could not parse existing .claude/settings.json, creating new');
-    }
-  }
+  let settings = readClaudeSettings();
 
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.UserPromptSubmit) settings.hooks.UserPromptSubmit = [];
@@ -764,7 +812,7 @@ function installUserPromptSubmitHook() {
       matcher: '',
       hooks: [{ type: 'command', command: hookCmd }]
     });
-    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    writeClaudeSettings(settings);
     log('UserPromptSubmit hook installed in .claude/settings.json');
     log('  → All prompts will be routed through harness-dispatcher');
     log('  → Opt-out per message: say "harness skip" or "without harness"');
@@ -781,18 +829,10 @@ function installStopHook() {
   log('Installing Stop hook (auto-chain conductor tick)...');
 
   const settingsDir = path.join(PROJECT_ROOT, '.claude');
-  const settingsFile = path.join(settingsDir, 'settings.json');
 
   ensureDir(settingsDir);
 
-  let settings = {};
-  if (fileExists(settingsFile)) {
-    try {
-      settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-    } catch (e) {
-      log('WARNING: Could not parse existing .claude/settings.json, creating new');
-    }
-  }
+  let settings = readClaudeSettings();
 
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.Stop) settings.hooks.Stop = [];
@@ -817,7 +857,7 @@ function installStopHook() {
       matcher: '',
       hooks: [{ type: 'command', command: hookCmd }]
     });
-    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+    writeClaudeSettings(settings);
     log('Stop hook installed in .claude/settings.json');
     log('  → Conductor 가 running 인 동안 turn 종료 시 자동으로 다음 tick 으로 연쇄');
     log('  → 비활성: .harness/config.json behavior.auto_chain_on_stop = false');
@@ -834,11 +874,7 @@ function installStopHook() {
 // 3d. Agent Teams env var
 // ─────────────────────────────────────────
 function installAgentTeamsEnv() {
-  const settingsPath = path.join(PROJECT_ROOT, '.claude', 'settings.json');
-  let settings = {};
-  if (fileExists(settingsPath)) {
-    try { settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (e) {}
-  }
+  let settings = readClaudeSettings();
 
   let changed = false;
 
@@ -852,26 +888,24 @@ function installAgentTeamsEnv() {
     log('Agent Teams already enabled');
   }
 
-  // Add git worktree permission for parallel worker isolation
-  if (!settings.permissions) settings.permissions = {};
-  if (!settings.permissions.allow) settings.permissions.allow = [];
-  const worktreePerms = [
+  // Add Claude Code permissions required for harness-driven edits, scripts,
+  // and parallel worker isolation. Existing permissions are preserved.
+  const harnessPerms = [
+    'Bash(*)',
+    'Write(*)',
+    'Edit(*)',
+    'Read(*)',
+    'MultiEdit(*)',
     'Bash(git worktree *)',
     'Bash(git checkout *)',
     'Bash(git merge *)',
     'Bash(git branch *)'
   ];
-  for (const perm of worktreePerms) {
-    if (!settings.permissions.allow.includes(perm)) {
-      settings.permissions.allow.push(perm);
-      changed = true;
-    }
-  }
+  changed = mergeClaudePermissionAllow(settings, harnessPerms) || changed;
 
   if (changed) {
-    ensureDir(path.dirname(settingsPath));
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
-    log('Git worktree permissions added for parallel worker isolation');
+    writeClaudeSettings(settings);
+    log('Claude settings merged: harness permissions/env preserved with existing settings');
   }
 }
 
