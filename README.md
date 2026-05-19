@@ -10,7 +10,7 @@ One project = one company. The Owner speaks only to the CEO. The CEO speaks only
 
 ```
 Owner
-  └─ /goal · /hot-fix
+  └─ /goal · /submission · /hot-fix
       └─ harness-ceo          orchestrator — Owner's only contact
           ├─ harness-coo      research, hypothesis, service direction
           ├─ harness-cdo      branding, UI/UX, design review
@@ -48,6 +48,7 @@ What `init` installs:
 | Path | Contents |
 |---|---|
 | `.claude/commands/goal.md` | `/goal` Owner command |
+| `.claude/commands/submission.md` | `/submission` Owner command |
 | `.claude/commands/hot-fix.md` | `/hot-fix` Owner command |
 | `.claude/skills/harness-{ceo,coo,cdo,cto,cqo,ops}/` | CXX agent skills |
 | `.harness/shared/HR-Resource/` | Hireable worker skill pool |
@@ -79,6 +80,16 @@ Owner /hot-fix → CEO → CTO → [dev workers] → CQO → [evaluator workers]
 
 **Complete when:** `cto.md` + `cqo.md` + at least one `.harness/gotchas/` or `.harness/conventions/` entry exist.
 
+### Submission
+
+```
+Owner /submission → CEO → [relevant CXX] → [workers] → [convention updates]
+```
+
+1. CEO locates the active `.harness/documents/goal-{index}-{name}/`.
+2. CEO creates `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/`.
+3. Relevant CXX update `.harness/conventions/` when the new requirement changes durable project rules.
+
 ---
 
 ## Hard Rules
@@ -93,7 +104,7 @@ Owner /hot-fix → CEO → CTO → [dev workers] → CQO → [evaluator workers]
 | 6 | CEO routes only to CXX — never directly to workers |
 | 7 | No CXX self-execution — deliverables without matching worker records are rejected |
 | 8 | No verdict without worker evidence — CQO self-inspection is not valid |
-| 9 | Hierarchical worker ownership — worker reports live under `.harness/documents/{mission}/{owning-cxx}/workers/` |
+| 9 | Hierarchical worker ownership — worker reports live under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/` |
 | 10 | Implementation Notes required — `ceo.md`, every `{cxx}.md`, and every worker report must end with an English `## Implementation Notes` section |
 
 ### Implementation Notes Format
@@ -170,7 +181,7 @@ npx walwal-harness init --force --project-root /path/to/project
 Features:
 
 - **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy
-- **Mission Timeline** — clickable history of goal/hot-fix missions showing the full dispatch chain
+- **Mission Timeline** — clickable history of goal/submission/hot-fix missions showing the full dispatch chain
 - **Mission Flow tab** — per-mission flow: Owner prompt → CEO routing → CXX → worker files changed → CQO verdict
 - **History tab** — mission-specific Owner request (from CEO summary + closest progress.log match)
 - **Gotchas tab** — searchable `.harness/gotchas/*.md` knowledge base, click to read full markdown
@@ -182,8 +193,10 @@ Features:
 
 | Path | Role |
 |---|---|
-| `.harness/documents/{mission}/` | CXX decisions and worker reports per mission |
-| `.harness/documents/{mission}/{cxx}/workers/` | Worker reports owned by that CXX |
+| `.harness/documents/goal-{index}-{name}/` | Goal-level CXX decisions and worker reports |
+| `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/` | Additional requirement under the active goal |
+| `.harness/documents/goal-{index}-{name}/hotfix-{index}-{name}/` | Emergency fix under the active goal |
+| `.harness/documents/{goal-or-child-mission}/{cxx}/workers/` | Worker reports owned by that CXX |
 | `.harness/conventions/` | Durable rules (CQO writes, survives missions) |
 | `.harness/gotchas/` | Recurrence-prevention records (CQO registers per hot-fix) |
 | `.harness/shared/HR-Resource/` | Hireable worker skill pool |

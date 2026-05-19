@@ -291,7 +291,7 @@ export interface WorkerDocEntry {
 export interface MissionDoc {
   missionId: string;
   ts: string;
-  type: "hotfix" | "feature" | "unknown";
+  type: "goal" | "submission" | "hotfix" | "feature" | "unknown";
   label: string;
   ceo: string | null;
   cto: string | null;
@@ -306,7 +306,7 @@ export interface MissionDoc {
 export interface OwnerPromptEntry {
   ts: string;
   content: string;
-  type: "goal" | "hot-fix" | "other";
+  type: "goal" | "submission" | "hot-fix" | "other";
 }
 
 export interface GotchaEntry {

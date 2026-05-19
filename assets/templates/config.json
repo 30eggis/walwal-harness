@@ -2,7 +2,7 @@
   "harness": {
     "name": "walwal-harness — NEXUS company harness",
     "version": "7.1.1",
-    "description": "v7 company harness. Owner uses /goal or /hot-fix, CEO coordinates CXX agents, CXX agents use resource-manager/hiring, and hired workers produce mission evidence under .harness/documents/{mission}/workers/.",
+    "description": "v7 company harness. Owner uses /goal, /submission, or /hot-fix, CEO coordinates CXX agents, CXX agents use resource-manager/hiring, and hired workers produce mission evidence under .harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/.",
     "source": "https://www.anthropic.com/engineering/harness-design-long-running-apps"
   },
   "agents": {
@@ -19,7 +19,7 @@
   "flow": {
     "sequence": ["ceo", "coo", "cdo", "cto", "cqo", "ops"],
     "worker_gate": "CXX agents must use harness-resource-manager and harness-hiring before specialist deliverables.",
-    "worker_reports_required": ".harness/documents/{mission}/workers/{worker-name}.md",
+    "worker_reports_required": ".harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/{worker-name}.md",
     "retry_on_fail": true,
     "max_retries_per_sprint": 5,
     "escalate_to_ceo_after": 3,

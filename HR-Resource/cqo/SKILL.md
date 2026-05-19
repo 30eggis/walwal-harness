@@ -12,7 +12,7 @@ Own quality, recurrence prevention, and archive eligibility.
 ## Workflow
 
 1. Read CEO and CTO mission context.
-2. Record decisions in `.harness/documents/{mission_name}/cqo.md`.
+2. Record decisions in `.harness/documents/{goal-or-child-mission}/cqo.md`.
 3. Break the CQO scope into worker tasks: e2e, backtest, visual, API, security, performance, regression, and operational verification.
 4. Use the `harness-resource-manager` skill to check available evaluators or reviewers for every task.
 5. Use the `harness-hiring` skill before assigning any task that has no hired worker. Do not complete that task yourself.
@@ -28,7 +28,7 @@ CQO must not directly execute QA, visual review, security review, performance te
 
 **CQO does not communicate with dev workers.** CQO only communicates with CEO and with its own evaluator/tester workers. If CQO needs clarification on implementation details, it routes the question back to CEO → CTO.
 
-Every evaluator/tester dispatched by CQO must write its report under `.harness/documents/{mission_name}/cqo/workers/{worker-name}.md`.
+Every evaluator/tester dispatched by CQO must write its report under `.harness/documents/{goal-or-child-mission}/cqo/workers/{worker-name}.md`.
 
 Required output sections in `cqo.md`:
 
@@ -40,7 +40,7 @@ Required output sections in `cqo.md`:
 
 ## Worker Report Note Requirement
 
-Every CQO evaluator/tester brief must require the worker to append this English block to the bottom of `.harness/documents/{mission_name}/cqo/workers/{worker-name}.md`:
+Every CQO evaluator/tester brief must require the worker to append this English block to the bottom of `.harness/documents/{goal-or-child-mission}/cqo/workers/{worker-name}.md`:
 
 ```
 ## Implementation Notes

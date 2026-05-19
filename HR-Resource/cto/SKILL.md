@@ -12,7 +12,7 @@ Own engineering execution for the mission.
 ## Workflow
 
 1. Read CEO, COO, and CDO mission documents.
-2. Record decisions in `.harness/documents/{mission_name}/cto.md`. **This file must be created before any worker is dispatched.**
+2. Record decisions in `.harness/documents/{goal-or-child-mission}/cto.md`. **This file must be created before any worker is dispatched.**
 3. Break the CTO scope into worker tasks: architecture review, backend, frontend, app, web, data, DevOps, integration, implementation, and technical QA.
 4. Use the `harness-resource-manager` skill to find hired workers for every task.
 5. Use the `harness-hiring` skill before assigning any missing specialty. Do not complete that task yourself.
@@ -26,9 +26,9 @@ Own engineering execution for the mission.
 
 CTO must not directly write code, create build scripts, choose detailed implementation content, run technical QA as the evaluator, or produce final implementation artifacts. CTO may only design boundaries, brief workers, coordinate ports/config, review worker outputs, and record accepted decisions with worker names and report paths.
 
-**cto.md is a prerequisite gate.** No worker may be dispatched before `cto.md` exists. A mission where workers appear in `.harness/documents/{mission_name}/workers/` but no `cto.md` exists is a protocol violation — CEO bypassed CTO.
+**cto.md is a prerequisite gate.** No worker may be dispatched before `cto.md` exists. A mission where workers appear in `.harness/documents/{goal-or-child-mission}/cto/workers/` but no `cto.md` exists is a protocol violation — CEO bypassed CTO.
 
-Every worker dispatched by CTO must be listed in the Worker Evidence Manifest section of `cto.md` with their report path and status. The report path must be `.harness/documents/{mission_name}/cto/workers/{worker-name}.md`. Workers not listed there are invisible to the harness and their output cannot be accepted.
+Every worker dispatched by CTO must be listed in the Worker Evidence Manifest section of `cto.md` with their report path and status. The report path must be `.harness/documents/{goal-or-child-mission}/cto/workers/{worker-name}.md`. Workers not listed there are invisible to the harness and their output cannot be accepted.
 
 Required output sections in `cto.md`:
 
@@ -41,7 +41,7 @@ Required output sections in `cto.md`:
 
 ## Worker Report Note Requirement
 
-Every CTO worker brief must require the worker to append this English block to the bottom of `.harness/documents/{mission_name}/cto/workers/{worker-name}.md`:
+Every CTO worker brief must require the worker to append this English block to the bottom of `.harness/documents/{goal-or-child-mission}/cto/workers/{worker-name}.md`:
 
 ```
 ## Implementation Notes

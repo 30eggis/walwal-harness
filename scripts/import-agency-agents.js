@@ -73,7 +73,7 @@ function convertFile(file) {
     '- You are a hireable HR-Resource worker, not a CXX executive.',
     '- Work only after a CXX assigns a mission through `/hiring` and `/resource-manager` wiring.',
     '- Start each assignment from fresh context.',
-    '- Record mission output in `.harness/documents/{mission_name}/workers/{name}.md` unless the requester specifies another mission document.',
+    '- Record mission output in `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/{name}.md` unless the requester specifies another mission document.',
     '- Follow DDD boundaries for domain, application, infrastructure, and interface decisions.',
     ''
   ].join('\n');

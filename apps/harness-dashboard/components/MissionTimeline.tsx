@@ -153,7 +153,9 @@ export function MissionTimeline({
         const typeBadge =
           mission.type === "hotfix"
             ? "[🔥 hot-fix]"
-            : mission.type === "feature"
+            : mission.type === "submission"
+            ? "[+ submission]"
+            : mission.type === "goal" || mission.type === "feature"
             ? "[✦ goal]"
             : "[— unknown]";
         const shortId =
@@ -188,6 +190,8 @@ export function MissionTimeline({
                   className={`shrink-0 font-mono text-[9px] rounded px-1.5 py-0.5 border ${
                     mission.type === "hotfix"
                       ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                      : mission.type === "submission"
+                      ? "bg-sky-500/15 text-sky-300 border-sky-500/30"
                       : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                   }`}
                 >

@@ -92,6 +92,8 @@ export function OwnerHistoryTab({ ownerHistory, mission, onEntryClick }: Props) 
                   className={`font-mono text-[9px] px-1.5 py-0.5 rounded ${
                     closestEntry.type === "goal"
                       ? "bg-emerald-500/15 text-emerald-300"
+                      : closestEntry.type === "submission"
+                      ? "bg-sky-500/15 text-sky-300"
                       : closestEntry.type === "hot-fix"
                       ? "bg-rose-500/15 text-rose-300"
                       : "bg-gray-500/15 text-gray-400"
@@ -140,6 +142,8 @@ export function OwnerHistoryTab({ ownerHistory, mission, onEntryClick }: Props) 
               className={`font-mono text-[9px] px-1.5 py-0.5 rounded ${
                 entry.type === "goal"
                   ? "bg-emerald-500/15 text-emerald-300"
+                  : entry.type === "submission"
+                  ? "bg-sky-500/15 text-sky-300"
                   : entry.type === "hot-fix"
                   ? "bg-rose-500/15 text-rose-300"
                   : "bg-gray-500/15 text-gray-400"

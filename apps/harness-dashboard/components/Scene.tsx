@@ -120,7 +120,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         <section className="mt-4">
           <div className="mb-2">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">Mission History</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">goal · hot-fix 명령별 파생 작업 흐름</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">goal · submission · hot-fix 명령별 파생 작업 흐름</p>
           </div>
           <MissionTimeline
             missions={snapshot.missions ?? []}

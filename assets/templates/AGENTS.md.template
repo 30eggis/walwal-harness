@@ -6,12 +6,13 @@
 
 ## 1. Entry Points
 
-Two Owner-facing commands. Nothing else reaches the company.
+Three Owner-facing commands. Nothing else reaches the company.
 
 | Command | When |
 |---|---|
 | `/goal` | Set, update, or extend a mission |
-| `/hot-fix` | Emergency fix independent of the active goal |
+| `/submission` | Add a requirement under the active goal |
+| `/hot-fix` | Emergency fix under the active goal |
 
 `/ceo`, `/cto`, `/cqo`, `/coo`, `/cdo`, `/ops`, `/hiring` are not slash commands.
 Internal routing uses agent/skill wiring only.
@@ -36,7 +37,7 @@ For goal: define verifiable success criteria before CEO routes to CXX.
 
 ```
 Owner
-  └─ /goal or /hot-fix
+  └─ /goal, /submission, or /hot-fix
       └─ harness-ceo          orchestrator — Owner's only contact
           ├─ harness-coo      research, hypothesis, service direction
           ├─ harness-cdo      branding, UI/UX, design review
@@ -47,7 +48,7 @@ Owner
 
 Each CXX:
 - Runs in a **fresh session context** — no shared memory with CEO's session
-- Records decisions in `.harness/documents/{mission_name}/{cxx}.md`
+- Records decisions in `.harness/documents/{goal-or-child-mission}/{cxx}.md`
 - Delegates all specialist work to hired workers — never executes directly
 - If a required worker is absent, invokes `harness-hiring` before assigning
 
@@ -64,7 +65,17 @@ CEO rejects any CXX report that contains completed deliverables without matching
 3. Each CXX hires workers, collects reports, records decisions in `{cxx}.md`.
 4. CEO aggregates CXX outputs, routes to next CXX or reports to Owner.
 
-**Complete when:** `.harness/documents/{mission_name}/ceo.md` contains a final Owner report.
+**Complete when:** `.harness/documents/goal-{index}-{name}/ceo.md` contains a final Owner report.
+
+### Submission
+
+1. CEO locates the active goal under `.harness/documents/goal-{index}-{name}/`.
+2. CEO creates `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/ceo.md`.
+3. CEO routes only the CXX needed for the added requirement.
+4. Relevant CXX update `.harness/conventions/` when the new requirement changes durable project rules.
+5. Workers report under `{owning-cxx}/workers/`; CXX summarize choices in `{cxx}.md`.
+
+**Complete when:** the submission child directory has CEO/CXX records, required worker evidence, and any convention updates required by the new requirement.
 
 ### Hot Fix
 
@@ -84,7 +95,9 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 
 | Path | Role |
 |---|---|
-| `.harness/documents/{mission}/` | CXX decisions and worker reports per mission |
+| `.harness/documents/goal-{index}-{name}/` | Goal-level CXX decisions and worker reports |
+| `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/` | Additional requirement under the active goal |
+| `.harness/documents/goal-{index}-{name}/hotfix-{index}-{name}/` | Emergency fix under the active goal |
 | `.harness/conventions/` | Durable rules (CQO writes, survives missions) |
 | `.harness/gotchas/` | Recurrence-prevention records (CQO writes per hot-fix) |
 | `.harness/memories/` | Long-term shared context |
@@ -107,7 +120,7 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 7. **CEO routes only to CXX — never to workers** — CEO must not dispatch, hire, or brief specialist workers directly. Implementation workers are hired by CTO. Evaluator/tester workers are hired by CQO.
 8. **No CXX self-execution** — CXX agents coordinate and manage only. A CXX that produces deliverables without matching worker records has violated its scope. CEO must reject such reports.
 9. **No verdict without worker evidence** — CQO cannot issue ACCEPTED/REJECTED without a Worker Evidence Manifest referencing at least one evaluator worker. Self-inspection by CQO is not valid evidence.
-10. **Hierarchical worker ownership** — Hired workers are installed under `.claude/skills/{owning-cxx}/{worker}/` and `.codex/skills/{owning-cxx}/{worker}/`; mission worker reports live under `.harness/documents/{mission}/{owning-cxx}/workers/`. Flat `{mission}/workers/` reports are legacy and signal an ownership violation unless explicitly migrated.
+10. **Hierarchical worker ownership** — Hired workers are installed under `.claude/skills/{owning-cxx}/{worker}/` and `.codex/skills/{owning-cxx}/{worker}/`; mission worker reports live under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`. Flat `{mission}/workers/` reports are legacy and signal an ownership violation unless explicitly migrated.
 11. **Implementation Notes required** — `ceo.md`, every `{cxx}.md`, and every worker report must end with an English `## Implementation Notes` section containing `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. Use `None` for empty subsections.
 
 ---

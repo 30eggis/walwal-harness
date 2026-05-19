@@ -35,9 +35,12 @@ has_legacy_flat_worker_report() {
   find "$mission_dir/workers" -maxdepth 1 -type f -name '*.md' 2>/dev/null | grep -q .
 }
 
-for mission_dir in "$DOC_ROOT"/*; do
+mission_dirs=$(find "$DOC_ROOT" -type f \( -name 'ceo.md' -o -name 'coo.md' -o -name 'cdo.md' -o -name 'cto.md' -o -name 'cqo.md' -o -name 'ops.md' \) -exec dirname {} \; 2>/dev/null | sort -u)
+
+while IFS= read -r mission_dir; do
+  [ -n "$mission_dir" ] || continue
   [ -d "$mission_dir" ] || continue
-  mission_name="$(basename "$mission_dir")"
+  mission_name="${mission_dir#$DOC_ROOT/}"
 
   ceo_path="$mission_dir/ceo.md"
   if [ -s "$ceo_path" ] && ! has_implementation_notes "$ceo_path"; then
@@ -71,7 +74,9 @@ for mission_dir in "$DOC_ROOT"/*; do
   if [ -s "$cqo_path" ] && grep -Eq '\b(ACCEPTED|REJECTED|PASS|FAIL)\b' "$cqo_path" && ! has_worker_report "$mission_dir" "cqo"; then
     violations+=("$mission_name:cqo-verdict-without-evaluator")
   fi
-done
+done <<EOF
+$mission_dirs
+EOF
 
 if [ "${#violations[@]}" -eq 0 ]; then
   if [ "$mode" = "json" ]; then

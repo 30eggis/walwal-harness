@@ -74,12 +74,13 @@
 
 ## 5. 진입점
 
-Owner가 회사에 접근하는 명령은 두 개뿐이다. 그 외의 경로는 없다.
+Owner가 회사에 접근하는 명령은 세 개뿐이다. 그 외의 경로는 없다.
 
 | 명령 | 사용 시점 |
 |---|---|
 | `/goal` | 미션 설정, 수정, 추가 |
-| `/hot-fix` | 활성 goal과 독립된 긴급 수정 |
+| `/submission` | 활성 goal 하위의 추가 요구사항 |
+| `/hot-fix` | 활성 goal 하위의 긴급 수정 |
 
 `/ceo`, `/cto`, `/cqo`, `/coo`, `/cdo`, `/ops`, `/hiring`은 slash command가 아니다.
 내부 라우팅은 agent/skill wiring으로만 처리한다.
@@ -88,7 +89,7 @@ Owner가 회사에 접근하는 명령은 두 개뿐이다. 그 외의 경로는
 
 ```
 Owner
-  └─ /goal 또는 /hot-fix
+  └─ /goal, /submission, 또는 /hot-fix
       └─ harness-ceo          오케스트레이터 — Owner의 유일한 접점
           ├─ harness-coo      리서치, 가설, 서비스 방향
           ├─ harness-cdo      브랜딩, UI/UX, 디자인 리뷰
@@ -99,7 +100,7 @@ Owner
 
 각 CXX는:
 - **독립된 fresh session 컨텍스트**에서 실행된다 — CEO 세션과 메모리를 공유하지 않는다
-- 결정을 `.harness/documents/{mission_name}/{cxx}.md`에 기록한다
+- 결정을 `.harness/documents/{goal-or-child-mission}/{cxx}.md`에 기록한다
 - 모든 전문 작업을 hired worker에게 위임한다 — 직접 실행하지 않는다
 - 필요한 worker가 없으면 `harness-hiring`을 먼저 호출한다
 
@@ -114,7 +115,17 @@ CEO는 worker 기록 없이 완료된 산출물을 포함한 CXX 보고서를 �
 3. 각 CXX가 worker를 고용하고, 위임하고, 결과를 수집하여 `{cxx}.md`에 기록한다.
 4. CEO가 CXX 산출물을 종합하여 다음 CXX에 라우팅하거나 Owner에게 보고한다.
 
-**완료 기준:** `.harness/documents/{mission_name}/ceo.md`에 최종 Owner 보고가 존재한다.
+**완료 기준:** `.harness/documents/goal-{index}-{name}/ceo.md`에 최종 Owner 보고가 존재한다.
+
+### Submission
+
+1. CEO가 활성 goal을 `.harness/documents/goal-{index}-{name}/`에서 찾는다.
+2. CEO가 `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/ceo.md`를 만든다.
+3. CEO는 추가 요구사항에 필요한 CXX만 라우팅한다.
+4. 추가 요구사항이 지속 규칙을 바꾸면 관련 CXX가 `.harness/conventions/`를 갱신한다.
+5. Worker는 `{owning-cxx}/workers/` 아래에 보고하고, CXX는 선택과 위험을 `{cxx}.md`에 요약한다.
+
+**완료 기준:** submission 하위 디렉터리에 CEO/CXX 기록, 필요한 worker evidence, 필요한 convention 업데이트가 존재한다.
 
 ### Hot Fix
 
@@ -132,7 +143,9 @@ CEO는 worker 기록 없이 완료된 산출물을 포함한 CXX 보고서를 �
 
 | 경로 | 역할 |
 |---|---|
-| `.harness/documents/{mission}/` | 미션별 CXX 결정 기록 및 worker 보고서 |
+| `.harness/documents/goal-{index}-{name}/` | goal 레벨 CXX 결정 기록 및 worker 보고서 |
+| `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/` | 활성 goal 하위의 추가 요구사항 |
+| `.harness/documents/goal-{index}-{name}/hotfix-{index}-{name}/` | 활성 goal 하위의 긴급 수정 |
 | `.harness/conventions/` | 지속 규칙 (CQO가 작성, 미션을 넘어 유지) |
 | `.harness/gotchas/` | 재발 방지 기록 (CQO가 hot-fix마다 작성) |
 | `.harness/memories/` | 장기 공유 컨텍스트 |

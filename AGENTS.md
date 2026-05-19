@@ -49,7 +49,7 @@ node ./bin/init.js init --force --project-root /private/tmp/walwal-v7-init-test
 ```
 
 **Expected after init:**
-- `.claude/commands/goal.md` and `hot-fix.md` — no other commands
+- `.claude/commands/goal.md`, `submission.md`, and `hot-fix.md` — no other commands
 - `.claude/skills/harness-{ceo,coo,cdo,cto,cqo,ops}/SKILL.md`
 - `.harness/shared/HR-Resource/`
 - `CLAUDE.md` is a symlink → `AGENTS.md`
@@ -62,7 +62,7 @@ node ./bin/init.js init --force --project-root /private/tmp/walwal-v7-init-test
 
 1. Create `.harness/` runtime directories
 2. Copy `HR-Resource/` → `.harness/shared/HR-Resource/`
-3. Install `/goal` and `/hot-fix` in `.claude/commands/` and `.codex/commands/` only
+3. Install `/goal`, `/submission`, and `/hot-fix` in `.claude/commands/` and `.codex/commands/` only
 4. Install CXX skills in `.claude/skills/` and `.codex/skills/`
 5. Remove invalid CXX slash commands (`/ceo`, `/cto`, `/cqo`, etc.) if present
 6. Install runtime scripts and hooks
@@ -79,6 +79,7 @@ node ./bin/init.js init --force --project-root /private/tmp/walwal-v7-init-test
 ├── bin/init.js                        # CLI entry — walwal-harness init
 ├── commands/
 │   ├── goal.md                        # Owner command (installed to target)
+│   ├── submission.md                  # Owner command (installed to target)
 │   └── hot-fix.md                     # Owner command (installed to target)
 ├── HR-Resource/{skill-name}/SKILL.md  # Hireable worker pool
 ├── scripts/
@@ -99,7 +100,7 @@ Target projects run in company mode after init:
 
 ```
 Owner
-  └─ /goal or /hot-fix
+  └─ /goal, /submission, or /hot-fix
       └─ harness-ceo
           ├─ harness-coo
           ├─ harness-cdo
@@ -114,12 +115,13 @@ Support skills: `harness-hiring`, `harness-resource-manager`, `harness-brick-off
 
 ## 6. Command Rule
 
-Exactly two Owner-facing commands. This rule does not flex:
+Exactly three Owner-facing commands. This rule does not flex:
 
 | Command | Role |
 |---|---|
 | `/goal` | Mission intake |
-| `/hot-fix` | Emergency fix |
+| `/submission` | Additional requirement under active goal |
+| `/hot-fix` | Emergency fix under active goal |
 
 Never add `/ceo`, `/cto`, `/cqo`, `/ops`, `/hiring`, or any CXX as a command.
 

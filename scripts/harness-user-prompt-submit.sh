@@ -62,7 +62,15 @@ if [ -n "$PROMPT" ] && [ -d "$CWD/.harness" ]; then
   fi
   PROMPT_SHORT=$(echo "$PROMPT" | tr '\n' ' ' | sed 's/  */ /g' | cut -c1-80)
   if [ ${#PROMPT_SHORT} -gt 2 ]; then
-    echo "$(date +"%Y-%m-%d %H:%M") | user-prompt | input | ${PROMPT_SHORT}" >> "$PROGRESS_LOG"
+    COMMAND_TYPE="other"
+    if echo "$PROMPT_SHORT" | grep -qiE '^/goal(\s|$)'; then
+      COMMAND_TYPE="goal"
+    elif echo "$PROMPT_SHORT" | grep -qiE '^/submission(\s|$)'; then
+      COMMAND_TYPE="submission"
+    elif echo "$PROMPT_SHORT" | grep -qiE '^/hot-fix(\s|$)'; then
+      COMMAND_TYPE="hot-fix"
+    fi
+    echo "$(date +"%Y-%m-%d %H:%M") | user-prompt | ${COMMAND_TYPE} | ${PROMPT_SHORT}" >> "$PROGRESS_LOG"
   fi
 fi
 
@@ -114,13 +122,13 @@ cat <<EOF
 [harness] company | S${SPRINT_NUM} | ${PIPELINE} | agent=${CURRENT_AGENT} (${AGENT_STATUS}) | next=${NEXT_AGENT} | queue=${T_PASSED}/${T_TOTAL} passed | failed=${T_FAILED}
 ${CONTEXT_WARNING}
 ## Route
-- pipeline=none/init → harness-ceo 스킬로 Owner goal/hot-fix를 접수하고 mission 문서를 생성
+- pipeline=none/init → harness-ceo 스킬로 Owner /goal, /submission, /hot-fix를 접수하고 mission 문서를 생성
 - 기본 경로는 v7 CXX 회사 루프다: CEO -> COO/CDO/CTO/CQO/OPS -> harness-resource-manager -> harness-hiring -> hired workers -> CXX review -> CEO report
-- CXX는 직접 전문 산출물을 만들지 않고 worker report를 `.harness/documents/{mission}/workers/`에 남겨야 한다
+- CXX는 직접 전문 산출물을 만들지 않고 worker report를 `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`에 남겨야 한다
 - Owner에게 "계속 진행", "진행할까요?", "다음 명령을 입력하세요"를 요구하지 않는다. GOAL이 있고 escalation이 아니면 즉시 next_agent/current_agent 업무를 수행한다
 - Owner 입력은 목표 변경·사고·결과 확인용이지 회사 진행을 펌프하는 신호가 아니다
 - CEO는 필요한 CXX만 호출하고, CXX는 resource-manager/hiring 없이 worker 업무를 수행하지 않는다
-- 기능 요청 → CEO mission flow | 긴급 수정 → hot-fix flow | 메타 질문 → 짧게 응답 (skip)
+- 목표 설정/변경 → goal flow | 추가 요구사항 → submission flow | 긴급 수정 → hot-fix flow | 메타 질문 → 짧게 응답 (skip)
 - 활성 pipeline → next_agent/current_agent 컨텍스트로 계속
 - skip: "harness skip", "just answer" 등 명시 시 단일 메시지 건너뜀
 EOF

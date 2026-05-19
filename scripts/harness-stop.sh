@@ -38,7 +38,7 @@ if [ -x "$SCRIPT_DIR/harness-worker-evidence-validate.sh" ]; then
     REASON=$(echo "$WORKER_EVIDENCE_JSON" | jq -r '
       "CXX 직접 실행 차단: " +
       ([.violations[] | "\(.mission) has CXX docs without worker reports: \(.docs | join(","))"] | join("; ")) +
-      ". harness-hiring/resource-manager로 전문 worker를 고용 또는 배정하고 .harness/documents/{mission}/workers/{worker-name}.md 를 남긴 뒤 계속하라."
+      ". harness-hiring/resource-manager로 전문 worker를 고용 또는 배정하고 .harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/{worker-name}.md 를 남긴 뒤 계속하라."
     ' 2>/dev/null || echo "CXX 직접 실행 차단: worker report가 없는 mission이 있습니다. hired worker 보고서를 먼저 생성하세요.")
     jq -nc --arg reason "$REASON" '{decision:"block", reason:$reason}'
     exit 0

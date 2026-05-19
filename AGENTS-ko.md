@@ -49,7 +49,7 @@ node ./bin/init.js init --force --project-root /private/tmp/walwal-v7-init-test
 ```
 
 **init 후 기대 결과:**
-- `.claude/commands/goal.md`, `hot-fix.md` — 다른 command 없음
+- `.claude/commands/goal.md`, `submission.md`, `hot-fix.md` — 다른 command 없음
 - `.claude/skills/harness-{ceo,coo,cdo,cto,cqo,ops}/SKILL.md`
 - `.harness/shared/HR-Resource/`
 - `CLAUDE.md` → `AGENTS.md` 심볼릭 링크
@@ -62,7 +62,7 @@ node ./bin/init.js init --force --project-root /private/tmp/walwal-v7-init-test
 
 1. `.harness/` 런타임 디렉터리 생성
 2. `HR-Resource/` → `.harness/shared/HR-Resource/` 복사
-3. `.claude/commands/`와 `.codex/commands/`에 `/goal`, `/hot-fix`만 설치
+3. `.claude/commands/`와 `.codex/commands/`에 `/goal`, `/submission`, `/hot-fix`만 설치
 4. `.claude/skills/`와 `.codex/skills/`에 CXX skills 설치
 5. 잘못 설치된 CXX slash command(`/ceo`, `/cto`, `/cqo` 등) 제거
 6. 런타임 스크립트와 훅 설치
@@ -79,6 +79,7 @@ node ./bin/init.js init --force --project-root /private/tmp/walwal-v7-init-test
 ├── bin/init.js                        # CLI 진입점 — walwal-harness init
 ├── commands/
 │   ├── goal.md                        # Owner command (대상에 설치됨)
+│   ├── submission.md                  # Owner command (대상에 설치됨)
 │   └── hot-fix.md                     # Owner command (대상에 설치됨)
 ├── HR-Resource/{skill-name}/SKILL.md  # 채용 후보 worker pool
 ├── scripts/
@@ -99,7 +100,7 @@ init 후 대상 프로젝트는 company mode로 동작한다:
 
 ```
 Owner
-  └─ /goal 또는 /hot-fix
+  └─ /goal, /submission, 또는 /hot-fix
       └─ harness-ceo
           ├─ harness-coo
           ├─ harness-cdo
@@ -114,12 +115,13 @@ Owner
 
 ## 6. Command 규칙
 
-Owner-facing command는 정확히 두 개. 이 규칙은 예외 없음:
+Owner-facing command는 정확히 세 개. 이 규칙은 예외 없음:
 
 | Command | 역할 |
 |---|---|
 | `/goal` | 미션 접수 |
-| `/hot-fix` | 긴급 수정 |
+| `/submission` | 활성 goal 하위의 추가 요구사항 |
+| `/hot-fix` | 활성 goal 하위의 긴급 수정 |
 
 `/ceo`, `/cto`, `/cqo`, `/ops`, `/hiring` 또는 어떤 CXX도 command로 추가하지 않는다.
 

@@ -129,7 +129,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
     id: "owner",
     role: "owner",
     label: "Owner",
-    sublabel: "/goal · /hot-fix",
+    sublabel: "/goal · /submission · /hot-fix",
     status: "idle",
     activity: snapshot.ownerHistory?.[0]?.content.slice(0, 80) ?? null,
     agentIds: [],

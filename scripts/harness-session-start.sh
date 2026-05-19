@@ -172,7 +172,7 @@ if [ "$sprint_status" = "init" ]; then
     echo "# Harness Company Mode active"
     echo "# Sprint is init, but next_agent=${next_agent}; continue the autonomous loop instead of waiting for Owner."
   else
-  echo "# Harness ready — use /goal or /hot-fix"
+  echo "# Harness ready — use /goal, /submission, or /hot-fix"
   echo "# 기본 경로는 v7 회사 루프입니다: CEO -> 필요한 CXX -> resource-manager/hiring -> worker reports -> CXX review -> CEO report."
   exit 0
   fi

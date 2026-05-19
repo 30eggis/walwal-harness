@@ -239,6 +239,18 @@ cat > "$AGENTS_FILE" << AGENTSEOF
 - Monorepo: ${TECH_MONO}
 - OpenAPI: ${OPENAPI}
 
+## Harness Entry Points
+
+Owner-facing commands are limited to:
+
+| Command | Purpose | History path |
+|------|------|------|
+| \`/goal\` | Set or change the company goal | \`.harness/documents/goal-{index}-{name}/\` |
+| \`/submission\` | Add a requirement under the active goal | \`.harness/documents/goal-{index}-{name}/submission-{index}-{name}/\` |
+| \`/hot-fix\` | Fix an urgent issue under the active goal | \`.harness/documents/goal-{index}-{name}/hotfix-{index}-{name}/\` |
+
+Owner speaks only to CEO. CEO speaks only to CXX. CXX agents coordinate and hire workers; they do not directly produce specialist deliverables. Worker reports must live under \`.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/\`.
+
 ## IA-MAP (Information Architecture)
 
 > 자동 스캔으로 생성됨. Planner가 검토 후 확정해야 합니다.
@@ -300,6 +312,9 @@ AGENTS.md 또는 api-contract.json 변경이 필요할 때:
 
 | 명령 | 설명 |
 |------|------|
+| \`/goal\` | 회사 목표 설정 또는 변경 |
+| \`/submission\` | 활성 goal 하위 추가 요구사항 |
+| \`/hot-fix\` | 활성 goal 하위 긴급 수정 |
 | \`bash scripts/scan-project.sh\` | 프로젝트 구조 재스캔 |
 | \`.harness/progress.json\` | 현재 진행 상태 (기계 판독) |
 | \`.harness/actions/\` | 활성 스프린트 문서 |
@@ -332,6 +347,6 @@ echo ""
 echo "=== Initialization Complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. AGENTS.md의 [?] 태그를 확인하고 Planner에게 분류를 요청하세요"
+echo "  1. AGENTS.md의 [?] 태그를 확인하고 COO에게 분류를 요청하세요"
 echo "  2. 'Preserved Rules' 섹션에서 불필요한 규칙을 정리하세요"
-echo "  3. '하네스 엔지니어링 시작'으로 Dispatcher를 실행하세요"
+echo "  3. /goal, /submission, 또는 /hot-fix로 CEO/CXX 흐름을 시작하세요"

@@ -4,7 +4,7 @@
 
 - This package repository must not contain project runtime `.harness/` state.
 - `walwal-harness init` creates `.harness/` in the target project.
-- `.claude/commands` and `.codex/commands` contain only `/goal` and `/hot-fix`.
+- `.claude/commands` and `.codex/commands` contain only `/goal`, `/submission`, and `/hot-fix`.
 - CXX and worker execution uses installed agents/skills, not slash commands.
 
 ## Hiring Boundary
@@ -19,9 +19,10 @@
 
 ## Mission Documents
 
-- Mission records live under `.harness/documents/{mission_name}/`.
+- Goal records live under `.harness/documents/goal-{index}-{name}/`.
+- Submission and hot-fix records live below the active goal directory.
 - CXX decisions use `{cxx}.md`.
-- Worker reports use `workers/{worker-name}.md`.
+- Worker reports use `{owning-cxx}/workers/{worker-name}.md`.
 
 ## DDD
 

@@ -288,7 +288,8 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
 
   const typeBadge =
     mission.type === "hotfix" ? "[🔥 hot-fix]"
-    : mission.type === "feature" ? "[✦ goal]"
+    : mission.type === "submission" ? "[+ submission]"
+    : mission.type === "goal" || mission.type === "feature" ? "[✦ goal]"
     : "[— unknown]";
 
   let dateStr = "—";
@@ -341,6 +342,8 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
             className={`font-mono text-[9px] rounded border px-1.5 py-0.5 ${
               mission.type === "hotfix"
                 ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                : mission.type === "submission"
+                ? "bg-sky-500/15 text-sky-300 border-sky-500/30"
                 : "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
             }`}
           >

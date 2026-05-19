@@ -766,7 +766,7 @@ function installCommands() {
   for (const commandsDest of commandDests) {
     const existing = fs.readdirSync(commandsDest);
     for (const f of existing) {
-      if (f.startsWith('harness-') || ['goal.md', 'hot-fix.md', 'play-harness.md', 'release-harness.md', 'stop-harness.md', 'brick-office.md', 'hiring.md', 'resource-manager.md', 'ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md'].includes(f)) {
+      if (f.startsWith('harness-') || ['goal.md', 'hot-fix.md', 'submission.md', 'play-harness.md', 'release-harness.md', 'stop-harness.md', 'brick-office.md', 'hiring.md', 'resource-manager.md', 'ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md'].includes(f)) {
         fs.unlinkSync(path.join(commandsDest, f));
       }
     }
@@ -910,7 +910,7 @@ function installUserPromptSubmitHook() {
     });
     writeClaudeSettings(settings);
     log('UserPromptSubmit hook installed in .claude/settings.json');
-    log('  → /goal and /hot-fix are guided through harness-ceo and CXX workflow');
+    log('  → /goal, /submission, and /hot-fix are guided through harness-ceo and CXX workflow');
     log('  → Opt-out per message: say "harness skip" or "without harness"');
     log('  → Disable globally: set .harness/config.json behavior.auto_route_ceo = false');
   } else {
@@ -1163,7 +1163,7 @@ Runtime (always-on company mode):
   - Stop 훅이 매 turn 종료 시 다음 부서로 자동 연쇄.
   - 1시간 안전망 wake (선택): bash scripts/harness-wake-install.sh install .
   - 3D 대시보드 (선택): bash scripts/harness-dashboard-up.sh
-  - Owner 입력은 GOAL 모호성, escalation, 결과 보고에만 필요합니다.
+  - Owner 입력은 GOAL 모호성, submission, hot-fix, escalation, 결과 보고에만 필요합니다.
 
 What it does:
   1. Scaffolds project-local .harness/ runtime state
@@ -1176,7 +1176,7 @@ What it does:
 
 After init:
   1. Restart Claude/Codex session if command discovery needs refresh.
-  2. Use /goal or /hot-fix.
+  2. Use /goal, /submission, or /hot-fix.
   3. Internal agents must call hired agents/skills, not slash commands.
 `);
 }
@@ -1408,7 +1408,7 @@ function showMigrationProposal(flags) {
   }
   if (flags.configMissingCompanyMode) {
     console.log('  • config.json: company_mode 섹션 동기화 가능');
-    console.log('    Owner /goal, /hot-fix → CEO/CXX/worker 흐름으로 고정합니다.');
+    console.log('    Owner /goal, /submission, /hot-fix → CEO/CXX/worker 흐름으로 고정합니다.');
   }
   if (flags.configLegacyRouting) {
     console.log('  • config.json: legacy dispatcher/conductor wording → v7 CEO/CXX wording');
@@ -1536,7 +1536,7 @@ function runMigrate(opts = {}) {
       c.flow = tpl.flow || c.flow;
       c.behavior = c.behavior || {};
       c.behavior.auto_route_ceo = c.behavior.auto_route_ceo ?? c.behavior.auto_route_dispatcher ?? true;
-      c.behavior.auto_route_ceo_description = 'true 이면 /goal 또는 /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다.';
+      c.behavior.auto_route_ceo_description = 'true 이면 /goal, /submission, /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다.';
       delete c.behavior.auto_route_dispatcher;
       delete c.behavior.auto_route_dispatcher_description;
       delete c.mode_selection;
@@ -1726,7 +1726,7 @@ function runMigrate(opts = {}) {
     log('Dry-run 완료 — 실제 변경 적용하려면 `npx walwal-harness migrate` 실행');
   } else {
     log(`Migration 완료. 백업: ${backupDir}`);
-    log('v7 routing 기준으로 /goal 또는 /hot-fix 가 CEO/CXX/worker 흐름을 시작합니다.');
+    log('v7 routing 기준으로 /goal, /submission, /hot-fix 가 CEO/CXX/worker 흐름을 시작합니다.');
     log('회사모드는 기본값이며 사용자 override 는 사용하지 않습니다.');
   }
   console.log('');
@@ -1781,7 +1781,7 @@ function runVerify() {
   log(`  skills: ${pass}/${expectedSkills.length * skillRoots.length} OK`);
 
   // 2) owner-facing commands
-  const allowedCommands = new Set(['goal.md', 'hot-fix.md']);
+  const allowedCommands = new Set(['goal.md', 'submission.md', 'hot-fix.md']);
   const forbiddenCommands = new Set(['ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md', 'hiring.md', 'resource-manager.md', 'brick-office.md']);
   const commandRoots = [
     ['.claude', CLAUDE_COMMANDS_DIR],
@@ -1807,7 +1807,7 @@ function runVerify() {
       }
     }
   }
-  log(`  commands: /goal + /hot-fix checked`);
+  log(`  commands: /goal + /submission + /hot-fix checked`);
 
   // 3) progress.json schema (v6+ = version 4 + mode_decision)
   const progressPath = path.join(HARNESS_DIR, 'progress.json');
@@ -1991,14 +1991,14 @@ function main() {
     log('╔═══════════════════════════════════════════════════════════╗');
     log('║  Restart Claude Code for skills & commands to activate!  ║');
     log('║                                                          ║');
-    log('║  Then invoke /goal or /hot-fix                           ║');
+    log('║  Then invoke /goal, /submission, or /hot-fix             ║');
     log('║                                                          ║');
     log('║  기본은 회사모드: 병렬 · 자율 진행. 추가 입력 불필요.     ║');
     log('╚═══════════════════════════════════════════════════════════╝');
   } else {
     log('Next steps:');
     log('  1. Restart Claude/Codex if command discovery needs refresh.');
-    log('  2. Use /goal or /hot-fix.');
+    log('  2. Use /goal, /submission, or /hot-fix.');
     log('  3. Internal agents call hired agents/skills, not slash commands.');
   }
   console.log('');

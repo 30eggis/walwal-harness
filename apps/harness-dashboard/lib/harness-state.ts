@@ -957,15 +957,41 @@ function readMissions(rootDir: string, limit = 15): MissionDoc[] {
   const docsDir = path.join(rootDir, ".harness", "documents");
   if (!existsSync(docsDir)) return [];
 
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(docsDir, { withFileTypes: true });
-  } catch { return []; }
+  const missionDirs: Array<{ rel: string; abs: string }> = [];
+  const cxxDocNames = new Set(["ceo.md", "cto.md", "cqo.md", "coo.md", "cdo.md", "ops.md"]);
 
-  const missions = entries
-    .filter(d => d.isDirectory() && !d.name.startsWith("."))
-    .map(d => {
-      const missionPath = path.join(docsDir, d.name);
+  const collectMissionDirs = (baseDir: string, relPrefix = "") => {
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(baseDir, { withFileTypes: true });
+    } catch { return; }
+
+    const hasMissionDoc = entries.some((entry) => entry.isFile() && cxxDocNames.has(entry.name));
+    if (hasMissionDoc && relPrefix) {
+      missionDirs.push({ rel: relPrefix, abs: baseDir });
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      if (["workers", "coo", "cdo", "cto", "cqo", "ops"].includes(entry.name)) continue;
+      const childRel = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      collectMissionDirs(path.join(baseDir, entry.name), childRel);
+    }
+  };
+
+  collectMissionDirs(docsDir);
+
+  const typeFromId = (id: string): MissionDoc["type"] => {
+    const base = id.split("/").pop() ?? id;
+    if (/^goal[-_]/i.test(base)) return "goal";
+    if (/^submission[-_]/i.test(base)) return "submission";
+    if (/^hot[-_]?fix[-_]/i.test(base) || /^hotfix[-_]/i.test(base)) return "hotfix";
+    if (/^F\d+/i.test(base)) return "feature";
+    return "unknown";
+  };
+
+  const missions = missionDirs
+    .map(({ rel, abs: missionPath }) => {
       let mtime: Date;
       try { mtime = statSync(missionPath).mtime; } catch { mtime = new Date(0); }
 
@@ -1004,12 +1030,13 @@ function readMissions(rootDir: string, limit = 15): MissionDoc[] {
       const cxxRoles = ["ceo", "cto", "cqo", "coo", "cdo", "ops"] as const;
       const cxxPresent = cxxRoles.filter(role => existsSync(path.join(missionPath, `${role}.md`)));
 
-      const id = d.name;
+      const id = rel;
+      const label = rel.split("/").pop() ?? rel;
       return {
         missionId: id,
         ts: mtime.toISOString(),
-        type: id.startsWith("hotfix") ? "hotfix" : id.match(/^F\d+/) ? "feature" : "unknown",
-        label: id,
+        type: typeFromId(id),
+        label,
         ceo: readMd("ceo.md"),
         cto: readMd("cto.md"),
         cqo: readMd("cqo.md"),
@@ -1039,11 +1066,15 @@ function readOwnerHistory(rootDir: string, limit = 30): OwnerPromptEntry[] {
     const parts = line.split(" | ");
     if (parts.length < 4) continue;
     const ts = parts[0]?.trim() ?? "";
+    const eventType = parts[2]?.trim() ?? "input";
     const content = parts.slice(3).join(" | ").trim();
     if (!content) continue;
     const lc = content.toLowerCase();
-    const type = content.startsWith("/goal") ? "goal" :
-                 (content.startsWith("/hot-fix") || lc.includes("/hot-fix")) ? "hot-fix" : "other";
+    const type =
+      eventType === "goal" || content.startsWith("/goal") ? "goal" :
+      eventType === "submission" || content.startsWith("/submission") || lc.includes("/submission") ? "submission" :
+      eventType === "hot-fix" || content.startsWith("/hot-fix") || lc.includes("/hot-fix") ? "hot-fix" :
+      "other";
     entries.push({ ts, content, type });
   }
   return entries.reverse().slice(0, limit);
