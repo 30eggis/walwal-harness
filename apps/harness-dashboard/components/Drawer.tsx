@@ -2,16 +2,10 @@
 import { useEffect } from "react";
 
 export type DrawerTab =
-  | "agent-log"
-  | "room-metrics"
-  | "archive-list"
-  | "incidents"
-  | "hypothesis"
-  | "tracks"
-  | "meeting-detail"
-  | "prompt-history"
-  | "mission-doc"
-  | "worker-doc";
+  | "mission-flow"      // Mission document hierarchy (PRIMARY)
+  | "history"           // Owner prompt history
+  | "mission-doc"       // Single doc markdown view
+  | "logs";             // Agent log (technical)
 
 interface DrawerProps {
   open: boolean;
@@ -23,15 +17,10 @@ interface DrawerProps {
 }
 
 const TABS: Array<{ id: DrawerTab; label: string }> = [
-  { id: "prompt-history", label: "History" },
-  { id: "mission-doc", label: "Mission" },
-  { id: "agent-log", label: "Agent Log" },
-  { id: "room-metrics", label: "Room Metrics" },
-  { id: "incidents", label: "Incidents" },
-  { id: "hypothesis", label: "Hypothesis" },
-  { id: "tracks", label: "Tracks" },
-  { id: "meeting-detail", label: "Meetings" },
-  { id: "archive-list", label: "Archive" },
+  { id: "mission-flow", label: "Mission Flow" },
+  { id: "history", label: "History" },
+  { id: "mission-doc", label: "Document" },
+  { id: "logs", label: "Agent Log" },
 ];
 
 export function Drawer({ open, tab, title, onClose, onTabChange, children }: DrawerProps) {
@@ -61,7 +50,7 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children }: Dra
         aria-hidden={!open}
         data-testid="drawer"
         data-open={open}
-        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[380px] bg-brick-bg border-l border-brick-wall shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
+        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[640px] lg:w-[720px] bg-brick-bg border-l border-brick-wall shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >

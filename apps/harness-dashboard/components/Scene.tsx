@@ -5,22 +5,18 @@ import type {
   EnvFileSummary,
   EscalationEntry,
   HarnessSnapshot,
-  MeetingRecord,
+  MissionDoc,
   OpsServiceHealth,
   OrgNodeDef,
-  RoomId,
-  RoomState,
   WorkerSnapshot,
 } from "@/lib/types";
 import { useHarnessStream, type ConnectionState } from "@/hooks/useHarnessStream";
 import { Drawer, type DrawerTab } from "./Drawer";
 import { AgentLogTab } from "./drawer/AgentLogTab";
-import { RoomMetricsTab } from "./drawer/RoomMetricsTab";
-import { IncidentsTab } from "./drawer/IncidentsTab";
-import { HypothesisTab } from "./drawer/HypothesisTab";
-import { TracksTab } from "./drawer/TracksTab";
 import { OwnerHistoryTab } from "./drawer/OwnerHistoryTab";
 import { MissionDocTab } from "./drawer/MissionDocTab";
+import { MissionFlowTab } from "./drawer/MissionFlowTab";
+import { MissionTimeline } from "./MissionTimeline";
 import { OrgTree } from "./OrgTree";
 
 interface SceneProps {
@@ -31,78 +27,52 @@ interface SceneProps {
 export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const { snapshot, connectionState } = useHarnessStream(initial);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<DrawerTab>("agent-log");
+  const [drawerTab, setDrawerTab] = useState<DrawerTab>("mission-flow");
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
-  const [selectedRoom, setSelectedRoom] = useState<RoomState | null>(null);
-  const [selectedMeeting, setSelectedMeeting] = useState<MeetingRecord | null>(null);
   const [selectedNode, setSelectedNode] = useState<OrgNodeDef | null>(null);
+  const [selectedMission, setSelectedMission] = useState<MissionDoc | null>(null);
 
   const handleAgentClick = (id: string) => {
     const a = snapshot.agents.find((x) => x.id === id) ?? null;
     setSelectedAgent(a);
-    setSelectedRoom(null);
-    setSelectedMeeting(null);
     setSelectedNode(null);
-    setDrawerTab("agent-log");
-    setDrawerOpen(true);
-  };
-
-  const handleRoomClick = (id: RoomId) => {
-    const r = snapshot.rooms.find((x) => x.id === id) ?? null;
-    setSelectedRoom(r);
-    setSelectedAgent(null);
-    setSelectedMeeting(null);
-    setSelectedNode(null);
-    // Route the click to the most relevant tab for that room. This way one
-    // click on Service-Ops opens the incident list, one click on COO opens
-    // the hypothesis list, etc., matching what the wall art is showing.
-    let nextTab: DrawerTab = "room-metrics";
-    if (id === "archive") nextTab = "archive-list";
-    else if (id === "service-ops" && snapshot.incidents.length > 0) nextTab = "incidents";
-    else if (id === "coo" && snapshot.hypothesis.length > 0) nextTab = "hypothesis";
-    else if (id === "meeting" && snapshot.tracks.length > 0) nextTab = "tracks";
-    setDrawerTab(nextTab);
-    setDrawerOpen(true);
-  };
-
-  const handleMeetingClick = (meeting: MeetingRecord) => {
-    setSelectedMeeting(meeting);
-    setSelectedAgent(null);
-    setSelectedRoom(null);
-    setSelectedNode(null);
-    setDrawerTab("meeting-detail");
+    setDrawerTab("logs");
     setDrawerOpen(true);
   };
 
   const handleNodeClick = (node: OrgNodeDef) => {
     setSelectedNode(node);
     setSelectedAgent(null);
-    setSelectedRoom(null);
-    setSelectedMeeting(null);
-
+    // Auto-select current mission for non-owner nodes
+    if (!selectedMission && snapshot.missions?.[0]) {
+      setSelectedMission(snapshot.missions[0]);
+    }
     if (node.id === "owner") {
-      setDrawerTab("prompt-history");
+      setDrawerTab("history");
     } else if (node.id.startsWith("worker-")) {
-      setDrawerTab("worker-doc");
+      setDrawerTab("mission-flow");
     } else {
-      setDrawerTab("mission-doc");
+      setDrawerTab("mission-flow");
     }
     setDrawerOpen(true);
   };
 
-  const drawerTitle = selectedNode
-    ? selectedNode.id === "owner"
-      ? "Owner · Prompt History"
-      : selectedNode.id.startsWith("worker-")
-      ? `Worker: ${selectedNode.label}`
-      : selectedNode.label
-    : selectedAgent
-    ? selectedAgent.name
-    : selectedMeeting
-    ? selectedMeeting.id
-    : selectedRoom
-    ? `${selectedRoom.label_ko}`
-    : "Detail";
+  const handleMissionClick = (mission: MissionDoc) => {
+    setSelectedMission(mission);
+    setSelectedNode(null);
+    setSelectedAgent(null);
+    setDrawerTab("mission-flow");
+    setDrawerOpen(true);
+  };
+
+  const drawerTitle =
+    selectedMission && drawerTab === "mission-flow"
+      ? selectedMission.missionId
+      : selectedNode?.id === "owner"
+      ? "Owner · History"
+      : selectedNode
+      ? selectedNode.label
+      : "Mission Flow";
 
   // Suppress unused lang warning — kept for future i18n
   void lang;
@@ -112,7 +82,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       {snapshot.escalations.length > 0 && (
         <EscalationStrip escalations={snapshot.escalations} />
       )}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,0.55fr)]">
+      <div className="min-w-0">
         <section className="min-w-0">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -146,18 +116,18 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
           </div>
         </section>
 
-        <aside className="grid min-h-full gap-3">
-          <MissionPanel snapshot={snapshot} />
-          <WorkerPanel workers={snapshot.dashboard.workers} />
-        </aside>
+        <section className="mt-4">
+          <div className="mb-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">Mission History</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">goal · hot-fix 명령별 파생 작업 흐름</p>
+          </div>
+          <MissionTimeline
+            missions={snapshot.missions ?? []}
+            activeMissionId={selectedMission?.missionId ?? null}
+            onMissionClick={handleMissionClick}
+          />
+        </section>
       </div>
-
-      <section className="mt-4 grid gap-4 xl:grid-cols-[1.1fr_0.9fr_0.8fr]">
-        <MeetingPanel meetings={snapshot.dashboard.recentMeetings} onSelect={handleMeetingClick} />
-        <OpsPanel services={snapshot.dashboard.opsHealth} />
-        <EnvPanel envFiles={snapshot.dashboard.envFiles} />
-      </section>
-
 
       {/* Hidden DOM index for E2E + a11y */}
       <ul className="sr-only" data-testid="scene-index">
@@ -190,7 +160,13 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         onClose={() => setDrawerOpen(false)}
         onTabChange={setDrawerTab}
       >
-        {drawerTab === "prompt-history" && (
+        {drawerTab === "mission-flow" && (
+          <MissionFlowTab
+            mission={selectedMission ?? snapshot.missions?.[0] ?? null}
+            ownerHistory={snapshot.ownerHistory ?? []}
+          />
+        )}
+        {drawerTab === "history" && (
           <OwnerHistoryTab ownerHistory={snapshot.ownerHistory ?? []} />
         )}
         {drawerTab === "mission-doc" && selectedNode && (
@@ -203,56 +179,25 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
             }
             fromLabel={selectedNode.role === "ceo" ? "Owner" : "CEO"}
             toLabel={
-              selectedNode.role === "ceo"
-                ? "CTO / CQO / COO"
-                : selectedNode.role === "cto"
+              selectedNode.role === "cto"
                 ? "Workers"
                 : selectedNode.role === "cqo"
-                ? "Owner (report)"
+                ? "Owner Report"
                 : "—"
             }
           />
         )}
-        {drawerTab === "worker-doc" && selectedNode?.id.startsWith("worker-") && (
-          <MissionDocTab
-            missions={snapshot.missions ?? []}
-            role="worker"
-            workerName={selectedNode.label}
-            fromLabel="CTO"
-            toLabel="Output"
-          />
+        {drawerTab === "logs" && selectedNode && (
+          <AgentLogTab agentId={selectedNode.agentIds[0] ?? selectedNode.id} />
         )}
-        {drawerTab === "agent-log" && selectedAgent && (
+        {drawerTab === "logs" && selectedAgent && !selectedNode && (
           <AgentLogTab agentId={selectedAgent.id} />
         )}
-        {drawerTab === "room-metrics" && selectedRoom && (
-          <RoomMetricsTab room={selectedRoom} />
+        {drawerTab === "logs" && !selectedNode && !selectedAgent && (
+          <div className="text-gray-500 text-xs">Select a node to view logs.</div>
         )}
-        {drawerTab === "agent-log" && !selectedAgent && (
-          <div className="text-gray-500">
-            Click a minifigure to view its log.
-          </div>
-        )}
-        {drawerTab === "room-metrics" && !selectedRoom && (
-          <div className="text-gray-500">Click a room to view its metrics.</div>
-        )}
-        {drawerTab === "archive-list" && (
-          <ArchiveList snapshot={snapshot} />
-        )}
-        {drawerTab === "incidents" && (
-          <IncidentsTab incidents={snapshot.incidents} />
-        )}
-        {drawerTab === "hypothesis" && (
-          <HypothesisTab hypothesis={snapshot.hypothesis} />
-        )}
-        {drawerTab === "tracks" && (
-          <TracksTab tracks={snapshot.tracks} />
-        )}
-        {drawerTab === "meeting-detail" && selectedMeeting && (
-          <MeetingDetail meeting={selectedMeeting} />
-        )}
-        {drawerTab === "meeting-detail" && !selectedMeeting && (
-          <div className="text-gray-500">Click a meeting item to view the minutes.</div>
+        {drawerTab === "mission-flow" && !selectedMission && !snapshot.missions?.length && (
+          <div className="text-gray-500 text-xs">No missions found in .harness/documents/</div>
         )}
       </Drawer>
     </div>
@@ -341,161 +286,94 @@ function Panel({
   );
 }
 
-function MissionPanel({ snapshot }: { snapshot: HarnessSnapshot }) {
-  const total = snapshot.contract.feature_total;
-  const done = snapshot.contract.feature_passed;
-  const progress = total > 0 ? Math.round((done / total) * 100) : null;
-  const featurePreview = snapshot.dashboard.features.slice(0, 4);
+function Metric({ label, value, tone }: { label: string; value: React.ReactNode; tone: "neutral" | "cyan" | "green" }) {
+  const color = tone === "cyan" ? "text-cyan-300" : tone === "green" ? "text-emerald-300" : "text-gray-200";
   return (
-    <Panel title="Current Mission" eyebrow="goal / contract">
-      <div className="space-y-3">
-        <div>
-          <div className="font-mono text-[10px] text-gray-500">
-            {snapshot.goal?.id ?? "goal"}
-          </div>
-          <div className="mt-1 text-base font-semibold leading-snug text-gray-100">
-            {snapshot.goal?.title ?? "No active goal registered"}
-          </div>
-          {snapshot.goal?.description_truncated && (
-            <p className="mt-2 text-xs leading-relaxed text-gray-400">
-              {snapshot.goal.description_truncated}
-            </p>
-          )}
-        </div>
-        <div className="grid grid-cols-3 gap-2">
-          <Metric label="Cycle" value={snapshot.contract.sprint_number ?? "—"} tone="neutral" />
-          <Metric label="Features" value={`${done}/${total || 0}`} tone="cyan" />
-          <Metric label="Pass" value={progress === null ? "—" : `${progress}%`} tone="green" />
-        </div>
-        <div className="h-2 overflow-hidden rounded bg-gray-800">
-          <div
-            className="h-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-amber-300"
-            style={{ width: `${progress ?? 0}%` }}
-          />
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-[11px]">
-          <StatusLine label="Meeting cadence" value={snapshot.meetings.cadence} />
-          <StatusLine label="Next agent" value={snapshot.agents.find((a) => a.lastActivity?.includes("next_agent"))?.name ?? "—"} />
-        </div>
-        {featurePreview.length > 0 && (
-          <div className="space-y-1">
-            {featurePreview.map((f) => (
-              <div key={f.id} className="flex items-center justify-between gap-2 rounded bg-black/20 px-2 py-1 font-mono text-[10px]">
-                <span className="min-w-0 truncate text-gray-300">{f.id} · {f.title}</span>
-                <span className={featureTone(f.status)}>{f.passes.length ? `${f.passes.length} pass` : f.status}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </Panel>
+    <div className="rounded border border-gray-700/70 bg-black/20 px-2 py-2">
+      <div className="font-mono text-[10px] uppercase text-gray-500">{label}</div>
+      <div className={`mt-1 text-lg font-semibold ${color}`}>{value}</div>
+    </div>
   );
 }
 
-function WorkerPanel({ workers }: { workers: WorkerSnapshot[] }) {
+function StatusLine({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <Panel title="Active Workstreams" eyebrow="friends working now">
-      {workers.length === 0 ? (
-        <EmptyLine text="No active workers. Conductor will dispatch when queue is ready." />
-      ) : (
-        <div className="space-y-2">
-          {workers.slice(0, 5).map((w) => (
-            <div key={`${w.team}-${w.feature}`} className="rounded border border-gray-700/70 bg-black/20 p-2">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="font-mono text-[10px] uppercase text-cyan-300">
-                    T{w.team} · {w.agent}
-                  </div>
-                  <div className="mt-0.5 truncate text-sm font-medium text-gray-100">
-                    {w.feature} · {w.title ?? w.feature}
-                  </div>
-                </div>
-                <span className={`shrink-0 rounded px-2 py-0.5 font-mono text-[10px] ${statusTone(w.status)}`}>
-                  {w.status}
-                </span>
-              </div>
-              <p className="mt-2 line-clamp-2 text-[11px] leading-relaxed text-gray-400">
-                {w.summary}
-              </p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded bg-gray-800">
-                <div className="h-full bg-cyan-300" style={{ width: `${Math.round((w.progress ?? 0.25) * 100)}%` }} />
-              </div>
-              {w.next_material && (
-                <div className="mt-2 truncate font-mono text-[10px] text-amber-300/80">
-                  next material: {w.next_material}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+    <div className="flex items-center justify-between gap-2 rounded bg-black/20 px-2 py-1 font-mono">
+      <span className="text-gray-500">{label}</span>
+      <span className="truncate text-gray-200">{value}</span>
+    </div>
+  );
+}
+
+function EmptyLine({ text }: { text: string }) {
+  return <div className="rounded border border-dashed border-gray-700 px-3 py-6 text-center text-xs text-gray-500">{text}</div>;
+}
+
+function statusTone(status: WorkerSnapshot["status"]): string {
+  if (status === "spawned" || status === "running") return "bg-cyan-400/15 text-cyan-300";
+  if (status === "recorded") return "bg-amber-400/15 text-amber-300";
+  if (status === "blocked") return "bg-rose-500/15 text-rose-300";
+  return "bg-gray-500/15 text-gray-300";
+}
+
+function featureTone(status: string): string {
+  if (status === "passed") return "text-emerald-300";
+  if (status === "failed" || status === "blocked") return "text-rose-300";
+  if (status === "in_progress" || status === "ready") return "text-cyan-300";
+  return "text-gray-500";
+}
+
+function serviceTone(status: OpsServiceHealth["status"]): string {
+  if (status === "ok") return "bg-emerald-400/15 text-emerald-300";
+  if (status === "degraded") return "bg-amber-400/15 text-amber-300";
+  if (status === "down") return "bg-rose-500/15 text-rose-300";
+  return "bg-gray-500/15 text-gray-300";
+}
+
+function EscalationStrip({ escalations }: { escalations: EscalationEntry[] }) {
+  return (
+    <div
+      data-testid="escalation-strip"
+      role="alert"
+      className="mb-3 flex flex-wrap items-center gap-2 rounded border border-aura-alert/60 bg-aura-alert/10 px-3 py-2 text-xs font-mono text-aura-alert"
+    >
+      <span className="font-semibold uppercase tracking-widest">
+        ↑ {escalations.length} escalation{escalations.length === 1 ? "" : "s"}
+      </span>
+      {escalations.slice(0, 3).map((e) => (
+        <span
+          key={e.id}
+          data-testid={`escalation-${e.id}`}
+          className="rounded bg-aura-alert/20 px-2 py-0.5 text-[10px]"
+        >
+          {e.id} · {e.reason}
+        </span>
+      ))}
+      {escalations.length > 3 && (
+        <span className="text-[10px] opacity-70">+{escalations.length - 3} more</span>
       )}
-    </Panel>
+    </div>
   );
 }
 
-function MeetingPanel({
-  meetings,
-  onSelect,
-}: {
-  meetings: MeetingRecord[];
-  onSelect: (meeting: MeetingRecord) => void;
-}) {
-  return (
-    <Panel title="Recent Meetings" eyebrow="minutes / decisions">
-      {meetings.length === 0 ? (
-        <EmptyLine text="No meeting minutes yet." />
-      ) : (
-        <div className="space-y-2">
-          {meetings.slice(0, 4).map((m) => (
-            <button
-              key={m.path}
-              type="button"
-              onClick={() => onSelect(m)}
-              className="grid w-full gap-2 rounded border border-gray-700/70 bg-black/20 p-2 text-left transition-colors hover:border-cyan-300/60 hover:bg-cyan-300/5 md:grid-cols-[150px_1fr]"
-            >
-              <div className="font-mono text-[10px] text-gray-500">
-                <div className="truncate text-gray-300">{m.id}</div>
-                <div>{m.ts ? new Date(m.ts).toLocaleString() : "—"}</div>
-                {m.verdict && <div className="mt-1 text-amber-300">{m.verdict}</div>}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-gray-100">{m.title}</div>
-                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-400">{m.summary}</p>
-                <div className="mt-1 truncate font-mono text-[10px] text-cyan-300/70">{m.path}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-function MeetingDetail({ meeting }: { meeting: MeetingRecord }) {
-  return (
-    <article className="space-y-3">
-      <div className="rounded border border-brick-wall bg-brick-wall/30 p-2">
-        <div className="font-mono text-[10px] uppercase tracking-wider text-gray-500">
-          {meeting.ts ? new Date(meeting.ts).toLocaleString() : "—"}
-        </div>
-        <h3 className="mt-1 text-sm font-semibold text-gray-100">{meeting.title}</h3>
-        {meeting.verdict && (
-          <div className="mt-1 font-mono text-[10px] text-amber-300">{meeting.verdict}</div>
-        )}
-        <div className="mt-2 break-all font-mono text-[10px] text-cyan-300/70">{meeting.path}</div>
-      </div>
-      <pre className="whitespace-pre-wrap break-words rounded border border-gray-700/70 bg-black/25 p-3 text-[11px] leading-relaxed text-gray-200">
-        {meeting.content || meeting.summary}
-      </pre>
-    </article>
-  );
-}
+// Keep unused helper functions to avoid breaking other panels if needed later
+void Panel;
+void Metric;
+void StatusLine;
+void EmptyLine;
+void statusTone;
+void featureTone;
+void serviceTone;
 
 function OpsPanel({ services }: { services: OpsServiceHealth[] }) {
   return (
-    <Panel title="Service-Ops" eyebrow="production monitor">
+    <section className="rounded-md border border-gray-700/80 bg-[#171a20]/95 p-3 shadow-xl">
+      <div className="mb-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">production monitor</p>
+        <h2 className="text-sm font-semibold text-gray-100">Service-Ops</h2>
+      </div>
       {services.length === 0 ? (
-        <EmptyLine text="No production services configured." />
+        <div className="rounded border border-dashed border-gray-700 px-3 py-6 text-center text-xs text-gray-500">No production services configured.</div>
       ) : (
         <div className="space-y-1.5">
           {services.map((s) => (
@@ -518,7 +396,7 @@ function OpsPanel({ services }: { services: OpsServiceHealth[] }) {
           ))}
         </div>
       )}
-    </Panel>
+    </section>
   );
 }
 
@@ -551,9 +429,13 @@ function EnvPanel({ envFiles }: { envFiles: EnvFileSummary[] }) {
   };
 
   return (
-    <Panel title="Environment Control" eyebrow="masked .env overview">
+    <section className="rounded-md border border-gray-700/80 bg-[#171a20]/95 p-3 shadow-xl">
+      <div className="mb-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">masked .env overview</p>
+        <h2 className="text-sm font-semibold text-gray-100">Environment Control</h2>
+      </div>
       {envFiles.length === 0 ? (
-        <EmptyLine text="No .env files found at project root." />
+        <div className="rounded border border-dashed border-gray-700 px-3 py-6 text-center text-xs text-gray-500">No .env files found at project root.</div>
       ) : (
         <div className="space-y-2">
           <div className="rounded border border-cyan-400/30 bg-cyan-400/5 p-2">
@@ -632,79 +514,13 @@ function EnvPanel({ envFiles }: { envFiles: EnvFileSummary[] }) {
           ))}
         </div>
       )}
-    </Panel>
+    </section>
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: React.ReactNode; tone: "neutral" | "cyan" | "green" }) {
-  const color = tone === "cyan" ? "text-cyan-300" : tone === "green" ? "text-emerald-300" : "text-gray-200";
-  return (
-    <div className="rounded border border-gray-700/70 bg-black/20 px-2 py-2">
-      <div className="font-mono text-[10px] uppercase text-gray-500">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${color}`}>{value}</div>
-    </div>
-  );
-}
-
-function StatusLine({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 rounded bg-black/20 px-2 py-1 font-mono">
-      <span className="text-gray-500">{label}</span>
-      <span className="truncate text-gray-200">{value}</span>
-    </div>
-  );
-}
-
-function EmptyLine({ text }: { text: string }) {
-  return <div className="rounded border border-dashed border-gray-700 px-3 py-6 text-center text-xs text-gray-500">{text}</div>;
-}
-
-function statusTone(status: WorkerSnapshot["status"]): string {
-  if (status === "spawned" || status === "running") return "bg-cyan-400/15 text-cyan-300";
-  if (status === "recorded") return "bg-amber-400/15 text-amber-300";
-  if (status === "blocked") return "bg-rose-500/15 text-rose-300";
-  return "bg-gray-500/15 text-gray-300";
-}
-
-function featureTone(status: string): string {
-  if (status === "passed") return "text-emerald-300";
-  if (status === "failed" || status === "blocked") return "text-rose-300";
-  if (status === "in_progress" || status === "ready") return "text-cyan-300";
-  return "text-gray-500";
-}
-
-function serviceTone(status: OpsServiceHealth["status"]): string {
-  if (status === "ok") return "bg-emerald-400/15 text-emerald-300";
-  if (status === "degraded") return "bg-amber-400/15 text-amber-300";
-  if (status === "down") return "bg-rose-500/15 text-rose-300";
-  return "bg-gray-500/15 text-gray-300";
-}
-
-function EscalationStrip({ escalations }: { escalations: EscalationEntry[] }) {
-  return (
-    <div
-      data-testid="escalation-strip"
-      role="alert"
-      className="mb-3 flex flex-wrap items-center gap-2 rounded border border-aura-alert/60 bg-aura-alert/10 px-3 py-2 text-xs font-mono text-aura-alert"
-    >
-      <span className="font-semibold uppercase tracking-widest">
-        ↑ {escalations.length} escalation{escalations.length === 1 ? "" : "s"}
-      </span>
-      {escalations.slice(0, 3).map((e) => (
-        <span
-          key={e.id}
-          data-testid={`escalation-${e.id}`}
-          className="rounded bg-aura-alert/20 px-2 py-0.5 text-[10px]"
-        >
-          {e.id} · {e.reason}
-        </span>
-      ))}
-      {escalations.length > 3 && (
-        <span className="text-[10px] opacity-70">+{escalations.length - 3} more</span>
-      )}
-    </div>
-  );
-}
+// Keep OpsPanel and EnvPanel available for future reuse
+void OpsPanel;
+void EnvPanel;
 
 function ArchiveList({ snapshot }: { snapshot: HarnessSnapshot }) {
   const list = snapshot.archive.all ?? snapshot.archive.recent ?? [];
@@ -735,3 +551,6 @@ function ArchiveList({ snapshot }: { snapshot: HarnessSnapshot }) {
     </ul>
   );
 }
+
+// Keep ArchiveList available for future reuse
+void ArchiveList;

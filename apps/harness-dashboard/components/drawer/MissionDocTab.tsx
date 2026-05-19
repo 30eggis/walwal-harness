@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import type { MissionDoc } from "@/lib/types";
+import { MarkdownView } from "@/lib/markdown";
 
 interface Props {
   missions: MissionDoc[];
@@ -82,10 +83,9 @@ export function MissionDocTab({ missions, role, workerName, fromLabel, toLabel }
           </div>
         </div>
       ) : (
-        <pre className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-gray-200 rounded border border-gray-700/60 bg-black/20 p-3 max-h-[60vh] overflow-y-auto">
-          {/* Strip YAML frontmatter for cleaner display */}
-          {content.replace(/^---[\s\S]*?---\n/, "")}
-        </pre>
+        <div className="rounded border border-gray-700/60 bg-black/20 p-3 max-h-[60vh] overflow-y-auto">
+          <MarkdownView source={content} />
+        </div>
       )}
     </div>
   );
