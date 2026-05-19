@@ -128,6 +128,45 @@ The harness ships with a real-time dashboard that reads `.harness/documents/` di
 bash scripts/harness-dashboard-up.sh
 ```
 
+Run on a different port:
+
+```bash
+bash scripts/harness-dashboard-up.sh --port 3002
+```
+
+Force-refresh the isolated dashboard cache when an older dashboard is still shown:
+
+```bash
+bash scripts/harness-dashboard-up.sh --port 3002 --reinstall
+```
+
+Dashboard options:
+
+| Option | Role |
+|---|---|
+| `--port <port>` | Run Brick Office on a custom port, e.g. `3002` |
+| `--reinstall` | Delete and rebuild the isolated dashboard cache under `~/.walwal-harness/dashboard/` |
+
+Existing users should update and migrate from the target project:
+
+```bash
+npm i @walwal-harness/cli@latest
+npx walwal-harness migrate
+```
+
+If command discovery or installed harness files look stale, refresh the install contract:
+
+```bash
+npx walwal-harness init --force
+```
+
+For an explicit project root:
+
+```bash
+npx walwal-harness migrate --project-root /path/to/project
+npx walwal-harness init --force --project-root /path/to/project
+```
+
 Features:
 
 - **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy
@@ -169,6 +208,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.9 | Dashboard is packaged with npm and auto-syncs isolated cache by package version; README documents dashboard port/reinstall and update/migrate commands |
 | 7.1.8 | HR-Resource: replace China-platform-specific workers with global equivalents; refine cross-border/video/livestream skills |
 | 7.1.7 | Implementation Notes mandatory in all CXX docs and worker reports; harness-worker-evidence-validate.sh |
 | 7.1.6 | CXX hierarchy enforcement: CEO→CXX-only gate, CTO prerequisite gate, CQO worker-evidence mandate; dashboard gotchas tab, mission-specific history tab, worker file list in flow |

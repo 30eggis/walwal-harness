@@ -2,9 +2,9 @@
 # walwal-harness — Brick Office dashboard launcher
 #
 # 처음 쓰는 사용자도 한 줄로 대시보드를 띄워볼 수 있게 만든 helper.
-# walwal-harness CLI 패키지에는 R3F + Next.js 무게 때문에 dashboard 가 미포함이고,
-# 본 스크립트가 git sparse-checkout 으로 apps/harness-dashboard/ 만 가져와서
-# 사용자 프로젝트 외부 (~/.walwal-harness/dashboard/<project-key>) 에 격리 설치 후 dev 실행한다.
+# npm 패키지에 포함된 apps/harness-dashboard 를 사용자 프로젝트 외부
+# (~/.walwal-harness/dashboard/<project-key>) 에 격리 복사 후 dev 실행한다.
+# 구버전 호환을 위해 패키지에 dashboard 가 없으면 git sparse-checkout 으로 fallback 한다.
 #
 # Usage:
 #   bash scripts/harness-dashboard-up.sh                 # install + dev (port 3001)
@@ -16,6 +16,7 @@ REPO_URL="${WALWAL_HARNESS_REPO:-https://github.com/30eggis/walwal-harness.git}"
 DASHBOARD_PATH="apps/harness-dashboard"
 PORT="${PORT:-3001}"
 REINSTALL=false
+PACKAGE_VERSION="unknown"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -40,6 +41,13 @@ fi
 PROJECT_KEY="$(printf '%s' "${HARNESS_ROOT}" | shasum -a 1 | awk '{print substr($1,1,12)}')"
 PROJECT_NAME="$(basename "${HARNESS_ROOT}")"
 LOCAL_DIR="${HOME}/.walwal-harness/dashboard/${PROJECT_NAME}-${PROJECT_KEY}"
+VERSION_FILE="${LOCAL_DIR}/.walwal-dashboard-version"
+
+PACKAGE_ROOT="${HARNESS_ROOT}/node_modules/@walwal-harness/cli"
+PACKAGED_DASHBOARD="${PACKAGE_ROOT}/${DASHBOARD_PATH}"
+if [[ -f "${PACKAGE_ROOT}/package.json" ]]; then
+  PACKAGE_VERSION="$(node -p "require('${PACKAGE_ROOT}/package.json').version" 2>/dev/null || echo unknown)"
+fi
 
 if [[ "$REINSTALL" == "true" ]]; then
   rm -rf "$LOCAL_DIR"
@@ -48,7 +56,19 @@ fi
 echo "[brick-office] HARNESS_ROOT = ${HARNESS_ROOT}"
 echo "[brick-office] dashboard 격리 경로 = ${LOCAL_DIR}"
 
-if [[ ! -d "${LOCAL_DIR}/${DASHBOARD_PATH}" ]]; then
+if [[ -d "${PACKAGED_DASHBOARD}" ]]; then
+  INSTALLED_VERSION=""
+  if [[ -f "${VERSION_FILE}" ]]; then
+    INSTALLED_VERSION="$(cat "${VERSION_FILE}" 2>/dev/null || true)"
+  fi
+  if [[ ! -d "${LOCAL_DIR}/${DASHBOARD_PATH}" || "${INSTALLED_VERSION}" != "${PACKAGE_VERSION}" ]]; then
+    echo "[brick-office] dashboard sync from npm package @walwal-harness/cli@${PACKAGE_VERSION}"
+    rm -rf "${LOCAL_DIR:?}/${DASHBOARD_PATH}"
+    mkdir -p "${LOCAL_DIR}/apps"
+    cp -R "${PACKAGED_DASHBOARD}" "${LOCAL_DIR}/apps/"
+    printf '%s\n' "${PACKAGE_VERSION}" > "${VERSION_FILE}"
+  fi
+elif [[ ! -d "${LOCAL_DIR}/${DASHBOARD_PATH}" ]]; then
   echo "[brick-office] 첫 실행 — git sparse-checkout 으로 dashboard 만 가져옵니다 (~5MB)."
   mkdir -p "${LOCAL_DIR}"
   cd "${LOCAL_DIR}"
