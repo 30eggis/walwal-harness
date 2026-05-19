@@ -37,3 +37,26 @@ Required output sections in `cto.md`:
 3. Worker Evidence Manifest — worker name, report path, changed files or artifact paths, status.
 4. CTO Decision — only decisions accepted from worker evidence.
 5. CQO Handoff — validation scope, commands, risk areas, blockers.
+6. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
+
+## Worker Report Note Requirement
+
+Every CTO worker brief must require the worker to append this English block to the bottom of `.harness/documents/{mission_name}/cto/workers/{worker-name}.md`:
+
+```
+## Implementation Notes
+
+### Design Decisions
+- ...
+
+### Deviations
+- ...
+
+### Tradeoffs
+- ...
+
+### Open Questions
+- ...
+```
+
+The worker notes must cover risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries. CTO must not accept worker output that omits this block.

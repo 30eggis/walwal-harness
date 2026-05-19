@@ -10,6 +10,16 @@ DOC_ROOT="$PROJECT_ROOT/.harness/documents"
 mode="${2:-text}"
 violations=()
 
+has_implementation_notes() {
+  local file="$1"
+  [ -s "$file" ] || return 1
+  grep -Eq '^##[[:space:]]+Implementation Notes[[:space:]]*$' "$file" &&
+    grep -Eq '^###[[:space:]]+Design Decisions[[:space:]]*$' "$file" &&
+    grep -Eq '^###[[:space:]]+Deviations[[:space:]]*$' "$file" &&
+    grep -Eq '^###[[:space:]]+Tradeoffs[[:space:]]*$' "$file" &&
+    grep -Eq '^###[[:space:]]+Open Questions[[:space:]]*$' "$file"
+}
+
 has_worker_report() {
   local mission_dir="$1"
   local owner="${2:-}"
@@ -29,6 +39,11 @@ for mission_dir in "$DOC_ROOT"/*; do
   [ -d "$mission_dir" ] || continue
   mission_name="$(basename "$mission_dir")"
 
+  ceo_path="$mission_dir/ceo.md"
+  if [ -s "$ceo_path" ] && ! has_implementation_notes "$ceo_path"; then
+    violations+=("$mission_name:ceo.md-missing-implementation-notes")
+  fi
+
   if has_legacy_flat_worker_report "$mission_dir"; then
     violations+=("$mission_name:legacy-flat-workers")
   fi
@@ -36,9 +51,20 @@ for mission_dir in "$DOC_ROOT"/*; do
   for cxx in coo cdo cto cqo ops; do
     cxx_path="$mission_dir/$cxx.md"
     [ -s "$cxx_path" ] || continue
+    if ! has_implementation_notes "$cxx_path"; then
+      violations+=("$mission_name:$cxx.md-missing-implementation-notes")
+    fi
     if ! has_worker_report "$mission_dir" "$cxx"; then
       violations+=("$mission_name:$cxx.md")
     fi
+    workers_dir="$mission_dir/$cxx/workers"
+    [ -d "$workers_dir" ] || continue
+    for worker_report in "$workers_dir"/*.md; do
+      [ -e "$worker_report" ] || continue
+      if ! has_implementation_notes "$worker_report"; then
+        violations+=("$mission_name:$cxx/workers/$(basename "$worker_report")-missing-implementation-notes")
+      fi
+    done
   done
 
   cqo_path="$mission_dir/cqo.md"

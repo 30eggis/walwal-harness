@@ -21,6 +21,10 @@ Manage worker availability and invocation wording.
 
 1. Check whether the requester is a CXX. CEO cannot request specialist worker assignment directly.
 2. Check whether a suitable worker is already hired for that owning CXX.
-3. If hired, return the exact skill name, owning CXX, hierarchical installed paths, and mission report path.
+3. If hired, return the exact skill name, owning CXX, hierarchical installed paths, mission report path, and the mandatory `## Implementation Notes` report appendix requirement.
 4. If not hired, suggest `.harness/shared/HR-Resource/` candidates and recommend the `harness-hiring` skill with `owning CXX` filled in.
 5. Keep aliases narrow enough to avoid accidental generic invocation.
+
+## Mandatory Worker Report Appendix
+
+Every worker assignment must require the worker to append an English `## Implementation Notes` section with these subsections: `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. The appendix must cover risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.

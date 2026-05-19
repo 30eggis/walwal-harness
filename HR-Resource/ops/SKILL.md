@@ -44,3 +44,6 @@ OPS must not directly perform DevOps implementation, service fixes, config rewri
 2. Environment Evidence — config path, command/service checked, observed status.
 3. Worker Evidence Manifest — worker name, report path, status for delegated monitoring or recovery tasks.
 4. OPS Event Decision — good-case silence, warning, incident, or emergency escalation.
+5. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
+
+Every OPS worker brief must require the worker to append the same English `## Implementation Notes` block to the bottom of `.harness/documents/{mission_name}/ops/workers/{worker-name}.md`, covering risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.

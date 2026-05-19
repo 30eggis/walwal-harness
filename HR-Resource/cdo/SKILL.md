@@ -31,3 +31,6 @@ Required output sections:
 2. Worker Evidence Manifest — worker name, report path, status.
 3. CDO Decision — only decisions accepted from worker evidence.
 4. Next Handoff — CTO-ready design constraints, inputs, blockers.
+5. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
+
+Every CDO worker brief must require the worker to append the same English `## Implementation Notes` block to the bottom of `.harness/documents/{mission_name}/cdo/workers/{worker-name}.md`, covering risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.

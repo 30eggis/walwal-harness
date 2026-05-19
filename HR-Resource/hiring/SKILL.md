@@ -26,6 +26,28 @@ Hire workers from `.harness/shared/HR-Resource/`.
 5. Update `.harness/shared/hr-roster.json` without deleting existing hired entries. Record `owner` as the owning CXX, `skillPath` as `.harness/shared/HR-Resource/{name}/SKILL.md`, and `skillPaths.claude` / `skillPaths.codex` as tool-specific hierarchical installed paths.
 6. The owning CXX must write worker reports under `.harness/documents/{mission}/{owning-cxx}/workers/{name}.md`. Do not write flat `.harness/documents/{mission}/workers/{name}.md` except when migrating legacy missions.
 7. Ask the `harness-resource-manager` skill to update trigger wording.
-8. Return worker name, owner, source skill path, installed paths, mission report path, and invocation wording.
+8. Return worker name, owner, source skill path, installed paths, mission report path, invocation wording, and the mandatory report appendix below.
+
+## Mandatory Worker Report Appendix
+
+Every hired worker must append this English section to the bottom of its existing report:
+
+```
+## Implementation Notes
+
+### Design Decisions
+- ...
+
+### Deviations
+- ...
+
+### Tradeoffs
+- ...
+
+### Open Questions
+- ...
+```
+
+The appendix must summarize risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries.
 
 Never mark a missing worker as available.

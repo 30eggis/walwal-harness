@@ -93,6 +93,30 @@ Owner /hot-fix → CEO → CTO → [dev workers] → CQO → [evaluator workers]
 | 6 | CEO routes only to CXX — never directly to workers |
 | 7 | No CXX self-execution — deliverables without matching worker records are rejected |
 | 8 | No verdict without worker evidence — CQO self-inspection is not valid |
+| 9 | Hierarchical worker ownership — worker reports live under `.harness/documents/{mission}/{owning-cxx}/workers/` |
+| 10 | Implementation Notes required — `ceo.md`, every `{cxx}.md`, and every worker report must end with an English `## Implementation Notes` section |
+
+### Implementation Notes Format
+
+Every `ceo.md`, `{cxx}.md`, and worker report must end with:
+
+```markdown
+## Implementation Notes
+
+### Design Decisions
+- How the role interpreted the Owner request
+
+### Deviations
+- Where the role intentionally diverged from the request
+
+### Tradeoffs
+- Alternatives considered and why they were rejected
+
+### Open Questions
+- What still needs Owner or CXX confirmation
+```
+
+Use `None` when a subsection has no entries. This section is mandatory even for small or emergency work. CEO must reject any CXX report that omits it. CTO and CQO must not accept worker output that omits it.
 
 ---
 
@@ -145,6 +169,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.7 | Implementation Notes mandatory in all CXX docs and worker reports; harness-worker-evidence-validate.sh |
 | 7.1.6 | CXX hierarchy enforcement: CEO→CXX-only gate, CTO prerequisite gate, CQO worker-evidence mandate; dashboard gotchas tab, mission-specific history tab, worker file list in flow |
 | 7.1.5 | Dashboard: mission flow timeline, markdown viewer, 50vw drawer |
 | 7.1.4 | Dashboard: org-tree redesign with real `.harness/documents/` data |

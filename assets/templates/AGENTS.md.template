@@ -108,6 +108,7 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 8. **No CXX self-execution** — CXX agents coordinate and manage only. A CXX that produces deliverables without matching worker records has violated its scope. CEO must reject such reports.
 9. **No verdict without worker evidence** — CQO cannot issue ACCEPTED/REJECTED without a Worker Evidence Manifest referencing at least one evaluator worker. Self-inspection by CQO is not valid evidence.
 10. **Hierarchical worker ownership** — Hired workers are installed under `.claude/skills/{owning-cxx}/{worker}/` and `.codex/skills/{owning-cxx}/{worker}/`; mission worker reports live under `.harness/documents/{mission}/{owning-cxx}/workers/`. Flat `{mission}/workers/` reports are legacy and signal an ownership violation unless explicitly migrated.
+11. **Implementation Notes required** — `ceo.md`, every `{cxx}.md`, and every worker report must end with an English `## Implementation Notes` section containing `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. Use `None` for empty subsections.
 
 ---
 

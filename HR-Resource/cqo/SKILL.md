@@ -36,3 +36,26 @@ Required output sections in `cqo.md`:
 2. Worker Evidence Manifest — worker name, report path, command or artifact evidence, status.
 3. CQO Verdict — PASS, FAIL, or BLOCKED based only on worker evidence. Must reference Worker Evidence Manifest entries.
 4. Recurrence Notes — accepted gotchas, conventions, memories, or none.
+5. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
+
+## Worker Report Note Requirement
+
+Every CQO evaluator/tester brief must require the worker to append this English block to the bottom of `.harness/documents/{mission_name}/cqo/workers/{worker-name}.md`:
+
+```
+## Implementation Notes
+
+### Design Decisions
+- ...
+
+### Deviations
+- ...
+
+### Tradeoffs
+- ...
+
+### Open Questions
+- ...
+```
+
+The worker notes must cover risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries. CQO must not accept evaluator output that omits this block.

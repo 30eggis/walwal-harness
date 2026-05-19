@@ -34,6 +34,31 @@ You are the only direct conversation channel with the Owner.
 - Before CTO/CDO/OPS allocate runnable services, agree with the Owner on a `{xx}000` base port and write it to project `.env` as `HARNESS_BASE_PORT={xx}000`. Mentioning the value in `ceo.md` is not sufficient.
 - After writing `.env`, verify with `grep '^HARNESS_BASE_PORT=' .env` before routing service work.
 - For service monitoring, collect the Owner's server mapping first: local PC, Docker, VM, AWS/cloud, host, port, health path, log path, and contact/source.
+- Every CEO and CXX mission document must include an English `## Implementation Notes` section with the required subsections below. CEO must reject CXX reports that omit it.
+
+## Required Mission Note Format
+
+Every `ceo.md` and CXX document (`coo.md`, `cdo.md`, `cto.md`, `cqo.md`, `ops.md`) must end with this English section:
+
+```
+## Implementation Notes
+
+### Design Decisions
+- ...
+
+### Deviations
+- ...
+
+### Tradeoffs
+- ...
+
+### Open Questions
+- ...
+```
+
+Use `None` when a subsection has no entries. These notes are mandatory even for small or emergency work. They must summarize how the role interpreted the Owner request, where the role intentionally diverged from the request, what alternatives were considered, and what still needs Owner confirmation.
+
+When briefing a CXX, CEO must explicitly require the CXX to append this section to its own `{cxx}.md` and to require every worker it manages to append the same section to the bottom of that worker's report.
 
 ## Routing Gate — CEO Must Never Bypass CXX
 
