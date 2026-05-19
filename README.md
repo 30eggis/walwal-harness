@@ -169,6 +169,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.8 | HR-Resource: replace China-platform-specific workers with global equivalents; refine cross-border/video/livestream skills |
 | 7.1.7 | Implementation Notes mandatory in all CXX docs and worker reports; harness-worker-evidence-validate.sh |
 | 7.1.6 | CXX hierarchy enforcement: CEO→CXX-only gate, CTO prerequisite gate, CQO worker-evidence mandate; dashboard gotchas tab, mission-specific history tab, worker file list in flow |
 | 7.1.5 | Dashboard: mission flow timeline, markdown viewer, 50vw drawer |

@@ -1,7 +1,7 @@
 {
   "source": "/Users/ted/Downloads/agency-agents-main",
   "imported_at": "2026-05-11T08:05:46.803Z",
-  "count": 185,
+  "count": 179,
   "resources": [
     {
       "sourceRel": "academic/academic-anthropologist.md",
@@ -104,10 +104,6 @@
       "skillName": "engineering-engineering-embedded-firmware-engineer"
     },
     {
-      "sourceRel": "engineering/engineering-feishu-integration-developer.md",
-      "skillName": "engineering-engineering-feishu-integration-developer"
-    },
-    {
       "sourceRel": "engineering/engineering-filament-optimization-specialist.md",
       "skillName": "engineering-engineering-filament-optimization-specialist"
     },
@@ -166,10 +162,6 @@
     {
       "sourceRel": "engineering/engineering-voice-ai-integration-engineer.md",
       "skillName": "engineering-engineering-voice-ai-integration-engineer"
-    },
-    {
-      "sourceRel": "engineering/engineering-wechat-mini-program-developer.md",
-      "skillName": "engineering-engineering-wechat-mini-program-developer"
     },
     {
       "sourceRel": "finance/finance-bookkeeper-controller.md",
@@ -288,28 +280,12 @@
       "skillName": "marketing-marketing-app-store-optimizer"
     },
     {
-      "sourceRel": "marketing/marketing-baidu-seo-specialist.md",
-      "skillName": "marketing-marketing-baidu-seo-specialist"
-    },
-    {
-      "sourceRel": "marketing/marketing-bilibili-content-strategist.md",
-      "skillName": "marketing-marketing-bilibili-content-strategist"
-    },
-    {
       "sourceRel": "marketing/marketing-book-co-author.md",
       "skillName": "marketing-marketing-book-co-author"
     },
     {
       "sourceRel": "marketing/marketing-carousel-growth-engine.md",
       "skillName": "marketing-marketing-carousel-growth-engine"
-    },
-    {
-      "sourceRel": "marketing/marketing-china-ecommerce-operator.md",
-      "skillName": "marketing-marketing-china-ecommerce-operator"
-    },
-    {
-      "sourceRel": "marketing/marketing-china-market-localization-strategist.md",
-      "skillName": "marketing-marketing-china-market-localization-strategist"
     },
     {
       "sourceRel": "marketing/marketing-content-creator.md",
@@ -320,20 +296,28 @@
       "skillName": "marketing-marketing-cross-border-ecommerce"
     },
     {
-      "sourceRel": "marketing/marketing-douyin-strategist.md",
-      "skillName": "marketing-marketing-douyin-strategist"
+      "sourceRel": "marketing/marketing-global-marketplace-operator.md",
+      "skillName": "marketing-marketing-global-marketplace-operator"
+    },
+    {
+      "sourceRel": "marketing/marketing-google-seo-specialist.md",
+      "skillName": "marketing-marketing-google-seo-specialist"
     },
     {
       "sourceRel": "marketing/marketing-growth-hacker.md",
       "skillName": "marketing-marketing-growth-hacker"
     },
     {
+      "sourceRel": "marketing/marketing-instagram-commerce-strategist.md",
+      "skillName": "marketing-marketing-instagram-commerce-strategist"
+    },
+    {
       "sourceRel": "marketing/marketing-instagram-curator.md",
       "skillName": "marketing-marketing-instagram-curator"
     },
     {
-      "sourceRel": "marketing/marketing-kuaishou-strategist.md",
-      "skillName": "marketing-marketing-kuaishou-strategist"
+      "sourceRel": "marketing/marketing-korea-global-market-localization-strategist.md",
+      "skillName": "marketing-marketing-korea-global-market-localization-strategist"
     },
     {
       "sourceRel": "marketing/marketing-linkedin-content-creator.md",
@@ -342,6 +326,10 @@
     {
       "sourceRel": "marketing/marketing-livestream-commerce-coach.md",
       "skillName": "marketing-marketing-livestream-commerce-coach"
+    },
+    {
+      "sourceRel": "marketing/marketing-naver-seo-specialist.md",
+      "skillName": "marketing-marketing-naver-seo-specialist"
     },
     {
       "sourceRel": "marketing/marketing-podcast-strategist.md",
@@ -380,20 +368,8 @@
       "skillName": "marketing-marketing-video-optimization-specialist"
     },
     {
-      "sourceRel": "marketing/marketing-wechat-official-account.md",
-      "skillName": "marketing-marketing-wechat-official-account"
-    },
-    {
-      "sourceRel": "marketing/marketing-weibo-strategist.md",
-      "skillName": "marketing-marketing-weibo-strategist"
-    },
-    {
-      "sourceRel": "marketing/marketing-xiaohongshu-specialist.md",
-      "skillName": "marketing-marketing-xiaohongshu-specialist"
-    },
-    {
-      "sourceRel": "marketing/marketing-zhihu-strategist.md",
-      "skillName": "marketing-marketing-zhihu-strategist"
+      "sourceRel": "marketing/marketing-youtube-shopping-strategist.md",
+      "skillName": "marketing-marketing-youtube-shopping-strategist"
     },
     {
       "sourceRel": "paid-media/paid-media-auditor.md",
