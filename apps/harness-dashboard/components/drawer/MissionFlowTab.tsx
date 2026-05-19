@@ -11,31 +11,75 @@ interface Props {
 }
 
 // ---------------------------------------------------------------------------
-// Helper: extract first 2-3 non-empty lines from a ## section (max 200 chars)
+// Section extractors
 // ---------------------------------------------------------------------------
-function extractSection(content: string, heading: string): string | null {
-  // Strip frontmatter
+
+/** Extract up to maxLines non-empty lines from a ## section */
+function extractSection(content: string, heading: string, maxLines = 3): string | null {
   const body = content.replace(/^---[\s\S]*?---\n+/, "");
   const pattern = new RegExp(`^##\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "m");
   const match = pattern.exec(body);
   if (!match) return null;
-
   const start = match.index + match[0].length;
   const rest = body.slice(start);
   const lines = rest.split("\n");
   const snippet: string[] = [];
-
   for (const line of lines) {
     if (line.startsWith("## ") || line.startsWith("# ")) break;
     const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith("---")) {
-      snippet.push(trimmed);
-    }
-    if (snippet.length >= 3) break;
+    if (trimmed && !trimmed.startsWith("---")) snippet.push(trimmed);
+    if (snippet.length >= maxLines) break;
   }
-
-  const result = snippet.join(" · ").slice(0, 200);
+  const result = snippet.join(" · ").slice(0, 240);
   return result || null;
+}
+
+/** Try multiple heading alternatives, return first match */
+function extractSectionAny(content: string, ...headings: string[]): string | null {
+  for (const h of headings) {
+    const r = extractSection(content, h, 4);
+    if (r) return r;
+  }
+  return null;
+}
+
+/** Parse markdown table rows from "생성/수정 파일" or "구현 파일 목록" sections */
+function extractFilesTable(content: string, maxRows = 5): Array<{ file: string; action: string }> {
+  const body = content.replace(/^---[\s\S]*?---\n+/, "");
+  const lines = body.split("\n");
+  const results: Array<{ file: string; action: string }> = [];
+  let inFileTable = false;
+
+  for (const line of lines) {
+    // Detect table header with "파일" column
+    if (line.startsWith("|") && (line.includes("파일") || line.includes("File"))) {
+      inFileTable = true;
+      continue;
+    }
+    if (inFileTable) {
+      if (line.trim() === "" || (!line.startsWith("|") && !line.startsWith("|-"))) {
+        inFileTable = false;
+        continue;
+      }
+      if (line.includes("---")) continue; // divider row
+      if (!line.startsWith("|")) continue;
+      const cells = line.split("|").map((c) => c.trim()).filter(Boolean);
+      if (cells.length < 1) continue;
+      const file = cells[0].replace(/`/g, "").trim();
+      if (!file || file.toLowerCase() === "파일" || file.toLowerCase() === "file") continue;
+      // Truncate long action text
+      const raw = cells[1]?.replace(/`/g, "").trim() ?? "";
+      const action = raw.length > 60 ? raw.slice(0, 60) + "…" : raw;
+      results.push({ file, action });
+      if (results.length >= maxRows) break;
+    }
+  }
+  return results;
+}
+
+/** Extract CTO's worker instruction section */
+function extractCtoWorkerInstructions(content: string): string | null {
+  return extractSection(content, "워커 지시", 6);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,17 +123,13 @@ function DocRow({
   roleLabel,
   roleKey,
   snippet,
-  status,
   onViewDoc,
-  ts,
 }: {
   step: number;
   roleLabel: string;
   roleKey: string;
   snippet?: string | null;
-  status?: string | null;
   onViewDoc?: () => void;
-  ts?: string;
 }) {
   return (
     <div className="relative pl-4 border-l border-gray-700/40 ml-2 space-y-1">
@@ -97,9 +137,6 @@ function DocRow({
         <div className="flex items-center gap-1.5">
           <span className="font-mono text-[9px] text-gray-600">{step}</span>
           <StepChip role={roleKey} label={roleLabel} />
-          {ts && (
-            <span className="font-mono text-[9px] text-gray-600">[{ts}]</span>
-          )}
         </div>
         {onViewDoc && (
           <button
@@ -112,12 +149,71 @@ function DocRow({
         )}
       </div>
       {snippet && (
-        <p className="text-[10px] text-gray-500 leading-relaxed pl-5 line-clamp-2">
+        <p className="text-[10px] text-gray-500 leading-relaxed pl-5 line-clamp-3">
           {snippet}
         </p>
       )}
-      {status && (
-        <div className="pl-5 font-mono text-[9px] text-emerald-400">{status}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// WorkerCard: shows worker + file list
+// ---------------------------------------------------------------------------
+function WorkerCard({
+  worker,
+  onViewDoc,
+  active,
+}: {
+  worker: { name: string; content: string; status: string; owner?: string };
+  onViewDoc?: () => void;
+  active?: boolean;
+}) {
+  const files = extractFilesTable(worker.content, 4);
+  return (
+    <div
+      className={`relative pl-3 border-l border-gray-700/30 ml-2 space-y-1 pb-1 ${active ? "border-cyan-400/40" : ""}`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-[9px] text-gray-600">├─</span>
+          <StepChip role="worker" label={worker.name} />
+          <span
+            className={`font-mono text-[9px] ${
+              worker.status === "COMPLETE" ? "text-emerald-400" : "text-amber-400"
+            }`}
+          >
+            {worker.status === "COMPLETE" ? "COMPLETE ✅" : "⏳"}
+          </span>
+        </div>
+        {onViewDoc && (
+          <button
+            type="button"
+            onClick={onViewDoc}
+            className="shrink-0 font-mono text-[9px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
+          >
+            View Doc →
+          </button>
+        )}
+      </div>
+
+      {/* Changed files */}
+      {files.length > 0 && (
+        <div className="pl-5 space-y-0.5">
+          {files.map((f, i) => (
+            <div key={i} className="flex items-start gap-1.5">
+              <span className="font-mono text-[9px] text-gray-600 shrink-0 mt-0.5">▸</span>
+              <div className="min-w-0">
+                <span className="font-mono text-[9px] text-blue-300/80 break-all leading-tight">
+                  {f.file}
+                </span>
+                {f.action && (
+                  <span className="font-mono text-[9px] text-gray-600 ml-1">— {f.action}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -129,7 +225,6 @@ function DocRow({
 export function MissionFlowTab({ mission, ownerHistory }: Props) {
   const [docView, setDocView] = useState<DocView>("overview");
 
-  // Handle null mission
   if (!mission) {
     return (
       <div className="text-gray-500 text-xs">
@@ -147,7 +242,6 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
       content = mission[docView as "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops"];
       docTitle = `harness-${docView}`;
     } else {
-      // worker name
       const w = mission.workers.find((x) => x.name === docView);
       content = w?.content ?? null;
       docTitle = docView;
@@ -176,7 +270,7 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
 
   // -- Overview mode --
 
-  // Find the owner prompt closest in date to the mission
+  // Find owner prompt closest to mission date
   let ownerPromptSnippet: string | null = null;
   if (ownerHistory.length > 0) {
     const missionTime = Date.parse(mission.ts);
@@ -186,67 +280,54 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
       const t = Date.parse(entry.ts);
       if (!Number.isNaN(t)) {
         const diff = Math.abs(t - missionTime);
-        if (diff < closestDiff) {
-          closestDiff = diff;
-          closest = entry;
-        }
+        if (diff < closestDiff) { closestDiff = diff; closest = entry; }
       }
     }
-    if (closest) {
-      ownerPromptSnippet = closest.content.slice(0, 120);
-    }
+    if (closest) ownerPromptSnippet = closest.content.slice(0, 140);
   }
 
   const typeBadge =
-    mission.type === "hotfix"
-      ? "[🔥 hot-fix]"
-      : mission.type === "feature"
-      ? "[✦ goal]"
-      : "[— unknown]";
+    mission.type === "hotfix" ? "[🔥 hot-fix]"
+    : mission.type === "feature" ? "[✦ goal]"
+    : "[— unknown]";
 
   let dateStr = "—";
   try {
     dateStr = new Date(mission.ts).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
+      year: "numeric", month: "short", day: "numeric",
     });
-  } catch {
-    // ignore
-  }
+  } catch { /* ignore */ }
 
   // Routing breadcrumb
   const routeChips: string[] = ["Owner", "CEO"];
-  const cxxOrder: Array<"coo" | "cdo" | "cto" | "cqo" | "ops"> = [
-    "coo", "cdo", "cto", "cqo", "ops",
-  ];
+  const cxxOrder: Array<"coo" | "cdo" | "cto" | "cqo" | "ops"> = ["coo", "cdo", "cto", "cqo", "ops"];
   for (const r of cxxOrder) {
     if (mission.cxxPresent.includes(r)) routeChips.push(r.toUpperCase());
   }
 
   // CEO snippets
-  const ceoSummarySnippet = mission.ceo
-    ? extractSection(mission.ceo, "Owner 요청 요약")
+  const ceoRequestSnippet = mission.ceo
+    ? extractSectionAny(mission.ceo, "Owner 요청 요약", "Owner Request")
     : null;
   const ceoDecisionSnippet = mission.ceo
-    ? extractSection(mission.ceo, "CEO 결정")
+    ? extractSectionAny(mission.ceo, "CEO 결정", "CXX Decisions")
     : null;
-  const ceoSnippet = [ceoSummarySnippet, ceoDecisionSnippet]
-    .filter(Boolean)
-    .join(" | ")
-    .slice(0, 200) || null;
+  const ceoSnippet = [ceoRequestSnippet, ceoDecisionSnippet].filter(Boolean).join(" | ").slice(0, 240) || null;
 
-  // CTO snippet
+  // CTO snippet + worker instructions
   const ctoSnippet = mission.cto
-    ? extractSection(mission.cto, "변경 요약")
+    ? extractSectionAny(mission.cto, "변경 요약", "Summary")
+    : null;
+  const ctoWorkerInstructions = mission.cto
+    ? extractCtoWorkerInstructions(mission.cto)
     : null;
 
   // CQO verdict
   let cqoVerdict: string | null = null;
   if (mission.cqo) {
     if (mission.cqo.includes("ACCEPTED")) cqoVerdict = "검증 결과: ACCEPTED ✅";
-    else if (mission.cqo.includes("REJECTED")) cqoVerdict = "검증 결과: REJECTED";
-    else cqoVerdict = extractSection(mission.cqo, "검증 결과") ?? extractSection(mission.cqo, "Verdict");
+    else if (mission.cqo.includes("REJECTED")) cqoVerdict = "검증 결과: REJECTED ❌";
+    else cqoVerdict = extractSectionAny(mission.cqo, "검증 결과", "Verdict") ?? null;
   }
 
   let stepNum = 1;
@@ -273,17 +354,10 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
         {/* Routing breadcrumb */}
         <div className="flex flex-wrap items-center gap-1 mt-1">
           {routeChips.map((label, idx) => {
-            const roleKey =
-              label === "Owner"
-                ? "owner"
-                : label === "CEO"
-                ? "ceo"
-                : label.toLowerCase();
+            const roleKey = label === "Owner" ? "owner" : label === "CEO" ? "ceo" : label.toLowerCase();
             return (
               <span key={idx} className="flex items-center gap-1">
-                {idx > 0 && (
-                  <span className="text-gray-600 text-[9px]">→</span>
-                )}
+                {idx > 0 && <span className="text-gray-600 text-[9px]">→</span>}
                 <StepChip role={roleKey} label={label} />
               </span>
             );
@@ -294,15 +368,10 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
       {/* Flow tree */}
       <div className="space-y-2">
         {/* OWNER */}
-        <DocRow
-          step={stepNum++}
-          roleLabel="OWNER"
-          roleKey="owner"
-        />
+        <DocRow step={stepNum++} roleLabel="OWNER" roleKey="owner" />
         {ownerPromptSnippet && (
           <p className="pl-7 text-[10px] text-gray-500 italic leading-relaxed line-clamp-2">
-            {ownerPromptSnippet}
-            {ownerPromptSnippet.length >= 120 ? "…" : ""}
+            {ownerPromptSnippet}{ownerPromptSnippet.length >= 140 ? "…" : ""}
           </p>
         )}
 
@@ -316,70 +385,22 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
             snippet={ceoSnippet}
             onViewDoc={mission.ceo ? () => setDocView("ceo") : undefined}
           />
+          {/* Legacy flat workers: protocol violation / unknown owner */}
+          {mission.workers.some((w) => w.owner === "unknown") && (
+            <div className="pl-4 space-y-2 mt-1">
+              <p className="font-mono text-[9px] text-rose-300/80 pl-1">
+                Unowned legacy workers (CEO/CXX bypass suspected):
+              </p>
+              {mission.workers.filter((w) => w.owner === "unknown").map((worker) => (
+                <WorkerCard
+                  key={worker.name}
+                  worker={worker}
+                  onViewDoc={worker.content ? () => setDocView(worker.name) : undefined}
+                />
+              ))}
+            </div>
+          )}
         </div>
-
-        {/* CTO */}
-        {mission.cxxPresent.includes("cto") && (
-          <div className="pl-6 space-y-1">
-            <p className="font-mono text-[9px] text-gray-600 pl-2">↓ routed to</p>
-            <DocRow
-              step={stepNum++}
-              roleLabel="harness-cto"
-              roleKey="cto"
-              snippet={ctoSnippet}
-              onViewDoc={mission.cto ? () => setDocView("cto") : undefined}
-            />
-            {/* Workers */}
-            {mission.workers.length > 0 && (
-              <div className="pl-4 space-y-1">
-                <p className="font-mono text-[9px] text-gray-500 pl-1">Workers dispatched:</p>
-                {mission.workers.map((worker) => {
-                  const fileCount = (worker.content.match(/\| [`].+[`] \|/g) ?? []).length;
-                  const fileHint = fileCount > 0 ? `${fileCount} file(s) changed` : null;
-                  return (
-                    <div
-                      key={worker.name}
-                      className="relative pl-3 border-l border-gray-700/30 ml-2 space-y-0.5"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-[9px] text-gray-600">├─</span>
-                          <StepChip
-                            role="worker"
-                            label={worker.name}
-                          />
-                          <span
-                            className={`font-mono text-[9px] ${
-                              worker.status === "COMPLETE"
-                                ? "text-emerald-400"
-                                : "text-amber-400"
-                            }`}
-                          >
-                            {worker.status === "COMPLETE" ? "COMPLETE ✅" : "⏳"}
-                          </span>
-                        </div>
-                        {worker.content && (
-                          <button
-                            type="button"
-                            onClick={() => setDocView(worker.name)}
-                            className="shrink-0 font-mono text-[9px] text-cyan-400/70 hover:text-cyan-300 transition-colors"
-                          >
-                            View Doc →
-                          </button>
-                        )}
-                      </div>
-                      {fileHint && (
-                        <p className="pl-5 font-mono text-[9px] text-gray-600">
-                          {fileHint}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* COO */}
         {mission.cxxPresent.includes("coo") && (
@@ -389,7 +410,7 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
               step={stepNum++}
               roleLabel="harness-coo"
               roleKey="coo"
-              snippet={mission.coo ? extractSection(mission.coo, "요약") : null}
+              snippet={mission.coo ? extractSectionAny(mission.coo, "요약", "Summary") : null}
               onViewDoc={mission.coo ? () => setDocView("coo") : undefined}
             />
           </div>
@@ -403,9 +424,51 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
               step={stepNum++}
               roleLabel="harness-cdo"
               roleKey="cdo"
-              snippet={mission.cdo ? extractSection(mission.cdo, "요약") : null}
+              snippet={mission.cdo ? extractSectionAny(mission.cdo, "요약", "Summary") : null}
               onViewDoc={mission.cdo ? () => setDocView("cdo") : undefined}
             />
+          </div>
+        )}
+
+        {/* CTO + Workers */}
+        {mission.cxxPresent.includes("cto") && (
+          <div className="pl-6 space-y-1">
+            <p className="font-mono text-[9px] text-gray-600 pl-2">↓ routed to</p>
+            <DocRow
+              step={stepNum++}
+              roleLabel="harness-cto"
+              roleKey="cto"
+              snippet={ctoSnippet}
+              onViewDoc={mission.cto ? () => setDocView("cto") : undefined}
+            />
+
+            {/* CTO worker instructions */}
+            {ctoWorkerInstructions && (
+              <div className="pl-7 mt-1">
+                <div className="rounded border border-blue-400/15 bg-blue-400/5 px-2 py-1.5">
+                  <span className="font-mono text-[9px] text-blue-300/50 uppercase tracking-wider">
+                    워커 지시
+                  </span>
+                  <p className="text-[10px] text-gray-400 leading-relaxed mt-0.5">
+                    {ctoWorkerInstructions}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Workers */}
+            {mission.workers.some((w) => w.owner === "cto") && (
+              <div className="pl-4 space-y-2 mt-1">
+                <p className="font-mono text-[9px] text-gray-500 pl-1">CTO workers:</p>
+                {mission.workers.filter((w) => w.owner === "cto").map((worker) => (
+                  <WorkerCard
+                    key={worker.name}
+                    worker={worker}
+                    onViewDoc={worker.content ? () => setDocView(worker.name) : undefined}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -417,7 +480,7 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
               step={stepNum++}
               roleLabel="harness-ops"
               roleKey="ops"
-              snippet={mission.ops ? extractSection(mission.ops, "요약") : null}
+              snippet={mission.ops ? extractSectionAny(mission.ops, "요약", "Summary") : null}
               onViewDoc={mission.ops ? () => setDocView("ops") : undefined}
             />
           </div>
@@ -434,6 +497,18 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
               snippet={cqoVerdict}
               onViewDoc={mission.cqo ? () => setDocView("cqo") : undefined}
             />
+            {mission.workers.some((w) => w.owner === "cqo") && (
+              <div className="pl-4 space-y-2 mt-1">
+                <p className="font-mono text-[9px] text-gray-500 pl-1">CQO evaluators:</p>
+                {mission.workers.filter((w) => w.owner === "cqo").map((worker) => (
+                  <WorkerCard
+                    key={worker.name}
+                    worker={worker}
+                    onViewDoc={worker.content ? () => setDocView(worker.name) : undefined}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

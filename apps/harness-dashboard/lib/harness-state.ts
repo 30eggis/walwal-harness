@@ -23,6 +23,7 @@ import type {
   MeetingCadence,
   MeetingRecord,
   MeetingsState,
+  GotchaEntry,
   MissionDoc,
   OperationsDashboard,
   OpsServiceHealth,
@@ -206,6 +207,7 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     dashboard: { workers: [], features: [], recentMeetings: [], opsHealth: [], envFiles: [] },
     missions: [],
     ownerHistory: [],
+    gotchas: [],
   };
 }
 
@@ -973,22 +975,31 @@ function readMissions(rootDir: string, limit = 15): MissionDoc[] {
         try { return readFileSync(p, "utf8"); } catch { return null; }
       };
 
-      const workersDir = path.join(missionPath, "workers");
       const workers: WorkerDocEntry[] = [];
-      if (existsSync(workersDir)) {
+      const addWorkersFromDir = (owner: WorkerDocEntry["owner"], relDir: string) => {
+        const workersDir = path.join(missionPath, relDir);
+        if (!existsSync(workersDir)) return;
         try {
           for (const f of readdirSync(workersDir)) {
             if (!f.endsWith(".md")) continue;
-            const content = readMd(`workers/${f}`) ?? "";
+            const content = readMd(`${relDir}/${f}`) ?? "";
             const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
             workers.push({
               name: f.replace(".md", ""),
               content,
               status: (statusMatch?.[1] as WorkerDocEntry["status"]) ?? "unknown",
+              owner,
             });
           }
         } catch { /* ignore */ }
-      }
+      };
+
+      addWorkersFromDir("cto", "cto/workers");
+      addWorkersFromDir("cqo", "cqo/workers");
+      addWorkersFromDir("coo", "coo/workers");
+      addWorkersFromDir("cdo", "cdo/workers");
+      addWorkersFromDir("ops", "ops/workers");
+      addWorkersFromDir("unknown", "workers");
 
       const cxxRoles = ["ceo", "cto", "cqo", "coo", "cdo", "ops"] as const;
       const cxxPresent = cxxRoles.filter(role => existsSync(path.join(missionPath, `${role}.md`)));
@@ -1038,6 +1049,32 @@ function readOwnerHistory(rootDir: string, limit = 30): OwnerPromptEntry[] {
   return entries.reverse().slice(0, limit);
 }
 
+function readGotchas(rootDir: string): GotchaEntry[] {
+  const gotchasDir = path.join(rootDir, ".harness", "gotchas");
+  if (!existsSync(gotchasDir)) return [];
+  let entries: Dirent[];
+  try { entries = readdirSync(gotchasDir, { withFileTypes: true }); } catch { return []; }
+  const results: GotchaEntry[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    if (entry.name === "README.md") continue;
+    const id = entry.name.replace(/\.md$/, "");
+    let content: string;
+    try { content = readFileSync(path.join(gotchasDir, entry.name), "utf8"); } catch { continue; }
+    // Extract title from first H1 after optional frontmatter
+    const body = content.replace(/^---[\s\S]*?---\n+/, "");
+    const h1 = body.match(/^#\s+(.+)/m);
+    const title = h1 ? h1[1].trim() : id;
+    // Extract tags from docmeta frontmatter
+    const tagsMatch = content.match(/^\s*tags:\s*\[([^\]]*)\]/m);
+    const tags = tagsMatch
+      ? tagsMatch[1].split(",").map((t) => t.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean)
+      : [];
+    results.push({ id, title, content, tags });
+  }
+  return results.sort((a, b) => a.id.localeCompare(b.id));
+}
+
 export function readHarnessState(rootDir: string): HarnessSnapshot {
   const harnessDir = path.join(rootDir, ".harness");
   if (!existsSync(harnessDir)) {
@@ -1066,6 +1103,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     snapshot.archive = buildArchive(rootDir);
     snapshot.missions = readMissions(rootDir);
     snapshot.ownerHistory = readOwnerHistory(rootDir);
+    snapshot.gotchas = readGotchas(rootDir);
     return snapshot;
   }
 
@@ -1116,6 +1154,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     dashboard,
     missions: readMissions(rootDir),
     ownerHistory: readOwnerHistory(rootDir),
+    gotchas: readGotchas(rootDir),
   };
 }
 

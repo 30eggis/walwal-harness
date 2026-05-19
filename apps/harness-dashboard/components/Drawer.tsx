@@ -4,6 +4,7 @@ import { useEffect } from "react";
 export type DrawerTab =
   | "mission-flow"      // Mission document hierarchy (PRIMARY)
   | "history"           // Owner prompt history
+  | "gotchas"           // Harness gotcha knowledge base
   | "mission-doc"       // Single doc markdown view
   | "logs";             // Agent log (technical)
 
@@ -19,6 +20,7 @@ interface DrawerProps {
 const TABS: Array<{ id: DrawerTab; label: string }> = [
   { id: "mission-flow", label: "Mission Flow" },
   { id: "history", label: "History" },
+  { id: "gotchas", label: "Gotchas" },
   { id: "mission-doc", label: "Document" },
   { id: "logs", label: "Agent Log" },
 ];
@@ -50,7 +52,7 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children }: Dra
         aria-hidden={!open}
         data-testid="drawer"
         data-open={open}
-        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[640px] lg:w-[720px] bg-brick-bg border-l border-brick-wall shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
+        className={`fixed top-0 right-0 h-[100dvh] w-full sm:w-[50vw] sm:min-w-[600px] bg-brick-bg border-l border-brick-wall shadow-2xl flex flex-col transition-transform duration-300 ease-out ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >

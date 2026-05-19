@@ -277,6 +277,7 @@ export interface HarnessSnapshot {
   dashboard: OperationsDashboard;
   missions: MissionDoc[];
   ownerHistory: OwnerPromptEntry[];
+  gotchas: GotchaEntry[];
 }
 
 // Real harness mission documents
@@ -284,6 +285,7 @@ export interface WorkerDocEntry {
   name: string;
   content: string;
   status: "COMPLETE" | "IN_PROGRESS" | "unknown";
+  owner: "cto" | "cqo" | "coo" | "cdo" | "ops" | "unknown";
 }
 
 export interface MissionDoc {
@@ -305,6 +307,13 @@ export interface OwnerPromptEntry {
   ts: string;
   content: string;
   type: "goal" | "hot-fix" | "other";
+}
+
+export interface GotchaEntry {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
 }
 
 export type OrgRole = "owner" | "ceo" | "coo" | "cdo" | "cto" | "cqo" | "ops";

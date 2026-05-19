@@ -64,10 +64,14 @@ function Arrow() {
 }
 
 function buildFlowChain(mission: MissionDoc): React.ReactNode {
-  const cxxOrder: Array<{ key: "coo" | "cdo" | "cto" | "cqo" | "ops"; role: ChipRole }> = [
+  // Pre-worker CXX: planning phase (before implementation)
+  const preWorker: Array<{ key: "coo" | "cdo" | "cto"; role: ChipRole }> = [
     { key: "coo", role: "coo" },
     { key: "cdo", role: "cdo" },
     { key: "cto", role: "cto" },
+  ];
+  // Post-worker CXX: verification phase (after implementation)
+  const postWorker: Array<{ key: "cqo" | "ops"; role: ChipRole }> = [
     { key: "cqo", role: "cqo" },
     { key: "ops", role: "ops" },
   ];
@@ -82,25 +86,17 @@ function buildFlowChain(mission: MissionDoc): React.ReactNode {
   chips.push(<Arrow key={key++} />);
   chips.push(<Chip key={key++} role="ceo" label="CEO" />);
 
-  for (const { key: roleKey, role } of cxxOrder) {
+  // Planning phase: COO, CDO, CTO
+  for (const { key: roleKey, role } of preWorker) {
     if (mission.cxxPresent.includes(roleKey)) {
       chips.push(<Arrow key={key++} />);
-      const badge =
-        roleKey === "cqo" && isCqoAccepted
-          ? "✅"
-          : undefined;
-      chips.push(
-        <Chip
-          key={key++}
-          role={role}
-          label={roleKey.toUpperCase()}
-          badge={badge}
-        />
-      );
+      chips.push(<Chip key={key++} role={role} label={roleKey.toUpperCase()} />);
     }
   }
 
-  for (const worker of mission.workers) {
+  // CTO-owned implementation workers. Legacy flat workers remain visible here
+  // with owner=unknown so protocol bypasses are not hidden.
+  for (const worker of mission.workers.filter((w) => w.owner === "cto" || w.owner === "unknown")) {
     chips.push(<Arrow key={key++} />);
     const badge = worker.status === "COMPLETE" ? "✅" : "⏳";
     const shortName =
@@ -108,6 +104,28 @@ function buildFlowChain(mission: MissionDoc): React.ReactNode {
     chips.push(
       <Chip key={key++} role="worker" label={shortName} badge={badge} />
     );
+  }
+
+  // Verification phase: CQO, OPS
+  for (const { key: roleKey, role } of postWorker) {
+    if (mission.cxxPresent.includes(roleKey)) {
+      chips.push(<Arrow key={key++} />);
+      const badge = roleKey === "cqo" && isCqoAccepted ? "✅" : undefined;
+      chips.push(
+        <Chip key={key++} role={role} label={roleKey.toUpperCase()} badge={badge} />
+      );
+      if (roleKey === "cqo") {
+        for (const worker of mission.workers.filter((w) => w.owner === "cqo")) {
+          chips.push(<Arrow key={key++} />);
+          const workerBadge = worker.status === "COMPLETE" ? "✅" : "⏳";
+          const shortName =
+            worker.name.length > 12 ? worker.name.slice(0, 12) + "…" : worker.name;
+          chips.push(
+            <Chip key={key++} role="worker" label={shortName} badge={workerBadge} />
+          );
+        }
+      }
+    }
   }
 
   return (

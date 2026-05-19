@@ -21,6 +21,17 @@ const isAuto = args.includes('--auto');
 const isForce = args.includes('--force');
 const isHelp = args.includes('--help') || args.includes('-h');
 
+function getOptionValue(name) {
+  const eqPrefix = `${name}=`;
+  const eqArg = args.find((a) => a.startsWith(eqPrefix));
+  if (eqArg) return eqArg.slice(eqPrefix.length);
+  const idx = args.indexOf(name);
+  if (idx !== -1 && args[idx + 1] && !args[idx + 1].startsWith('-')) {
+    return args[idx + 1];
+  }
+  return null;
+}
+
 // ─────────────────────────────────────────
 // Resolve project root
 // ─────────────────────────────────────────
@@ -28,6 +39,9 @@ const isHelp = args.includes('--help') || args.includes('-h');
 // inside node_modules, NOT the consumer project root.
 // We detect this and walk up to find the actual project root.
 function resolveProjectRoot() {
+  const explicitRoot = getOptionValue('--project-root');
+  if (explicitRoot) return path.resolve(explicitRoot);
+
   let cwd = process.cwd();
 
   // If we're running inside node_modules, walk up to the project root
@@ -430,12 +444,12 @@ function scaffoldHarness() {
   }
 
   const rosterPath = path.join(HARNESS_DIR, 'shared', 'hr-roster.json');
-  if (!fileExists(rosterPath) || isForce) {
+  if (!fileExists(rosterPath)) {
     fs.writeFileSync(rosterPath, JSON.stringify({ hired: [] }, null, 2) + '\n');
   }
 
   const resourceIndexPath = path.join(HARNESS_DIR, 'shared', 'resource-index.json');
-  if (!fileExists(resourceIndexPath) || isForce) {
+  if (!fileExists(resourceIndexPath)) {
     fs.writeFileSync(resourceIndexPath, JSON.stringify({ aliases: {}, keywords: {} }, null, 2) + '\n');
   }
 
@@ -1183,16 +1197,39 @@ function detectMigrationNeeded() {
   const configPath = path.join(HARNESS_DIR, 'config.json');
   const memoryPath = path.join(HARNESS_DIR, 'memory.md');
   const memoryTplPath = path.join(PKG_ROOT, 'assets', 'templates', 'memory.md');
+  const rosterPath = path.join(HARNESS_DIR, 'shared', 'hr-roster.json');
+  const resourceIndexPath = path.join(HARNESS_DIR, 'shared', 'resource-index.json');
   const flags = {
     progressV3toV4: false,
     progressLegacyRouting: false,
     configMissingCompanyMode: false,
     configLegacyRouting: false,
+    coreSkillsStale: false,
+    hrResourcePoolStale: false,
+    rosterCodexPathsMissing: false,
+    resourceIndexCodexWordingMissing: false,
     memoryMissingSystemEntries: [],
     gotchaMissingEntries: {},   // { "<filename>": [G-IDs...] }
     conventionMissingEntries: {}, // { "<filename>": [C-IDs...] }
     bundleVersionStale: null,    // { current, installed }
   };
+
+  const coreSkills = ['ceo', 'coo', 'cdo', 'cto', 'cqo', 'ops', 'hiring', 'resource-manager', 'brick-office'];
+  for (const skill of coreSkills) {
+    const srcPath = path.join(PKG_ROOT, 'HR-Resource', skill, 'SKILL.md');
+    if (!fs.existsSync(srcPath)) continue;
+    const srcBody = fs.readFileSync(srcPath, 'utf8');
+    for (const root of [CLAUDE_SKILLS_DIR, CODEX_SKILLS_DIR]) {
+      const destPath = path.join(root, `harness-${skill}`, 'SKILL.md');
+      if (!fs.existsSync(destPath) || fs.readFileSync(destPath, 'utf8') !== srcBody) {
+        flags.coreSkillsStale = true;
+      }
+    }
+    const poolPath = path.join(HARNESS_DIR, 'shared', 'HR-Resource', skill, 'SKILL.md');
+    if (fs.existsSync(path.dirname(poolPath)) && (!fs.existsSync(poolPath) || fs.readFileSync(poolPath, 'utf8') !== srcBody)) {
+      flags.hrResourcePoolStale = true;
+    }
+  }
 
   // Gotcha entry-level diff: for each bundled gotcha file, compare entry IDs.
   // 사용자가 직접 추가한 [G-NNN] 은 절대 건드리지 않으며, 패키지에서 새로
@@ -1264,6 +1301,27 @@ function detectMigrationNeeded() {
         c.company_mode?.owner === 'conductor' ||
         c.agents?.dispatcher?.skill === 'harness-dispatcher'
       ) flags.configLegacyRouting = true;
+    } catch {}
+  }
+  if (fs.existsSync(rosterPath)) {
+    try {
+      const roster = JSON.parse(fs.readFileSync(rosterPath, 'utf8'));
+      const hired = Array.isArray(roster.hired) ? roster.hired : [];
+      flags.rosterCodexPathsMissing = hired.some((entry) => {
+        if (!entry || typeof entry !== 'object' || !entry.worker) return false;
+        const owner = entry.owner || entry.owningCxx;
+        const flatClaude = /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(entry.skillPaths?.claude || '');
+        const flatCodex = /^\.codex\/skills\/[^/]+\/SKILL\.md$/.test(entry.skillPaths?.codex || '');
+        return !owner || !entry.skillPaths?.codex || !entry.skillPaths?.claude || /^\.claude\/skills\//.test(entry.skillPath || '') || flatClaude || flatCodex;
+      });
+    } catch {}
+  }
+  if (fs.existsSync(resourceIndexPath)) {
+    try {
+      const idx = JSON.parse(fs.readFileSync(resourceIndexPath, 'utf8'));
+      if (!idx.invocation || !idx.invocation.codex || !idx.invocation.claude) {
+        flags.resourceIndexCodexWordingMissing = true;
+      }
     } catch {}
   }
   if (fs.existsSync(memoryPath) && fs.existsSync(memoryTplPath)) {
@@ -1355,6 +1413,18 @@ function showMigrationProposal(flags) {
   if (flags.configLegacyRouting) {
     console.log('  • config.json: legacy dispatcher/conductor wording → v7 CEO/CXX wording');
   }
+  if (flags.coreSkillsStale) {
+    console.log('  • .claude/.codex skills: harness-* core skills 최신 패키지로 refresh');
+  }
+  if (flags.hrResourcePoolStale) {
+    console.log('  • .harness/shared/HR-Resource: core HR pool 최신 패키지로 refresh');
+  }
+  if (flags.rosterCodexPathsMissing) {
+    console.log('  • hr-roster.json: 기존 hired worker 보존 + Claude/Codex skillPaths 보강');
+  }
+  if (flags.resourceIndexCodexWordingMissing) {
+    console.log('  • resource-index.json: Claude/Codex skill invocation wording 보강');
+  }
   if (flags.memoryMissingSystemEntries && flags.memoryMissingSystemEntries.length) {
     console.log('  • memory.md: 시스템 entry 누락 — append 가능');
     console.log('    [' + flags.memoryMissingSystemEntries.join(', ') + ']');
@@ -1397,6 +1467,10 @@ function runMigrate(opts = {}) {
     !flags.progressLegacyRouting &&
     !flags.configMissingCompanyMode &&
     !flags.configLegacyRouting &&
+    !flags.coreSkillsStale &&
+    !flags.hrResourcePoolStale &&
+    !flags.rosterCodexPathsMissing &&
+    !flags.resourceIndexCodexWordingMissing &&
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
     gotchaMissingTotal === 0 &&
     conventionMissingTotal === 0 &&
@@ -1405,7 +1479,7 @@ function runMigrate(opts = {}) {
     console.log('');
     let pkgVer = 'unknown';
     try { pkgVer = JSON.parse(fs.readFileSync(path.join(PKG_ROOT, 'package.json'), 'utf8')).version; } catch {}
-    log(`이미 최신 — bundle v${pkgVer} 일치, progress v${TARGET_PROGRESS_VERSION} v7 routing, config.company_mode, memory 시스템 entry, gotcha entry 모두 sync.`);
+    log(`이미 최신 — bundle v${pkgVer} 일치, progress v${TARGET_PROGRESS_VERSION} v7 routing, config.company_mode, Codex skill wiring, memory 시스템 entry, gotcha entry 모두 sync.`);
     return;
   }
 
@@ -1471,6 +1545,99 @@ function runMigrate(opts = {}) {
         fs.writeFileSync(path.join(backupDir, 'config.json'), original);
         fs.writeFileSync(configPath, JSON.stringify(c, null, 2) + '\n');
       }
+    }
+  }
+
+  // 2a. Refresh installed core harness skills and HR core pool without
+  //     touching hired worker skills or roster state.
+  if (flags.hrResourcePoolStale) {
+    const hrResourceSrc = path.join(PKG_ROOT, 'HR-Resource');
+    const hrResourceDest = path.join(HARNESS_DIR, 'shared', 'HR-Resource');
+    if (fs.existsSync(hrResourceSrc)) {
+      log('  .harness/shared/HR-Resource: core pool refresh');
+      if (!dryRun) copyDir(hrResourceSrc, hrResourceDest);
+    }
+  }
+  if (flags.coreSkillsStale) {
+    log('  .claude/.codex skills: harness-* core skills refresh');
+    if (!dryRun) installSkills();
+  }
+
+  // 2b. hr-roster.json — preserve hired worker history, add tool-specific
+  //     paths so Codex can reuse existing hires without relying on .claude.
+  const rosterPath = path.join(HARNESS_DIR, 'shared', 'hr-roster.json');
+  if (flags.rosterCodexPathsMissing && fs.existsSync(rosterPath)) {
+    const original = fs.readFileSync(rosterPath, 'utf8');
+    try {
+      const roster = JSON.parse(original);
+      const hired = Array.isArray(roster.hired) ? roster.hired : [];
+      let changed = false;
+      roster.hired = hired.map((entry) => {
+        if (!entry || typeof entry !== 'object' || !entry.worker) return entry;
+        const worker = entry.worker;
+        const owner = entry.owner || entry.owningCxx || 'unknown';
+        const scopedPrefix = owner ? `${owner}/` : '';
+        const claudePath = entry.skillPaths?.claude || (
+          /^\.claude\/skills\//.test(entry.skillPath || '')
+            ? entry.skillPath
+            : `.claude/skills/${scopedPrefix}${worker}/SKILL.md`
+        );
+        const codexPath = entry.skillPaths?.codex || (
+          /^\.codex\/skills\//.test(entry.skillPath || '')
+            ? entry.skillPath
+            : `.codex/skills/${scopedPrefix}${worker}/SKILL.md`
+        );
+        const next = {
+          ...entry,
+          owner,
+          skillPath: `.harness/shared/HR-Resource/${worker}/SKILL.md`,
+          skillPaths: {
+            ...(entry.skillPaths || {}),
+            claude: /^\.claude\/skills\/[^/]+\/SKILL\.md$/.test(claudePath)
+              ? `.claude/skills/${scopedPrefix}${worker}/SKILL.md`
+              : claudePath,
+            codex: /^\.codex\/skills\/[^/]+\/SKILL\.md$/.test(codexPath)
+              ? `.codex/skills/${scopedPrefix}${worker}/SKILL.md`
+              : codexPath,
+            source: `.harness/shared/HR-Resource/${worker}/SKILL.md`,
+          },
+        };
+        if (JSON.stringify(next) !== JSON.stringify(entry)) changed = true;
+        return next;
+      });
+      if (changed) {
+        log(`  hr-roster.json: ${roster.hired.length}개 hired worker에 Codex 경로 보강`);
+        if (!dryRun) {
+          fs.writeFileSync(path.join(backupDir, 'hr-roster.json'), original);
+          fs.writeFileSync(rosterPath, JSON.stringify(roster, null, 2) + '\n');
+        }
+      }
+    } catch (e) {
+      log(`  WARNING: hr-roster.json parse failed, skipped (${e.message})`);
+    }
+  }
+
+  // 2c. resource-index.json — keep aliases/keywords, add tool wording.
+  const resourceIndexPath = path.join(HARNESS_DIR, 'shared', 'resource-index.json');
+  if (flags.resourceIndexCodexWordingMissing && fs.existsSync(resourceIndexPath)) {
+    const original = fs.readFileSync(resourceIndexPath, 'utf8');
+    try {
+      const idx = JSON.parse(original);
+      idx.aliases = idx.aliases || {};
+      idx.keywords = idx.keywords || {};
+      idx.invocation = {
+        ...(idx.invocation || {}),
+        claude: 'Invoke the installed skill by name from .claude/skills/{owning-cxx}/{worker}/SKILL.md.',
+        codex: 'Use the installed skill by name from .codex/skills/{owning-cxx}/{worker}/SKILL.md.',
+        source: 'Candidate pool lives in .harness/shared/HR-Resource/{worker}/SKILL.md.',
+      };
+      log('  resource-index.json: Claude/Codex invocation wording 보강');
+      if (!dryRun) {
+        fs.writeFileSync(path.join(backupDir, 'resource-index.json'), original);
+        fs.writeFileSync(resourceIndexPath, JSON.stringify(idx, null, 2) + '\n');
+      }
+    } catch (e) {
+      log(`  WARNING: resource-index.json parse failed, skipped (${e.message})`);
     }
   }
 

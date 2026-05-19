@@ -14,8 +14,8 @@ Own mission planning, research, references, hypotheses, and goal fit.
 1. Read `.harness/documents/{mission_name}/ceo.md`.
 2. Record work in `.harness/documents/{mission_name}/coo.md`.
 3. Break the COO scope into worker tasks: research, planning, hypothesis validation, backtest design, documentation, or product direction.
-4. Use `/resource-manager` to check available workers for every task.
-5. Use `/hiring` before assigning any task that has no hired worker. Do not complete that task yourself.
+4. Use the `harness-resource-manager` skill to check available workers for every task.
+5. Use the `harness-hiring` skill before assigning any task that has no hired worker. Do not complete that task yourself.
 6. Delegate all COO deliverables to hired workers in fresh sessions.
 7. Review worker reports against the goal.
 8. Reassign work or report to CEO.

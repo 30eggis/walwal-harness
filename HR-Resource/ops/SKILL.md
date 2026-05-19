@@ -28,8 +28,8 @@ OPS must not directly perform DevOps implementation, service fixes, config rewri
 ## Workflow
 
 1. Read `.env` and `.harness/config.json runtime.ports`, `runtime.build`, and `runtime.production`.
-2. Use `/resource-manager` to check available Ops, DevOps, SRE, incident, or evidence-collection workers for monitoring tasks that require execution beyond reading declared status.
-3. Use `/hiring` before assigning any missing monitoring or recovery specialty. Do not complete that task yourself.
+2. Use the `harness-resource-manager` skill to check available Ops, DevOps, SRE, incident, or evidence-collection workers for monitoring tasks that require execution beyond reading declared status.
+3. Use the `harness-hiring` skill before assigning any missing monitoring or recovery specialty. Do not complete that task yourself.
 4. Monitor build environments declared in `runtime.build.commands[]`: command, cwd, expected port, log path, and owner.
 5. Monitor service environments declared in `runtime.production.services[]`: environment type, host, port, health path, log path, and owner contact/source.
 6. Write daily logs under `.harness/logs/YYYY-MM-DD/` and mission decisions in `.harness/documents/{mission_name}/ops.md`.

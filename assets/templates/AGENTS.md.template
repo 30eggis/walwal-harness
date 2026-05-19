@@ -104,6 +104,10 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 4. **No archive without CQO verdict** — `{mission}/cqo.md` with explicit PASS must exist.
 5. **No gotcha skip** — Every hot-fix produces at least one `.harness/gotchas/` or `.harness/conventions/` entry.
 6. **This file is read-only during missions** — Raise a separate `/goal` to update AGENTS.md.
+7. **CEO routes only to CXX — never to workers** — CEO must not dispatch, hire, or brief specialist workers directly. Implementation workers are hired by CTO. Evaluator/tester workers are hired by CQO.
+8. **No CXX self-execution** — CXX agents coordinate and manage only. A CXX that produces deliverables without matching worker records has violated its scope. CEO must reject such reports.
+9. **No verdict without worker evidence** — CQO cannot issue ACCEPTED/REJECTED without a Worker Evidence Manifest referencing at least one evaluator worker. Self-inspection by CQO is not valid evidence.
+10. **Hierarchical worker ownership** — Hired workers are installed under `.claude/skills/{owning-cxx}/{worker}/` and `.codex/skills/{owning-cxx}/{worker}/`; mission worker reports live under `.harness/documents/{mission}/{owning-cxx}/workers/`. Flat `{mission}/workers/` reports are legacy and signal an ownership violation unless explicitly migrated.
 
 ---
 

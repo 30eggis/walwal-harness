@@ -1,407 +1,159 @@
 # @walwal-harness/cli
 
-AI 에이전트 개발을 위한 회사형 하네스 프레임워크.
+**v7.1** — Company-mode AI agent harness for Claude Code and Codex.
 
-walwal-harness 는 단일 에이전트를 오래 붙잡는 대신, 문서와 상태 파일을 기준으로 여러 역할을 이어 붙입니다.  
-핵심 개념은 "하나의 프로젝트 = 하나의 회사" 입니다.
+One project = one company. The Owner speaks only to the CEO. The CEO speaks only to CXX agents. CXX agents hire specialist workers. No one skips a level.
 
-- Owner: 사용자
-- Dispatcher: CEO, 유일한 대화 창구
-- Planner: COO, 기획·가설·HR
-- CTO: 구현 총괄
-- CQO: 품질 총괄
-- Service-Ops: 운영·모니터링·회고
-- Conductor: 자율 라우터
-- Meeting-Manager: 회의 소집기
+---
 
-이 프레임워크는 Anthropic 의 harness engineering 방향과 NEXUS-style company loop 를 walwal-harness 구조에 맞게 재해석한 것입니다.
+## Company Structure
 
-## 핵심 원칙
-
-- 에이전트는 대화 기억보다 문서 팩트를 우선합니다.
-- 작업 전환은 항상 `progress.json`, `handoff.json`, `task session` 을 기준으로 이뤄집니다.
-- 회의는 동기화와 의사결정에 쓰고, 단순 런타임 복구는 값싼 상태 기반 로직으로 처리합니다.
-- TokenLimit, retry, drift, handoff 같은 운영 문제를 코드가 아니라 하네스 레벨에서 다룹니다.
-
-## 회사 구조
-
-```text
+```
 Owner
-  ↕
-Dispatcher (CEO)
-  ├─ Conductor
-  └─ Meeting-Manager
-       ↓
-  Planner (COO + HR)
-    ├─ COO Hypothesis Cell
-    │  ├─ coo-developer
-    │  └─ documentationer
-    ├─ CTO
-    │  ├─ generator-backend
-    │  ├─ generator-frontend
-    │  ├─ generator-designer
-    │  └─ generator-devops
-    ├─ CQO
-    │  ├─ evaluator-code-quality
-    │  ├─ evaluator-functional
-    │  ├─ evaluator-visual
-    │  ├─ evaluator-architecture
-    │  └─ evaluator-security
-    └─ Service-Ops
+  └─ /goal · /hot-fix
+      └─ harness-ceo          orchestrator — Owner's only contact
+          ├─ harness-coo      research, hypothesis, service direction
+          ├─ harness-cdo      branding, UI/UX, design review
+          ├─ harness-cto      architecture, API, platform, implementation
+          ├─ harness-cqo      quality gates, regression, archive, gotcha/convention
+          └─ harness-ops      build monitoring, log analysis, service events
 ```
 
-### 각 부서가 하는 일
+### Hierarchy Rules (non-negotiable)
 
-- `Dispatcher`: 사용자 요청을 회사가 처리할 목표와 루프로 변환
-- `Meeting-Manager`: Standup, Sprint Review, Spec Review, Incident War Room, All-Hands 소집
-- `Conductor`: 다음 owner 와 next agent 를 재결정
-- `Planner`: 스펙, feature-list, api-contract, 가설 검증 셀 운영
-- `CTO`: 구현 라인 총괄, hotfix/기술 판단
-- `CQO`: 적대적 평가와 회귀 차단
-- `Service-Ops`: cadence, 운영 drift, auto-retro
-- `coo-developer`: 빠른 spike, backdata 검증
-- `documentationer`: 웹 리서치, 실험 보고서, 가설 유효/무효 판정
+- **CEO → CXX only.** CEO never dispatches or hires workers directly. All worker contact goes through the responsible CXX.
+- **CTO → dev workers.** CTO hires and briefs implementation workers. `cto.md` must exist before any worker is dispatched.
+- **CQO → evaluator/tester workers.** CQO hires evaluation workers and bases its verdict entirely on their evidence. Self-inspection by CQO is not valid evidence.
+- **No CXX self-execution.** CXX agents coordinate and manage only. A CXX that produces specialist deliverables without matching worker records has violated its scope.
+- **No verdict without worker evidence.** CQO cannot issue ACCEPTED/REJECTED without a Worker Evidence Manifest referencing at least one evaluator worker.
 
-## 설치
+---
 
-프로젝트 루트에서:
+## Install
 
 ```bash
 npm i @walwal-harness/cli
 ```
 
-설치 후 Claude Code 를 재시작합니다.
+Restart Claude Code after install.
 
-초기화가 필요하면:
-
-```bash
-npx walwal-harness
-```
-
-기존 설치를 현재 패키지 버전에 맞게 다시 정리하려면:
+To initialize a project:
 
 ```bash
-npx walwal-harness --force
+npx walwal-harness init
 ```
 
-## 시작 방법
+What `init` installs:
 
-새 Claude Code 세션의 첫 메시지:
-
-```text
-하네스 엔지니어링 시작
-```
-
-기본 흐름:
-
-1. `dispatcher` 가 요청을 분류하고 pipeline/runbook 을 정합니다.
-2. 필요하면 `meeting-manager` 가 CEO intake 회의를 엽니다.
-3. `planner` 가 `plan.md`, `feature-list.json`, `api-contract.json` 을 만듭니다.
-4. `conductor` 가 회사 루프에 따라 CTO/CQO/Service-Ops/Meeting 으로 라우팅합니다.
-5. generator / evaluator / cqo / ops 가 문서 기반으로 이어집니다.
-
-## 상태 파일
-
-하네스의 기준 상태는 `.harness/` 아래에 있습니다.
-
-| 파일 | 역할 |
+| Path | Contents |
 |---|---|
-| `.harness/progress.json` | 현재 회사 상태의 단일 기준 |
-| `.harness/handoff.json` | 다음 agent 실행 문서 |
-| `.harness/progress.log` | 사람 읽기용 활동 로그 |
-| `.harness/actions/` | 활성 sprint 문서 |
-| `.harness/archive/` | 완료 sprint 보관 |
+| `.claude/commands/goal.md` | `/goal` Owner command |
+| `.claude/commands/hot-fix.md` | `/hot-fix` Owner command |
+| `.claude/skills/harness-{ceo,coo,cdo,cto,cqo,ops}/` | CXX agent skills |
+| `.harness/shared/HR-Resource/` | Hireable worker skill pool |
+| `AGENTS.md` ← `CLAUDE.md` symlink | Project harness config |
 
-### 중요한 progress 필드
+---
 
-- `current_agent`, `agent_status`, `next_agent`
-- `workflow.stage`
-- `meetings.*`
-- `task_sessions.current`
-- `task_stop.*`
-- `goals.*`
-- `conductor.*`, `planner.*`, `cto.*`, `cqo.*`, `service_ops.*`
+## Mission Flow
 
-## Task Session
+### Goal
 
-각 agent 전환 시 `.harness/actions/task-sessions/<agent>/...md` 가 생성됩니다.
-
-목적:
-
-- 이전 채팅 문맥을 들고 가지 않기
-- 자기편향적 사고를 줄이기
-- 사실과 추론을 분리하기
-- 재개 시에도 문서 기준으로만 이어가기
-
-에이전트는 task session, handoff, progress 를 단일 사실원으로 사용해야 합니다.
-
-## 회의 시스템
-
-회의는 계속 유지됩니다. 토큰 제한 복구 로직이 회의를 대체하지 않습니다.
-
-지원 회의:
-
-- `Standup`
-- `Sprint Review`
-- `Spec Review`
-- `Incident War Room`
-- `All-Hands`
-
-역할:
-
-- 회의: owner 결정, drift 분류, evidence 집계, action item 생성
-- Conductor: 회의 결과를 읽고 next agent 갱신
-- Service-Ops: cadence 계산
-
-기본 cadence:
-
-- `light`: 30m
-- `normal`: 1h
-- `heavy`: 4h
-
-## TokenLimit Hold / Resume
-
-`TokenLimit` 은 회의가 아니라 런타임 중단 복구 문제로 취급합니다.
-
-즉:
-
-- 회의 시스템은 그대로 유지
-- TokenLimit 은 별도 저비용 복구 레이어로 처리
-
-### 동작 방식
-
-토큰 한도로 작업이 중단되면:
-
-```bash
-bash scripts/harness-token-limit.sh . mark
+```
+Owner /goal → CEO → [COO] → [CDO] → CTO → [dev workers] → CQO → [evaluator workers]
 ```
 
-기본 정책:
+1. CEO reads Owner request, writes `ceo.md`, routes to relevant CXX.
+2. Each CXX writes its own `{cxx}.md`, hires workers, collects evidence.
+3. CEO aggregates CXX outputs and reports to Owner.
 
-- `TaskStopReason = TokenLimit`
-- 현재 작업은 `paused`
-- `progress.json.task_stop` 에 아래가 기록됨
-  - `wake_target`
-  - `resume_after`
-  - `stopped_agent`
-  - `stopped_next_agent`
-  - `task_session_path`
+### Hot Fix
 
-그 다음:
-
-- `SessionStart` 는 별도 모델 probe 없이 시간만 확인
-- 아직 hold 중이면 `retry_after` 와 `wake target` 만 출력
-- 시간이 지나면 `# Harness resume ready` 를 출력하고 원래 CXX/agent 로 복귀
-
-테스트용:
-
-```bash
-bash scripts/harness-token-limit.sh . mark 300
+```
+Owner /hot-fix → CEO → CTO → [dev workers] → CQO → [evaluator workers]
 ```
 
-중요:
+1. CEO summons CTO and CQO immediately.
+2. CTO designs minimum patch, hires implementation workers, writes `cto.md`.
+3. CQO runs regression gate with evaluator workers, registers gotcha/convention, writes `cqo.md`.
 
-- 회의는 유지됩니다.
-- TokenLimit checker 는 회의를 대체하지 않습니다.
-- 에이전트는 복귀 시 이전 대화가 아니라 `task_session_path` 와 문서를 보고 이어갑니다.
+**Complete when:** `cto.md` + `cqo.md` + at least one `.harness/gotchas/` or `.harness/conventions/` entry exist.
 
-## COO Hypothesis Cell
+---
 
-정규 CTO/CQO 라인에 넣기 전, COO 직속으로 빠른 가설 검증 셀을 돌릴 수 있습니다.
+## Hard Rules
 
-구성:
-
-- `coo-developer`
-- `documentationer`
-
-흐름:
-
-1. `planner.requested_mode = "hypothesis"`
-2. `documentationer` 가 리서치/질문 정리
-3. `coo-developer` 가 spike / backdata 실험
-4. `documentationer` 가 보고서와 verdict 작성
-5. `planner` 가 결과를 정규 sprint artifact 로 승격하거나 폐기
-
-핵심은 운영 품질이 아니라 빠른 사실 확인입니다.
-
-## 런타임 (회사모드 always-on)
-
-회사모드는 유일한 런타임이며 항상 켜져 있습니다. `progress.mode == "company"` 가 항상 참이고, 별도 모드 전환 명령은 없습니다.
-
-자율 진행은 두 메커니즘으로 유지됩니다:
-
-- **Stop 훅** — Claude 가 한 turn 을 끝내려는 시점에 발화. `conductor.state == "running"` 이고 다음 부서가 있으면 자동으로 turn 을 한 번 더 굴려 끊김 없이 연쇄.
-- **launchd hourly wake (선택)** — 1시간마다 macOS 가 `scripts/harness-wake.sh` 를 호출. idle ≥ 55분이고 `paused/completed/escalated` 가 아닌 프로젝트만 깨움.
-
-```bash
-# 1시간 안전망 wake 등록
-bash scripts/harness-wake-install.sh install .
-
-# 상태 확인
-bash scripts/harness-wake-install.sh status
-
-# 즉시 한 번 발화 (테스트)
-bash scripts/harness-wake-install.sh run-now
-```
-
-회의 결정의 `tracks[]` 는 진행 흐름의 fork-join 단위이며 런타임 모드와는 별개입니다 (`tracks.length ≥ 2` 일 때 parallel).
-- Archive prompt
-
-Queue 관련 유용한 명령:
-
-```bash
-bash scripts/harness-queue-manager.sh status .
-bash scripts/harness-queue-manager.sh auto-dispatch .
-bash scripts/harness-queue-manager.sh idle-slots .
-```
-
-## Generator / Evaluator Chain
-
-구현과 평가는 분리됩니다.
-
-일반적인 흐름:
-
-1. `generator-backend`
-2. `generator-frontend`
-3. `evaluator-code-quality`
-4. `evaluator-functional`
-5. `evaluator-visual`
-6. `cqo`
-7. `service-ops`
-
-평가자 체인 원칙:
-
-- 앞단 FAIL 시 뒤 평가는 생략 가능
-- Evidence 없는 점수는 0
-- regression 1건 이상이면 전체 FAIL
-- evaluator 는 읽기 전용
-
-## Gotchas / Conventions / Memory
-
-하네스는 피드백을 세 저장소로 나눠 누적합니다.
-
-| 종류 | 용도 |
+| # | Rule |
 |---|---|
-| `gotchas/` | 에이전트가 반복한 실수 |
-| `.harness/conventions/` | 하우스 스타일 |
-| `.harness/memory.md` | 프로젝트 전역 교훈 |
+| 1 | No source edit without `{mission}/cto.md` — CTO scope sign-off required |
+| 2 | No CXX impersonation — use installed harness skills in fresh sessions |
+| 3 | No unnamed workers — all work routes through `harness-hiring` → `harness-resource-manager` |
+| 4 | No archive without CQO verdict — `{mission}/cqo.md` with explicit PASS must exist |
+| 5 | No gotcha skip — every hot-fix produces at least one gotcha or convention entry |
+| 6 | CEO routes only to CXX — never directly to workers |
+| 7 | No CXX self-execution — deliverables without matching worker records are rejected |
+| 8 | No verdict without worker evidence — CQO self-inspection is not valid |
 
-각 agent 는 세션 시작 시 다음 순서로 읽습니다.
+---
 
-1. `CONVENTIONS.md`
-2. `.harness/conventions/shared.md`
-3. `.harness/conventions/<self>.md`
-4. `.harness/gotchas/<self>.md`
-5. `.harness/memory.md`
+## Harness Dashboard
 
-## 주요 스크립트
+The harness ships with a real-time dashboard that reads `.harness/documents/` directly.
 
-| 스크립트 | 역할 |
+```bash
+bash scripts/harness-dashboard-up.sh
+```
+
+Features:
+
+- **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy
+- **Mission Timeline** — clickable history of goal/hot-fix missions showing the full dispatch chain
+- **Mission Flow tab** — per-mission flow: Owner prompt → CEO routing → CXX → worker files changed → CQO verdict
+- **History tab** — mission-specific Owner request (from CEO summary + closest progress.log match)
+- **Gotchas tab** — searchable `.harness/gotchas/*.md` knowledge base, click to read full markdown
+- **Document tab** — per-CXX markdown doc viewer
+
+---
+
+## Harness Runtime Paths
+
+| Path | Role |
 |---|---|
-| `scripts/conductor-tick.sh` | 회사 루프 라우터 — 다음 부서 결정 |
-| `scripts/harness-next.sh` | turn 종료 후 handoff 생성 + gotcha/convention 자동 등록 + audit gate |
-| `scripts/harness-progress-set.sh` | progress.json partial update 헬퍼 |
-| `scripts/harness-session-start.sh` | SessionStart 훅 (+ future-dated 라인 자동 격리) |
-| `scripts/harness-user-prompt-submit.sh` | UserPromptSubmit 훅 |
-| `scripts/harness-stop.sh` | Stop 훅 — turn 종료 시 자동 연쇄 |
-| `scripts/harness-wake.sh` | 1시간 안전망 wake (launchd 가 호출) |
-| `scripts/harness-wake-install.sh` | launchd 등록/관리 CLI |
-| `scripts/harness-statusline.sh` | 1줄 statusLine 렌더 |
-| `scripts/harness-queue-manager.sh` | feature queue 관리 |
-| `scripts/harness-meeting-doc.sh` | 회의 문서 skeleton / decision 처리 |
-| `scripts/harness-task-session.sh` | agent 별 task session (TokenLimit) |
-| `scripts/harness-token-limit.sh` | TokenLimit hold/resume 마킹 |
-| `scripts/harness-archive.sh` | sprint 종료 archive |
-| `scripts/harness-gotcha-register.sh` | evaluator output 의 gotcha_candidates 자동 등록 |
-| `scripts/harness-dashboard-up.sh` | Brick Office (브라우저 3D 대시보드) 기동 |
+| `.harness/documents/{mission}/` | CXX decisions and worker reports per mission |
+| `.harness/documents/{mission}/{cxx}/workers/` | Worker reports owned by that CXX |
+| `.harness/conventions/` | Durable rules (CQO writes, survives missions) |
+| `.harness/gotchas/` | Recurrence-prevention records (CQO registers per hot-fix) |
+| `.harness/shared/HR-Resource/` | Hireable worker skill pool |
+| `.harness/archive/` | CQO-approved completed missions (immutable) |
+| `.harness/logs/YYYY-MM-DD/` | OPS exception logs |
 
-## 디렉토리 구조
+---
 
-```text
-.harness/
-├── actions/
-│   ├── plan.md
-│   ├── feature-list.json
-│   ├── api-contract.json
-│   ├── sprint-contract.md
-│   ├── meetings/
-│   ├── incidents/
-│   └── task-sessions/
-├── archive/
-├── progress.json
-├── handoff.json
-├── progress.log
-├── config.json
-└── doctrine/
+## Hiring
+
+Any CXX uses `harness-hiring` before assigning work to a specialist not yet on roster.
+
+```
+harness-resource-manager → find available worker
+harness-hiring           → register and onboard worker
+{cxx} → hired worker     → deliverable → {cxx} evidence manifest
 ```
 
-상세 조직 규칙은 다음 문서를 봅니다.
+---
 
-- `AGENTS.md`
-- `.harness/doctrine/nexus.md`
-- `.harness/agency-mapping.md`
-- `.harness/HARNESS.md`
+## Version History
 
-## Troubleshooting
+| Version | Summary |
+|---|---|
+| 7.1.6 | CXX hierarchy enforcement: CEO→CXX-only gate, CTO prerequisite gate, CQO worker-evidence mandate; dashboard gotchas tab, mission-specific history tab, worker file list in flow |
+| 7.1.5 | Dashboard: mission flow timeline, markdown viewer, 50vw drawer |
+| 7.1.4 | Dashboard: org-tree redesign with real `.harness/documents/` data |
+| 7.1.3 | Karpathy-style AGENTS.md rewrite, ko templates, hot-fix harness gate rules |
+| 7.1.2 | v7 CEO routing migration, legacy command removal |
+| 7.1.1 | CEO no-git hiring fix, gotcha/convention migration |
+| 7.1.0 | v7.1 merge: OPS monitoring, CXX hiring enforcement |
 
-### 다음 agent 가 안 뜸
-
-```bash
-cat .harness/progress.json | jq '{current_agent, agent_status, next_agent, workflow, task_stop}'
-```
-
-### handoff 재생성
-
-```bash
-bash scripts/harness-next.sh .
-```
-
-### SessionStart 안내 확인
-
-```bash
-bash scripts/harness-session-start.sh
-```
-
-### TokenLimit hold 상태 확인
-
-```bash
-cat .harness/progress.json | jq '.task_stop'
-```
-
-### queue 상태 확인
-
-```bash
-bash scripts/harness-queue-manager.sh status .
-```
-
-### Stop 훅 자동 연쇄가 안 도는지 점검
-
-```bash
-# config 확인 — auto_chain_on_stop 이 true 여야 함
-jq '.behavior.auto_chain_on_stop // true' .harness/config.json
-
-# stop_chain_count 와 sprint 상한 확인
-jq '{count: .conductor.stop_chain_count, max: 200}' .harness/progress.json
-```
-
-### 1시간 wake 가 발화 안 하는지 점검
-
-```bash
-bash scripts/harness-wake-install.sh status
-tail -30 ~/.walwal-harness/logs/wake.log
-```
-
-## 버전 호환성
-
-README 는 v6.x 계열 always-on 회사모드 기준입니다 (solo/team 모드 영구 제거).
-
-이 문서에서 전제하는 기능:
-
-- company loop
-- conductor / meeting-manager / cto / cqo / service-ops
-- task-session isolation
-- COO hypothesis cell
-- TokenLimit hold/resume
+---
 
 ## License
 

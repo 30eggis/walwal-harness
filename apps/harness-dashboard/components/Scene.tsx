@@ -16,6 +16,7 @@ import { AgentLogTab } from "./drawer/AgentLogTab";
 import { OwnerHistoryTab } from "./drawer/OwnerHistoryTab";
 import { MissionDocTab } from "./drawer/MissionDocTab";
 import { MissionFlowTab } from "./drawer/MissionFlowTab";
+import { GotchasTab } from "./drawer/GotchasTab";
 import { MissionTimeline } from "./MissionTimeline";
 import { OrgTree } from "./OrgTree";
 
@@ -167,7 +168,13 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
           />
         )}
         {drawerTab === "history" && (
-          <OwnerHistoryTab ownerHistory={snapshot.ownerHistory ?? []} />
+          <OwnerHistoryTab
+            ownerHistory={snapshot.ownerHistory ?? []}
+            mission={selectedMission ?? snapshot.missions?.[0] ?? null}
+          />
+        )}
+        {drawerTab === "gotchas" && (
+          <GotchasTab gotchas={snapshot.gotchas ?? []} />
         )}
         {drawerTab === "mission-doc" && selectedNode && (
           <MissionDocTab

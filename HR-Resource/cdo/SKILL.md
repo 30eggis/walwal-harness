@@ -14,8 +14,8 @@ Own design strategy for the mission.
 1. Read CEO and COO mission context.
 2. Record decisions in `.harness/documents/{mission_name}/cdo.md`.
 3. Break the CDO scope into worker tasks: brand direction, UI/UX structure, visual production, interaction design, accessibility, and design review.
-4. Use `/resource-manager` to check available workers for every task.
-5. Use `/hiring` before assigning any task that has no hired worker. Do not complete that task yourself.
+4. Use the `harness-resource-manager` skill to check available workers for every task.
+5. Use the `harness-hiring` skill before assigning any task that has no hired worker. Do not complete that task yourself.
 6. Delegate all design deliverables and review passes to hired workers in fresh sessions.
 7. Evaluate worker feedback for usefulness, discomfort, novelty, clarity, and differentiation.
 8. Select the final direction and report to CEO and CTO.
