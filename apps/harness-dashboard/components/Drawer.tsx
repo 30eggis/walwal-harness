@@ -8,7 +8,10 @@ export type DrawerTab =
   | "incidents"
   | "hypothesis"
   | "tracks"
-  | "meeting-detail";
+  | "meeting-detail"
+  | "prompt-history"
+  | "mission-doc"
+  | "worker-doc";
 
 interface DrawerProps {
   open: boolean;
@@ -20,6 +23,8 @@ interface DrawerProps {
 }
 
 const TABS: Array<{ id: DrawerTab; label: string }> = [
+  { id: "prompt-history", label: "History" },
+  { id: "mission-doc", label: "Mission" },
   { id: "agent-log", label: "Agent Log" },
   { id: "room-metrics", label: "Room Metrics" },
   { id: "incidents", label: "Incidents" },

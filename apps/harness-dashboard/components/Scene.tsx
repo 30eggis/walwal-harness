@@ -1,14 +1,13 @@
 "use client";
-import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import type {
-  AgentId,
   AgentState,
   EnvFileSummary,
   EscalationEntry,
   HarnessSnapshot,
   MeetingRecord,
   OpsServiceHealth,
+  OrgNodeDef,
   RoomId,
   RoomState,
   WorkerSnapshot,
@@ -20,27 +19,9 @@ import { RoomMetricsTab } from "./drawer/RoomMetricsTab";
 import { IncidentsTab } from "./drawer/IncidentsTab";
 import { HypothesisTab } from "./drawer/HypothesisTab";
 import { TracksTab } from "./drawer/TracksTab";
-
-const Stage3D = dynamic(
-  () =>
-    import("./three/Stage3D").then((m) => ({
-      default: m.Stage3D as unknown as React.ComponentType<{
-        snapshot: HarnessSnapshot;
-        lang?: "ko" | "en";
-        onAgentClick?: (id: AgentId) => void;
-        onRoomClick?: (id: RoomId) => void;
-      }>,
-    })),
-  { ssr: false, loading: () => <SceneFallback /> }
-);
-
-function SceneFallback() {
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-brick-floor text-xs font-mono text-gray-400">
-      Loading 3D scene…
-    </div>
-  );
-}
+import { OwnerHistoryTab } from "./drawer/OwnerHistoryTab";
+import { MissionDocTab } from "./drawer/MissionDocTab";
+import { OrgTree } from "./OrgTree";
 
 interface SceneProps {
   snapshot: HarnessSnapshot;
@@ -54,12 +35,14 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
   const [selectedRoom, setSelectedRoom] = useState<RoomState | null>(null);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingRecord | null>(null);
+  const [selectedNode, setSelectedNode] = useState<OrgNodeDef | null>(null);
 
-  const handleAgentClick = (id: AgentId) => {
+  const handleAgentClick = (id: string) => {
     const a = snapshot.agents.find((x) => x.id === id) ?? null;
     setSelectedAgent(a);
     setSelectedRoom(null);
     setSelectedMeeting(null);
+    setSelectedNode(null);
     setDrawerTab("agent-log");
     setDrawerOpen(true);
   };
@@ -69,6 +52,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     setSelectedRoom(r);
     setSelectedAgent(null);
     setSelectedMeeting(null);
+    setSelectedNode(null);
     // Route the click to the most relevant tab for that room. This way one
     // click on Service-Ops opens the incident list, one click on COO opens
     // the hypothesis list, etc., matching what the wall art is showing.
@@ -85,17 +69,43 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     setSelectedMeeting(meeting);
     setSelectedAgent(null);
     setSelectedRoom(null);
+    setSelectedNode(null);
     setDrawerTab("meeting-detail");
     setDrawerOpen(true);
   };
 
-  const drawerTitle = selectedAgent
+  const handleNodeClick = (node: OrgNodeDef) => {
+    setSelectedNode(node);
+    setSelectedAgent(null);
+    setSelectedRoom(null);
+    setSelectedMeeting(null);
+
+    if (node.id === "owner") {
+      setDrawerTab("prompt-history");
+    } else if (node.id.startsWith("worker-")) {
+      setDrawerTab("worker-doc");
+    } else {
+      setDrawerTab("mission-doc");
+    }
+    setDrawerOpen(true);
+  };
+
+  const drawerTitle = selectedNode
+    ? selectedNode.id === "owner"
+      ? "Owner · Prompt History"
+      : selectedNode.id.startsWith("worker-")
+      ? `Worker: ${selectedNode.label}`
+      : selectedNode.label
+    : selectedAgent
     ? selectedAgent.name
     : selectedMeeting
     ? selectedMeeting.id
     : selectedRoom
     ? `${selectedRoom.label_ko}`
     : "Detail";
+
+  // Suppress unused lang warning — kept for future i18n
+  void lang;
 
   return (
     <div className="mx-auto max-w-[1920px] px-4 py-5">
@@ -107,27 +117,31 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-cyan-300/80">
-                Operations Control Room
+                Company Structure
               </p>
               <h1 className="mt-1 text-2xl font-semibold text-gray-100">
-                {snapshot.projectName} Mission Floor
+                {snapshot.projectName || "walwal-harness"} · Organization
               </h1>
             </div>
             <ActivityIndicator snapshot={snapshot} connectionState={connectionState} />
           </div>
           <div
             data-testid="brick-office-stage"
-            className="relative aspect-[16/9] w-full overflow-hidden rounded-md border border-gray-700/80 bg-[#12151b] shadow-2xl"
+            className="w-full overflow-hidden rounded-md border border-gray-700/80 bg-[#12151b] shadow-2xl"
           >
-            <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between border-b border-white/10 bg-black/30 px-4 py-2 font-mono text-[10px] text-gray-300 backdrop-blur">
-              <span>2.5D service map</span>
-              <span>{snapshot.dashboard.opsHealth.filter((s) => s.status === "ok").length}/{snapshot.dashboard.opsHealth.length || 0} services ok</span>
+            <div className="pointer-events-none flex items-center justify-between border-b border-white/10 bg-black/30 px-4 py-2 font-mono text-[10px] text-gray-300 backdrop-blur">
+              <span>Owner → CEO → CXX → Workers</span>
+              <span>
+                {snapshot.missions?.[0]?.missionId ?? "no active mission"}
+                {snapshot.missions?.[0]?.cxxPresent.length
+                  ? ` · ${snapshot.missions[0].cxxPresent.join(" / ")}`
+                  : ""}
+              </span>
             </div>
-            <Stage3D
+            <OrgTree
               snapshot={snapshot}
-              lang={lang}
-              onAgentClick={handleAgentClick}
-              onRoomClick={handleRoomClick}
+              activeNodeId={selectedNode?.id ?? null}
+              onNodeClick={handleNodeClick}
             />
           </div>
         </section>
@@ -176,6 +190,38 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         onClose={() => setDrawerOpen(false)}
         onTabChange={setDrawerTab}
       >
+        {drawerTab === "prompt-history" && (
+          <OwnerHistoryTab ownerHistory={snapshot.ownerHistory ?? []} />
+        )}
+        {drawerTab === "mission-doc" && selectedNode && (
+          <MissionDocTab
+            missions={snapshot.missions ?? []}
+            role={
+              selectedNode.role === "owner"
+                ? "ceo"
+                : (selectedNode.role as "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops")
+            }
+            fromLabel={selectedNode.role === "ceo" ? "Owner" : "CEO"}
+            toLabel={
+              selectedNode.role === "ceo"
+                ? "CTO / CQO / COO"
+                : selectedNode.role === "cto"
+                ? "Workers"
+                : selectedNode.role === "cqo"
+                ? "Owner (report)"
+                : "—"
+            }
+          />
+        )}
+        {drawerTab === "worker-doc" && selectedNode?.id.startsWith("worker-") && (
+          <MissionDocTab
+            missions={snapshot.missions ?? []}
+            role="worker"
+            workerName={selectedNode.label}
+            fromLabel="CTO"
+            toLabel="Output"
+          />
+        )}
         {drawerTab === "agent-log" && selectedAgent && (
           <AgentLogTab agentId={selectedAgent.id} />
         )}

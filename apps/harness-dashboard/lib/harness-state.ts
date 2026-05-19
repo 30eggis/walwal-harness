@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, statSync, readFileSync, type Dirent } from "node:fs";
 import path from "node:path";
 import { readJsonSafe } from "./safe-json";
 import { AGENT_ROSTER, ROOM_LABELS } from "./agent-roster";
@@ -23,14 +23,17 @@ import type {
   MeetingCadence,
   MeetingRecord,
   MeetingsState,
+  MissionDoc,
   OperationsDashboard,
   OpsServiceHealth,
+  OwnerPromptEntry,
   ParallelTrack,
   Pipeline,
   RoomId,
   RoomMetrics,
   RoomState,
   TrackStatus,
+  WorkerDocEntry,
   WorkerSnapshot,
 } from "./types";
 
@@ -201,6 +204,8 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     evalScores: null,
     errorBanner: banner,
     dashboard: { workers: [], features: [], recentMeetings: [], opsHealth: [], envFiles: [] },
+    missions: [],
+    ownerHistory: [],
   };
 }
 
@@ -946,6 +951,93 @@ function buildDashboard(rootDir: string, progress: RawProgress | null): Operatio
   };
 }
 
+function readMissions(rootDir: string, limit = 15): MissionDoc[] {
+  const docsDir = path.join(rootDir, ".harness", "documents");
+  if (!existsSync(docsDir)) return [];
+
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(docsDir, { withFileTypes: true });
+  } catch { return []; }
+
+  const missions = entries
+    .filter(d => d.isDirectory() && !d.name.startsWith("."))
+    .map(d => {
+      const missionPath = path.join(docsDir, d.name);
+      let mtime: Date;
+      try { mtime = statSync(missionPath).mtime; } catch { mtime = new Date(0); }
+
+      const readMd = (name: string): string | null => {
+        const p = path.join(missionPath, name);
+        if (!existsSync(p)) return null;
+        try { return readFileSync(p, "utf8"); } catch { return null; }
+      };
+
+      const workersDir = path.join(missionPath, "workers");
+      const workers: WorkerDocEntry[] = [];
+      if (existsSync(workersDir)) {
+        try {
+          for (const f of readdirSync(workersDir)) {
+            if (!f.endsWith(".md")) continue;
+            const content = readMd(`workers/${f}`) ?? "";
+            const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
+            workers.push({
+              name: f.replace(".md", ""),
+              content,
+              status: (statusMatch?.[1] as WorkerDocEntry["status"]) ?? "unknown",
+            });
+          }
+        } catch { /* ignore */ }
+      }
+
+      const cxxRoles = ["ceo", "cto", "cqo", "coo", "cdo", "ops"] as const;
+      const cxxPresent = cxxRoles.filter(role => existsSync(path.join(missionPath, `${role}.md`)));
+
+      const id = d.name;
+      return {
+        missionId: id,
+        ts: mtime.toISOString(),
+        type: id.startsWith("hotfix") ? "hotfix" : id.match(/^F\d+/) ? "feature" : "unknown",
+        label: id,
+        ceo: readMd("ceo.md"),
+        cto: readMd("cto.md"),
+        cqo: readMd("cqo.md"),
+        coo: readMd("coo.md"),
+        cdo: readMd("cdo.md"),
+        ops: readMd("ops.md"),
+        workers,
+        cxxPresent: [...cxxPresent],
+      } satisfies MissionDoc;
+    })
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+    .slice(0, limit);
+
+  return missions;
+}
+
+function readOwnerHistory(rootDir: string, limit = 30): OwnerPromptEntry[] {
+  const logFile = path.join(rootDir, ".harness", "progress.log");
+  if (!existsSync(logFile)) return [];
+  let raw: string;
+  try { raw = readFileSync(logFile, "utf8"); } catch { return []; }
+
+  const entries: OwnerPromptEntry[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.includes("user-prompt") && !line.includes("input")) continue;
+    if (line.trim().startsWith("#")) continue;
+    const parts = line.split(" | ");
+    if (parts.length < 4) continue;
+    const ts = parts[0]?.trim() ?? "";
+    const content = parts.slice(3).join(" | ").trim();
+    if (!content) continue;
+    const lc = content.toLowerCase();
+    const type = content.startsWith("/goal") ? "goal" :
+                 (content.startsWith("/hot-fix") || lc.includes("/hot-fix")) ? "hot-fix" : "other";
+    entries.push({ ts, content, type });
+  }
+  return entries.reverse().slice(0, limit);
+}
+
 export function readHarnessState(rootDir: string): HarnessSnapshot {
   const harnessDir = path.join(rootDir, ".harness");
   if (!existsSync(harnessDir)) {
@@ -972,6 +1064,8 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
           };
     const snapshot = emptySnapshot(banner, rootDir);
     snapshot.archive = buildArchive(rootDir);
+    snapshot.missions = readMissions(rootDir);
+    snapshot.ownerHistory = readOwnerHistory(rootDir);
     return snapshot;
   }
 
@@ -1020,6 +1114,8 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     evalScores,
     errorBanner: null,
     dashboard,
+    missions: readMissions(rootDir),
+    ownerHistory: readOwnerHistory(rootDir),
   };
 }
 

@@ -275,4 +275,46 @@ export interface HarnessSnapshot {
   evalScores: EvalScores | null;
   errorBanner: ErrorBanner | null;
   dashboard: OperationsDashboard;
+  missions: MissionDoc[];
+  ownerHistory: OwnerPromptEntry[];
+}
+
+// Real harness mission documents
+export interface WorkerDocEntry {
+  name: string;
+  content: string;
+  status: "COMPLETE" | "IN_PROGRESS" | "unknown";
+}
+
+export interface MissionDoc {
+  missionId: string;
+  ts: string;
+  type: "hotfix" | "feature" | "unknown";
+  label: string;
+  ceo: string | null;
+  cto: string | null;
+  cqo: string | null;
+  coo: string | null;
+  cdo: string | null;
+  ops: string | null;
+  workers: WorkerDocEntry[];
+  cxxPresent: string[];
+}
+
+export interface OwnerPromptEntry {
+  ts: string;
+  content: string;
+  type: "goal" | "hot-fix" | "other";
+}
+
+export type OrgRole = "owner" | "ceo" | "coo" | "cdo" | "cto" | "cqo" | "ops";
+
+export interface OrgNodeDef {
+  id: string;
+  role: OrgRole;
+  label: string;
+  sublabel?: string;
+  status: MinifigState;
+  activity: string | null;
+  agentIds: AgentId[];
 }

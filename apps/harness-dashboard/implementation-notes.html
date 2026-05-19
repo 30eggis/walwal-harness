@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Redesign — Implementation Notes</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      font-size: 14px;
+      line-height: 1.7;
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 { color: #58a6ff; font-size: 1.5rem; border-bottom: 1px solid #30363d; padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
+    h2 { color: #79c0ff; font-size: 1.1rem; margin: 2rem 0 0.75rem; }
+    h3 { color: #cae8ff; font-size: 0.95rem; margin: 1.25rem 0 0.5rem; }
+    p { margin-bottom: 0.75rem; }
+    ol, ul { padding-left: 1.5rem; margin-bottom: 0.75rem; }
+    li { margin-bottom: 0.4rem; }
+    code {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 0.1em 0.4em;
+      font-size: 0.85em;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      color: #e6edf3;
+    }
+    .section {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .tag {
+      display: inline-block;
+      background: #1f6feb22;
+      border: 1px solid #1f6feb55;
+      color: #58a6ff;
+      border-radius: 4px;
+      padding: 0.1em 0.5em;
+      font-size: 0.78rem;
+      font-family: monospace;
+      margin-right: 0.3rem;
+    }
+    .tag.warn { background: #bb800022; border-color: #bb800055; color: #e3b341; }
+    .tag.open { background: #2ea04322; border-color: #2ea04355; color: #3fb950; }
+  </style>
+</head>
+<body>
+  <h1>Dashboard Redesign — Implementation Notes</h1>
+  <p>This document records the design decisions, deviations, tradeoffs, and open questions for the harness-dashboard redesign from Three.js / R3F org chart (Stage3D) to a CSS-only OrgTree component backed by real <code>.harness/documents/</code> data.</p>
+
+  <div class="section">
+    <h2>Design Decisions</h2>
+
+    <h3>1. CSS Flexbox + inline SVG for org tree — no D3 or react-flow</h3>
+    <p>The harness hierarchy is fixed: <strong>Owner → CEO → 5 CXX → Workers</strong>. There is no runtime graph topology to discover, so a force-directed layout library would add significant bundle weight (react-flow: ~600kB) with zero benefit. The <code>BranchConnector</code> SVG uses percentage-based X positions that match the flexbox column centers by construction — no DOM measurements needed. If the hierarchy shape changes (e.g. a CEO deputy layer), the fixed layout can be extended without touching the SVG math.</p>
+
+    <h3>2. Three.js / R3F components preserved — only the import in Scene.tsx is removed</h3>
+    <p>All files under <code>components/three/</code> are left intact. <code>Stage3D</code> and <code>SceneFallback</code> are no longer dynamically imported in Scene.tsx, but the source is not deleted. This preserves existing test coverage and leaves a migration path back to 3D if the product direction changes. The dynamic import overhead was only at runtime, not at build time, so removing it has no negative effect on build.</p>
+
+    <h3>3. Mission documents served inline from snapshot — no per-click fetch</h3>
+    <p><code>readMissions()</code> in <code>lib/harness-state.ts</code> reads all <code>.harness/documents/{"{"}mission-id{"}"}/</code> directories at snapshot time (same call that reads <code>progress.json</code>). The drawer tabs display document content from <code>snapshot.missions</code> without an additional round-trip. The SSE stream (<code>/api/snapshot/stream</code>) remains the single data source. Limit is 15 missions; worker files inside each mission are also read inline.</p>
+
+    <h3>4. Workers shown under CTO column</h3>
+    <p>In real harness usage (moon_web), workers are always dispatched via the CTO architecture plan's <code>## 워커 지시</code> section. The worker doc format (<code>.harness/documents/{"{"}mission{"}"}/workers/{"{"}worker-name{"}"}.md</code>) is produced by hired workers reporting back to CTO. Showing workers under the CTO card in the org tree is therefore semantically correct and matches the actual file structure.</p>
+  </div>
+
+  <div class="section">
+    <h2>Deviations from Spec</h2>
+
+    <h3>1. harness-cdo has no sub-agents in v7.1</h3>
+    <p><span class="tag warn">deviation</span> The spec mentioned <code>harness-cdo</code> but <code>moon_web/.harness/config.json</code> confirms CDO exists as a role but has no workers in <code>AGENT_ROSTER</code> or any <code>agentIds</code>. The CDO node is rendered with <code>status="idle"</code> and an empty <code>agentIds</code> array. This is the correct state for v7.1 — CDO is a placeholder for future design/branding agents.</p>
+
+    <h3>2. <code>.harness/meetings/</code> and <code>.harness/workers/</code> don't exist in real moon_web</h3>
+    <p><span class="tag warn">deviation</span> The existing <code>buildRecentMeetings()</code> reads from <code>.harness/actions/meetings/</code> (not <code>.harness/meetings/</code>). The real moon_web project has no such directory. The new <code>readMissions()</code> function supplements this by reading from <code>.harness/documents/</code>, which is where real v7 agent output actually lives.</p>
+
+    <h3>3. CEO drawer shows actual ceo.md instead of a separate brainstorm file</h3>
+    <p><span class="tag warn">deviation</span> The "brainstorming decisions" in the CEO drawer now surfaces the actual <code>.harness/documents/{"{"}mission{"}"}/ceo.md</code> which contains <code>## CEO 결정</code> (routing decisions) and <code>## Owner 요청 요약</code>. This is more accurate than attempting to parse a hypothetical separate brainstorm file that does not exist in the real harness output.</p>
+  </div>
+
+  <div class="section">
+    <h2>Tradeoffs</h2>
+
+    <h3>1. YAML frontmatter stripped by regex</h3>
+    <p><span class="tag">tradeoff</span> <code>MissionDocTab</code> strips YAML frontmatter using <code>/^---[\s\S]*?---\n/</code> before rendering. A proper YAML parser (e.g. <code>js-yaml</code>) would be more robust, but adds a dependency and the frontmatter content is not rendered anyway — only stripped. The regex is sufficient for all observed harness document formats.</p>
+
+    <h3>2. Branch connector SVG uses equal-width column assumption</h3>
+    <p><span class="tag">tradeoff</span> The SVG percentage widths assume that the five CXX flexbox columns are equally wide (same <code>min-w-[150px] max-w-[190px]</code> cards with <code>gap-3</code>). At very narrow viewports (below ~800px) or when workers push the CTO column significantly wider, the connector lines may not align perfectly with the actual card centers. A ref-based measurement approach (ResizeObserver + useLayoutEffect) would be more precise but adds React complexity. For the expected viewport range (1280px+), the equal-width assumption is accurate.</p>
+
+    <h3>3. Missions sorted by directory mtime</h3>
+    <p><span class="tag">tradeoff</span> Missions are ordered by <code>statSync(missionPath).mtime</code>. If the OS modifies a directory's mtime for reasons other than harness writes (e.g. metadata updates, backup tools), the ordering could drift. An explicit timestamp in each mission's YAML frontmatter would be more reliable. The existing docs have <code>updatedAt</code> in frontmatter but parsing it would require stripping and reading YAML — added complexity for a correctness edge case that hasn't occurred in practice.</p>
+  </div>
+
+  <div class="section">
+    <h2>Open Questions</h2>
+
+    <ol>
+      <li>
+        <span class="tag open">open</span>
+        <strong>CDO sub-agents:</strong> Should we add <code>"cdo"</code> to <code>AgentId</code> type and <code>AGENT_ROSTER</code> once <code>harness-cdo</code> gains real sub-agents (design reviewer, brand auditor)? The OrgTree's CDO node already has <code>agentIds: []</code> and <code>getStatus([])</code> returns <code>"idle"</code> — no code change needed in OrgTree when agents are added, only in <code>types.ts</code> and <code>agent-roster.ts</code>.
+      </li>
+      <li>
+        <span class="tag open">open</span>
+        <strong>feature-queue.json team slots as worker cards:</strong> The <code>feature-queue.json</code> has <code>teams</code> state (<code>idle</code> / <code>busy</code>). Should the OrgTree show team slots as worker mini-cards even when no <code>.harness/documents/{"{"}mission{"}"}/workers/</code> file exists? Currently only workers with an actual <code>.md</code> file are shown. The queue-based workers are already surfaced in the <code>WorkerPanel</code> on the right side panel.
+      </li>
+      <li>
+        <span class="tag open">open</span>
+        <strong>Truncated content in progress.log:</strong> The <code>user-prompt | input</code> lines in <code>progress.log</code> contain content truncated to ~100 chars by the harness hook. The <code>readOwnerHistory()</code> function reads whatever is written. Should we parse a separate source (e.g. the CEO mission doc's <code>## Owner 요청 요약</code> section) to get the full prompt content for the Owner History tab?
+      </li>
+      <li>
+        <span class="tag open">open</span>
+        <strong>SSE watcher glob coverage:</strong> The SSE stream fires on <code>.harness/</code> file changes via <code>lib/watcher.ts</code>. Verify that the watcher glob includes <code>.harness/documents/**</code> — if it only watches <code>.harness/progress.json</code> and <code>.harness/actions/</code>, new mission documents written by agents won't trigger a snapshot push. Check <code>lib/watcher.ts</code> and expand the glob if needed.
+      </li>
+    </ol>
+  </div>
+</body>
+</html>
