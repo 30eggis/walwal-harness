@@ -1459,6 +1459,14 @@ function showMigrationProposal(flags) {
 
 function runMigrate(opts = {}) {
   const dryRun = opts.dryRun || false;
+
+  // Always refresh owner-facing commands (full replacement regardless of current state).
+  if (dryRun) {
+    log('  (dry-run) commands: /goal, /submission, /hot-fix 교체 예정');
+  } else {
+    installCommands();
+  }
+
   const flags = detectMigrationNeeded();
   const gotchaMissingTotal = Object.values(flags.gotchaMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   const conventionMissingTotal = Object.values(flags.conventionMissingEntries || {}).reduce((n, a) => n + a.length, 0);
