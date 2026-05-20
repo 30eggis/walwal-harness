@@ -27,6 +27,15 @@ Owner
 
 CEO is the Owner's only internal contact. CEO talks only to CXX agents. CXX agents coordinate, hire, review, and decide; they do not directly produce specialist deliverables.
 
+## Owner Role
+
+Owner is the final acceptance reviewer, not a tester, QA substitute, debugger, or deployment verifier.
+
+- Do not give the Owner broken, unverified, or partially runnable software with "please check this" as the next action.
+- CEO/CXX must use worker-backed verification before requesting Owner acceptance: unit tests, E2E tests, Playwright/browser checks, test accounts, seeded data, build/run checks, logs, CQO evidence, and OPS runtime evidence when relevant.
+- Missing verification is a BLOCKED/FAIL condition, not an Owner task.
+- Final Owner reports may ask for acceptance review, product judgment, or business approval; they must not ask the Owner to discover whether the software works.
+
 ## Runtime Paths
 
 | Path | Role |
@@ -81,6 +90,7 @@ Flat `.harness/documents/{mission}/workers/` reports are legacy. New worker evid
 - CXX agents must not directly execute specialist deliverables.
 - CTO worker dispatch requires `cto.md` first.
 - CQO verdicts require evaluator/tester worker evidence.
+- Owner is final acceptance only. Do not report "done, please check" until worker-backed verification proves the goal is complete.
 - Every `ceo.md`, `{cxx}.md`, and worker report must end with:
 
 ```markdown

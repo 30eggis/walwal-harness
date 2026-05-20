@@ -40,18 +40,18 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   };
 
   const handleNodeClick = (node: OrgNodeDef) => {
+    const currentMission = snapshot.missions?.[0] ?? null;
     setSelectedNode(node);
     setSelectedAgent(null);
-    // Auto-select current mission for non-owner nodes
-    if (!selectedMission && snapshot.missions?.[0]) {
-      setSelectedMission(snapshot.missions[0]);
+    if (currentMission) {
+      setSelectedMission(currentMission);
     }
     if (node.id === "owner") {
       setDrawerTab("history");
     } else if (node.id.startsWith("worker-")) {
-      setDrawerTab("mission-flow");
+      setDrawerTab("mission-doc");
     } else {
-      setDrawerTab("mission-flow");
+      setDrawerTab("mission-doc");
     }
   };
 
@@ -76,6 +76,14 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     selectedNode?.id ?? "",
     selectedAgent?.id ?? "",
   ].join(":");
+  const selectedWorkerName = selectedNode?.id.startsWith("worker-")
+    ? selectedNode.label
+    : undefined;
+  const selectedDocumentRole = selectedWorkerName
+    ? "worker"
+    : selectedNode?.role === "owner"
+    ? "ceo"
+    : selectedNode?.role;
 
   // Suppress unused lang warning — kept for future i18n
   void lang;
@@ -161,14 +169,19 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
             {drawerTab === "mission-doc" && selectedNode && (
               <MissionDocTab
                 missions={snapshot.missions ?? []}
-                role={
-                  selectedNode.role === "owner"
-                    ? "ceo"
-                    : (selectedNode.role as "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops")
+                role={selectedDocumentRole as "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops" | "worker"}
+                workerName={selectedWorkerName}
+                fromLabel={
+                  selectedWorkerName
+                    ? selectedNode.role.toUpperCase()
+                    : selectedNode.role === "ceo"
+                    ? "Owner"
+                    : "CEO"
                 }
-                fromLabel={selectedNode.role === "ceo" ? "Owner" : "CEO"}
                 toLabel={
-                  selectedNode.role === "cto"
+                  selectedWorkerName
+                    ? "Evidence"
+                    : selectedNode.role === "cto"
                     ? "Workers"
                     : selectedNode.role === "cqo"
                     ? "Owner Report"

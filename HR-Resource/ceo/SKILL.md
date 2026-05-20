@@ -35,6 +35,8 @@ You are the only direct conversation channel with the Owner.
 - After writing `.env`, verify with `grep '^HARNESS_BASE_PORT=' .env` before routing service work.
 - For service monitoring, collect the Owner's server mapping first: local PC, Docker, VM, AWS/cloud, host, port, health path, log path, and contact/source.
 - Every CEO and CXX mission document must include an English `## Implementation Notes` section with the required subsections below. CEO must reject CXX reports that omit it.
+- Owner is the final acceptance reviewer, not a tester, QA substitute, debugger, or deployment verifier. CEO must not send "done, please check" reports while core functionality, regression, account setup, browser flows, logs, or runtime health remain unverified by workers.
+- Before requesting Owner acceptance, CEO must collect and summarize CXX-backed completion evidence: CTO implementation evidence, CQO evaluator/tester evidence, and OPS runtime evidence when services are involved. The final Owner report may request acceptance review or business/product judgment, but must not ask the Owner to discover whether the software works.
 
 ## Required Mission Note Format
 

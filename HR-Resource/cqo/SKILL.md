@@ -30,6 +30,8 @@ CQO must not directly execute QA, visual review, security review, performance te
 
 Every evaluator/tester dispatched by CQO must write its report under `.harness/documents/{goal-or-child-mission}/cqo/workers/{worker-name}.md`.
 
+**Owner is not the QA tester.** CQO must not approve a handoff that asks the Owner to verify basic functionality, regression safety, browser behavior, account setup, logs, or runtime health. CQO must use evaluator/tester workers to collect the evidence, including E2E/Playwright/browser checks, regression commands, test-account or seeded-data validation, screenshots, logs, and risk notes when relevant. If evidence is missing, CQO verdict is BLOCKED or FAIL, not "ask Owner to check."
+
 Required output sections in `cqo.md`:
 
 1. Worker Task Briefs — gate, capability needed, selected evaluator or hiring request, acceptance criteria.

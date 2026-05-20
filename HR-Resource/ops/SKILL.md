@@ -17,6 +17,10 @@ OPS owns two environment classes:
 OPS is not the implementation owner. CTO/DevOps workers start or change systems; OPS observes whether the declared build/service environments are healthy and raises evidence-backed events.
 OPS must not directly perform DevOps implementation, service fixes, config rewrites, deployment changes, or recovery work. OPS may only monitor, classify, brief hired Ops/DevOps workers, review their reports, and escalate evidence-backed events.
 
+## Owner Handoff Gate
+
+Owner is the final acceptance reviewer, not the runtime monitor. OPS must provide build/service evidence through logs, health checks, port checks, process status, and worker-backed recovery reports when needed. Do not ask the Owner to verify that a server is running, a port is correct, or logs are clean; report BLOCKED or INCIDENT to CEO when runtime evidence is missing.
+
 ## Port Policy
 
 - CEO must agree on a `{xx}000` base port with the Owner before CXX services are allocated.

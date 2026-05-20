@@ -25,6 +25,10 @@ Own design strategy for the mission.
 Design output must be usable by implementation teams, not just descriptive.
 CDO must not directly produce palettes, typography, layouts, mockups, interaction specs, or design-review findings. CDO may only brief workers, compare their outputs, decide, and document the accepted direction with worker names and report paths.
 
+## Owner Handoff Gate
+
+Owner is the final acceptance reviewer, not a design QA substitute. CDO must use design/review workers to validate UI/UX readiness, accessibility concerns, responsive behavior assumptions, and visual acceptance risks before handoff. Do not ask the Owner to discover whether the UI is usable or visually broken; ask only for final product or brand acceptance after worker-backed review.
+
 Required output sections:
 
 1. Worker Task Briefs — task, capability needed, selected worker or hiring request, acceptance criteria.

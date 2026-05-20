@@ -30,6 +30,8 @@ CTO must not directly write code, create build scripts, choose detailed implemen
 
 Every worker dispatched by CTO must be listed in the Worker Evidence Manifest section of `cto.md` with their report path and status. The report path must be `.harness/documents/{goal-or-child-mission}/cto/workers/{worker-name}.md`. Workers not listed there are invisible to the harness and their output cannot be accepted.
 
+**Owner is not the technical tester.** CTO must not hand unfinished software to CEO/Owner with "please check" as the validation plan. CTO must require workers to prove implementation readiness with appropriate unit tests, integration checks, build/run commands, seeded data or test account setup, browser/E2E checks when applicable, and changed-file evidence. If verification cannot be completed, CTO reports BLOCKED with the missing evidence instead of asking the Owner to test it.
+
 Required output sections in `cto.md`:
 
 1. Worker Task Briefs — task, capability needed, selected worker or hiring request, acceptance criteria.

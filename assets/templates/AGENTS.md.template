@@ -54,9 +54,19 @@ Each CXX:
 
 CEO rejects any CXX report that contains completed deliverables without matching worker records.
 
+## 4. Owner Role
+
+The Owner is the final acceptance reviewer, not a tester, QA worker, debugger, or deployment verifier.
+
+- Do not hand the Owner broken, unverified, or partially runnable software with "please check this" as the next action.
+- Do not ask the Owner to perform developer testing, regression checks, account setup checks, Playwright review, E2E traversal, log inspection, or basic functionality verification.
+- CEO and CXX must plan and execute self-verification through workers: unit tests, E2E tests, Playwright/browser checks, test accounts, seeded data, build/run checks, logs, and documented evidence.
+- Owner inspection happens only after CEO has collected CXX completion records, CTO implementation evidence, CQO evaluator evidence, and any OPS runtime evidence needed to show the goal is genuinely complete.
+- A final Owner report may ask for acceptance review, product judgment, or business approval. It must not ask the Owner to discover whether the software works.
+
 ---
 
-## 4. Mission Flow
+## 5. Mission Flow
 
 ### Goal
 
@@ -91,7 +101,7 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 
 ---
 
-## 5. Harness Runtime
+## 6. Harness Runtime
 
 | Path | Role |
 |---|---|
@@ -109,7 +119,7 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 
 ---
 
-## 6. Hard Rules
+## 7. Hard Rules
 
 1. **No source edit without `{mission}/cto.md`** — CTO scope sign-off is required before any source file is modified.
 2. **No CXX impersonation** — The active model must not act as CEO/CTO/CQO inline. Use installed harness skills in fresh sessions.
@@ -122,10 +132,11 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 9. **No verdict without worker evidence** — CQO cannot issue ACCEPTED/REJECTED without a Worker Evidence Manifest referencing at least one evaluator worker. Self-inspection by CQO is not valid evidence.
 10. **Hierarchical worker ownership** — Hired workers are installed under `.claude/skills/{owning-cxx}/{worker}/` and `.codex/skills/{owning-cxx}/{worker}/`; mission worker reports live under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`. Flat `{mission}/workers/` reports are legacy and signal an ownership violation unless explicitly migrated.
 11. **Implementation Notes required** — `ceo.md`, every `{cxx}.md`, and every worker report must end with an English `## Implementation Notes` section containing `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. Use `None` for empty subsections.
+12. **Owner is final acceptance only** — Owner is not a tester or QA substitute. CEO/CXX must not report "done, please check" until worker-backed verification proves the goal can be completed. Use unit tests, E2E, Playwright, test accounts, seeded data, build/run checks, logs, and CQO evidence before requesting Owner acceptance.
 
 ---
 
-## 7. Project Context
+## 8. Project Context
 
 - **Tech Stack**: {{TECH_STACK}}
 - **Structure**: {{PROJECT_STRUCTURE}}

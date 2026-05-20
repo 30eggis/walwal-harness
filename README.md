@@ -181,12 +181,13 @@ npx walwal-harness init --force --project-root /path/to/project
 Features:
 
 - **Split Workspace** — full-viewport left/right panes keep Org Tree + Mission Timeline beside the selected mission detail; both panes scroll independently with hidden scrollbars, and the detail pane resets to top on selection changes
-- **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards grouped under their owning CXX
+- **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards grouped under their owning CXX; clicking any node initializes the right pane to the relevant history, CXX document, or worker report
 - **Mission Timeline** — clickable history of goal/submission/hot-fix missions showing the full dispatch chain
 - **Mission Flow tab** — per-mission flow: Owner prompt → CEO routing → CXX → owner-specific worker evidence → CQO verdict
 - **History tab** — mission-specific Owner request (from CEO summary + closest progress.log match)
 - **Gotchas tab** — searchable `.harness/gotchas/*.md` knowledge base, click to read full markdown
 - **Document tab** — per-CXX markdown doc viewer
+- **Owner Acceptance Gate** — Owner is final acceptance only; CEO/CXX must complete worker-backed verification before asking for Owner review
 
 ---
 
@@ -222,6 +223,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.14 | Owner acceptance gate: Owner is final reviewer, not tester; dashboard org-node clicks initialize the detail pane |
 | 7.1.13 | Dashboard: full-viewport split workspace, hidden pane scrollbars, and detail scroll reset on selection |
 | 7.1.12 | Dashboard: split workspace panes now scroll independently |
 | 7.1.11 | Dashboard: persistent 50/50 split workspace and CXX-owned worker grouping in the org tree |
