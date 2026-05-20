@@ -223,6 +223,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.15 | Dashboard: reset embedded View Doc state when the selected mission or document target changes |
 | 7.1.14 | Owner acceptance gate: Owner is final reviewer, not tester; dashboard org-node clicks initialize the detail pane |
 | 7.1.13 | Dashboard: full-viewport split workspace, hidden pane scrollbars, and detail scroll reset on selection |
 | 7.1.12 | Dashboard: split workspace panes now scroll independently |

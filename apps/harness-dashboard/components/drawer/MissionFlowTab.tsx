@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MissionDoc, OwnerPromptEntry } from "@/lib/types";
 import { MarkdownView } from "@/lib/markdown";
 
@@ -224,6 +224,10 @@ function WorkerCard({
 // ---------------------------------------------------------------------------
 export function MissionFlowTab({ mission, ownerHistory }: Props) {
   const [docView, setDocView] = useState<DocView>("overview");
+
+  useEffect(() => {
+    setDocView("overview");
+  }, [mission?.missionId]);
 
   if (!mission) {
     return (

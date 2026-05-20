@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { MissionDoc } from "@/lib/types";
 import { MarkdownView } from "@/lib/markdown";
 
@@ -14,6 +14,10 @@ interface Props {
 export function MissionDocTab({ missions, role, workerName, fromLabel, toLabel }: Props) {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const mission = missions[selectedIdx];
+
+  useEffect(() => {
+    setSelectedIdx(0);
+  }, [role, workerName]);
 
   if (!missions.length) {
     return (
