@@ -43,7 +43,7 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children, mode 
         aria-label="Detail panel"
         data-testid="drawer"
         data-open="true"
-        className="h-full min-h-[calc(100dvh-2.5rem)] rounded-md border border-brick-wall bg-brick-bg shadow-2xl flex flex-col overflow-hidden"
+        className="h-full min-h-0 rounded-md border border-brick-wall bg-brick-bg shadow-2xl flex flex-col overflow-hidden"
       >
         <header className="flex items-center justify-between border-b border-brick-wall px-4 py-3">
           <h2 className="text-sm font-mono uppercase tracking-widest text-gray-200 truncate">

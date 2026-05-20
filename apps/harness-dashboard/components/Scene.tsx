@@ -75,12 +75,12 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   void lang;
 
   return (
-    <div className="mx-auto max-w-[1920px] px-4 py-5">
+    <div className="mx-auto flex h-[100dvh] max-w-[1920px] flex-col overflow-hidden px-4 py-5">
       {snapshot.escalations.length > 0 && (
         <EscalationStrip escalations={snapshot.escalations} />
       )}
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-        <div className="min-w-0">
+      <div className="grid min-h-0 flex-1 min-w-0 gap-4 lg:grid-cols-2">
+        <div className="min-h-0 min-w-0 overflow-y-auto pr-1">
           <section className="min-w-0">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -127,7 +127,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
           </section>
         </div>
 
-        <div className="min-w-0">
+        <div className="min-h-0 min-w-0">
           <Drawer
             mode="inline"
             open={true}

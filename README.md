@@ -180,7 +180,7 @@ npx walwal-harness init --force --project-root /path/to/project
 
 Features:
 
-- **Split Workspace** — left pane keeps Org Tree + Mission Timeline visible while the right pane shows the selected mission detail
+- **Split Workspace** — left pane keeps Org Tree + Mission Timeline visible while the right pane shows the selected mission detail; both panes scroll independently
 - **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards grouped under their owning CXX
 - **Mission Timeline** — clickable history of goal/submission/hot-fix missions showing the full dispatch chain
 - **Mission Flow tab** — per-mission flow: Owner prompt → CEO routing → CXX → owner-specific worker evidence → CQO verdict
@@ -222,6 +222,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.12 | Dashboard: split workspace panes now scroll independently |
 | 7.1.11 | Dashboard: persistent 50/50 split workspace and CXX-owned worker grouping in the org tree |
 | 7.1.10 | Adds `/submission` and nested goal/submission/hot-fix mission history |
 | 7.1.9 | Dashboard is packaged with npm and auto-syncs isolated cache by package version; README documents dashboard port/reinstall and update/migrate commands |
