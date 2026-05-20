@@ -155,6 +155,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
               <MissionFlowTab
                 mission={selectedMission ?? snapshot.missions?.[0] ?? null}
                 ownerHistory={snapshot.ownerHistory ?? []}
+                runtime={snapshot.runtime}
               />
             )}
             {drawerTab === "history" && (

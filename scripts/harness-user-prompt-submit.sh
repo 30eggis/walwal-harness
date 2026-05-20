@@ -71,6 +71,28 @@ if [ -n "$PROMPT" ] && [ -d "$CWD/.harness" ]; then
       COMMAND_TYPE="hot-fix"
     fi
     echo "$(date +"%Y-%m-%d %H:%M") | user-prompt | ${COMMAND_TYPE} | ${PROMPT_SHORT}" >> "$PROGRESS_LOG"
+    if [ "$COMMAND_TYPE" = "goal" ] || [ "$COMMAND_TYPE" = "submission" ] || [ "$COMMAND_TYPE" = "hot-fix" ]; then
+      if [ -f "$CWD/.harness/progress.json" ] && command -v jq >/dev/null 2>&1; then
+        TMP_PROGRESS="${CWD}/.harness/progress.json.tmp.$$"
+        NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        jq \
+          --arg now "$NOW_ISO" \
+          --arg command "$COMMAND_TYPE" \
+          --arg prompt "$PROMPT_SHORT" \
+          '
+          .current_agent = "ceo" |
+          .agent_status = "running" |
+          .next_agent = "ceo" |
+          .updated_at = $now |
+          .owner_prompt = {
+            command: $command,
+            summary: $prompt,
+            received_at: $now,
+            status: "routing"
+          }
+          ' "$CWD/.harness/progress.json" > "$TMP_PROGRESS" && mv "$TMP_PROGRESS" "$CWD/.harness/progress.json"
+      fi
+    fi
   fi
 fi
 

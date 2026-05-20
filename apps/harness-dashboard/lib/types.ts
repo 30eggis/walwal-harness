@@ -257,6 +257,19 @@ export interface OperationsDashboard {
   envFiles: EnvFileSummary[];
 }
 
+export interface RuntimeSnapshot {
+  currentAgent: string | null;
+  agentStatus: string;
+  nextAgent: string | null;
+  updatedAt: string | null;
+  ownerPrompt: {
+    command: string;
+    summary: string;
+    receivedAt: string | null;
+    status: string;
+  } | null;
+}
+
 export interface HarnessSnapshot {
   version: string;
   ts: string;
@@ -275,6 +288,7 @@ export interface HarnessSnapshot {
   evalScores: EvalScores | null;
   errorBanner: ErrorBanner | null;
   dashboard: OperationsDashboard;
+  runtime: RuntimeSnapshot;
   missions: MissionDoc[];
   ownerHistory: OwnerPromptEntry[];
   gotchas: GotchaEntry[];

@@ -223,6 +223,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.17 | Dashboard: fix /submission and /hot-fix missions displaying as /goal; runtime strip shows live owner command in mission flow tab |
 | 7.1.16 | `migrate` now always fully replaces /goal, /submission, /hot-fix commands regardless of current state |
 | 7.1.15 | Dashboard: reset embedded View Doc state when the selected mission or document target changes |
 | 7.1.14 | Owner acceptance gate: Owner is final reviewer, not tester; dashboard org-node clicks initialize the detail pane |

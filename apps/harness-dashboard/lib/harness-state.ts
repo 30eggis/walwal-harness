@@ -33,6 +33,7 @@ import type {
   RoomId,
   RoomMetrics,
   RoomState,
+  RuntimeSnapshot,
   TrackStatus,
   WorkerDocEntry,
   WorkerSnapshot,
@@ -50,6 +51,13 @@ interface RawProgress {
   current_agent?: AgentId | null;
   next_agent?: AgentId | null;
   agent_status?: string;
+  updated_at?: string | null;
+  owner_prompt?: {
+    command?: string;
+    summary?: string;
+    received_at?: string | null;
+    status?: string;
+  } | null;
   pipeline?: Pipeline;
   failure?: { agent?: AgentId | null; message?: string | null; location?: string | null; retry_target?: AgentId | null } | null;
   meetings?: {
@@ -205,6 +213,13 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     evalScores: null,
     errorBanner: banner,
     dashboard: { workers: [], features: [], recentMeetings: [], opsHealth: [], envFiles: [] },
+    runtime: {
+      currentAgent: null,
+      agentStatus: "unknown",
+      nextAgent: null,
+      updatedAt: null,
+      ownerPrompt: null,
+    },
     missions: [],
     ownerHistory: [],
     gotchas: [],
@@ -953,7 +968,25 @@ function buildDashboard(rootDir: string, progress: RawProgress | null): Operatio
   };
 }
 
-function readMissions(rootDir: string, limit = 15): MissionDoc[] {
+function buildRuntime(progress: RawProgress | null): RuntimeSnapshot {
+  const ownerPrompt = progress?.owner_prompt
+    ? {
+        command: progress.owner_prompt.command ?? "input",
+        summary: progress.owner_prompt.summary ?? "",
+        receivedAt: progress.owner_prompt.received_at ?? null,
+        status: progress.owner_prompt.status ?? "unknown",
+      }
+    : null;
+  return {
+    currentAgent: progress?.current_agent ?? null,
+    agentStatus: progress?.agent_status ?? "unknown",
+    nextAgent: progress?.next_agent ?? null,
+    updatedAt: progress?.updated_at ?? null,
+    ownerPrompt,
+  };
+}
+
+function readMissions(rootDir: string, progress: RawProgress | null = null, limit = 15): MissionDoc[] {
   const docsDir = path.join(rootDir, ".harness", "documents");
   if (!existsSync(docsDir)) return [];
 
@@ -1050,6 +1083,19 @@ function readMissions(rootDir: string, limit = 15): MissionDoc[] {
     .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
     .slice(0, limit);
 
+  // When the CEO updates a goal directory in-place for a submission or hot-fix
+  // (instead of creating a submission-* or hotfix-* subdirectory), the most
+  // recently modified mission still has type "goal" from its directory name.
+  // Override it using owner_prompt.command so the display reflects the actual
+  // command the Owner issued, not just the directory prefix.
+  const cmd = progress?.owner_prompt?.command;
+  if (missions.length > 0 && (cmd === "submission" || cmd === "hot-fix")) {
+    const top = missions[0];
+    if (top.type === "goal") {
+      missions[0] = { ...top, type: cmd === "hot-fix" ? "hotfix" : "submission" };
+    }
+  }
+
   return missions;
 }
 
@@ -1132,7 +1178,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
           };
     const snapshot = emptySnapshot(banner, rootDir);
     snapshot.archive = buildArchive(rootDir);
-    snapshot.missions = readMissions(rootDir);
+    snapshot.missions = readMissions(rootDir, null);
     snapshot.ownerHistory = readOwnerHistory(rootDir);
     snapshot.gotchas = readGotchas(rootDir);
     return snapshot;
@@ -1183,7 +1229,8 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     evalScores,
     errorBanner: null,
     dashboard,
-    missions: readMissions(rootDir),
+    runtime: buildRuntime(progress),
+    missions: readMissions(rootDir, progress),
     ownerHistory: readOwnerHistory(rootDir),
     gotchas: readGotchas(rootDir),
   };

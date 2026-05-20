@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import type { MissionDoc, OwnerPromptEntry } from "@/lib/types";
+import type { MissionDoc, OwnerPromptEntry, RuntimeSnapshot } from "@/lib/types";
 import { MarkdownView } from "@/lib/markdown";
 
 type DocView = "overview" | "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops" | string;
@@ -8,6 +8,7 @@ type DocView = "overview" | "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops" | stri
 interface Props {
   mission: MissionDoc | null;
   ownerHistory: OwnerPromptEntry[];
+  runtime: RuntimeSnapshot;
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +223,53 @@ function WorkerCard({
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-export function MissionFlowTab({ mission, ownerHistory }: Props) {
+function RuntimeStrip({ runtime }: { runtime: RuntimeSnapshot }) {
+  const isActive = runtime.agentStatus === "running";
+  const command = runtime.ownerPrompt?.command ?? "input";
+  const summary = runtime.ownerPrompt?.summary ?? null;
+  return (
+    <div
+      data-testid="runtime-strip"
+      data-current-agent={runtime.currentAgent ?? ""}
+      data-agent-status={runtime.agentStatus}
+      className={`rounded border px-2.5 py-2 ${
+        isActive
+          ? "border-cyan-400/30 bg-cyan-400/10"
+          : runtime.agentStatus === "blocked" || runtime.agentStatus === "failed"
+          ? "border-rose-400/30 bg-rose-400/10"
+          : "border-gray-700/60 bg-black/20"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-gray-500">
+          live runtime
+        </span>
+        <StepChip role={runtime.currentAgent ?? "worker"} label={runtime.currentAgent ?? "none"} />
+        <span
+          className={`font-mono text-[9px] ${
+            isActive ? "text-cyan-300" : "text-gray-400"
+          }`}
+        >
+          {runtime.agentStatus}
+        </span>
+        {runtime.nextAgent && (
+          <span className="font-mono text-[9px] text-gray-500">
+            next: {runtime.nextAgent}
+          </span>
+        )}
+      </div>
+      {summary && (
+        <p className="mt-1.5 text-[10px] leading-relaxed text-gray-400 line-clamp-2">
+          <span className="font-mono text-gray-500">{command}</span>
+          <span className="text-gray-600"> · </span>
+          {summary}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function MissionFlowTab({ mission, ownerHistory, runtime }: Props) {
   const [docView, setDocView] = useState<DocView>("overview");
 
   useEffect(() => {
@@ -231,8 +278,11 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
 
   if (!mission) {
     return (
-      <div className="text-gray-500 text-xs">
-        No mission selected. Click a mission from the timeline below.
+      <div className="space-y-3">
+        <RuntimeStrip runtime={runtime} />
+        <div className="text-gray-500 text-xs">
+          No mission selected. Click a mission from the timeline below.
+        </div>
       </div>
     );
   }
@@ -253,6 +303,7 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
 
     return (
       <div className="space-y-3">
+        <RuntimeStrip runtime={runtime} />
         <button
           type="button"
           onClick={() => setDocView("overview")}
@@ -339,6 +390,7 @@ export function MissionFlowTab({ mission, ownerHistory }: Props) {
 
   return (
     <div className="space-y-3">
+      <RuntimeStrip runtime={runtime} />
       {/* Mission header */}
       <div>
         <div className="flex items-center gap-2 flex-wrap mb-1">

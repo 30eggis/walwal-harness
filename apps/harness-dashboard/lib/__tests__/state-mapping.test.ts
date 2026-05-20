@@ -15,6 +15,30 @@ describe("deriveMinifigState", () => {
     ).toBe("typing");
   });
 
+  it("maps v7 CEO alias to dispatcher and brainstormer", () => {
+    const progress = {
+      current_agent: "ceo",
+      agent_status: "running",
+    };
+    expect(deriveMinifigState("dispatcher", progress)).toBe("typing");
+    expect(deriveMinifigState("brainstormer", progress)).toBe("typing");
+  });
+
+  it("maps v7 CXX aliases to their dashboard departments", () => {
+    expect(
+      deriveMinifigState("generator-designer", {
+        current_agent: "cdo",
+        agent_status: "running",
+      })
+    ).toBe("typing");
+    expect(
+      deriveMinifigState("service-ops", {
+        next_agent: "ops",
+        agent_status: "pending",
+      })
+    ).toBe("queued");
+  });
+
   it("does not return typing when agent_status is not running", () => {
     expect(
       deriveMinifigState("generator-backend", {

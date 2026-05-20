@@ -1,11 +1,24 @@
 import type { AgentId, Dept, MinifigState } from "./types";
 
+const AGENT_ALIASES: Record<string, AgentId[]> = {
+  ceo: ["dispatcher", "brainstormer"],
+  dispatcher: ["dispatcher"],
+  brainstormer: ["brainstormer"],
+  coo: ["planner", "coo-developer", "documentationer"],
+  planner: ["planner"],
+  cdo: ["generator-designer"],
+  cto: ["cto", "conductor", "generator-backend", "generator-frontend", "generator-designer", "generator-devops"],
+  cqo: ["cqo", "evaluator-functional", "evaluator-visual", "evaluator-code-quality", "evaluator-architecture", "evaluator-security"],
+  ops: ["service-ops"],
+  "service-ops": ["service-ops"],
+};
+
 export interface ProgressSlice {
-  current_agent?: AgentId | null;
-  next_agent?: AgentId | null;
+  current_agent?: string | null;
+  next_agent?: string | null;
   agent_status?: string;
-  failure?: { agent?: AgentId | null; message?: string | null } | null;
-  meetings?: { active?: AgentId[] };
+  failure?: { agent?: string | null; message?: string | null } | null;
+  meetings?: { active?: string[] };
   service_ops?: {
     incident?: { open?: Array<{ id: string; dept?: string }> };
     monitor?: { stream_active?: boolean; stream_target?: string | null };
@@ -42,6 +55,13 @@ export function parseSpawnAgent(action: string | null | undefined): string | nul
   return m ? m[1].toLowerCase() : null;
 }
 
+function agentMatches(agentId: string, raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  const key = raw.toLowerCase();
+  if (key === agentId) return true;
+  return AGENT_ALIASES[key]?.includes(agentId as AgentId) ?? false;
+}
+
 function isAgentRunningTrack(
   agentId: string,
   conductor: ProgressSlice["conductor"]
@@ -49,7 +69,7 @@ function isAgentRunningTrack(
   const tracks = conductor?.tracks ?? [];
   return tracks.some(
     (t) =>
-      t.owner === agentId &&
+      agentMatches(agentId, t.owner) &&
       (t.status === "running" || t.status === "in_progress" || t.status === "active")
   );
 }
@@ -59,7 +79,7 @@ function isAgentQueuedTrack(
   conductor: ProgressSlice["conductor"]
 ): boolean {
   const tracks = conductor?.tracks ?? [];
-  return tracks.some((t) => t.owner === agentId && t.status === "pending");
+  return tracks.some((t) => agentMatches(agentId, t.owner) && t.status === "pending");
 }
 
 // Priority: red-alert > talking > typing > queued > idle.
@@ -76,18 +96,18 @@ export function deriveMinifigState(
   ctx: DeriveContext = {}
 ): MinifigState {
   if (!progress) return "idle";
-  if (progress.failure?.agent === agentId) return "red-alert";
+  if (agentMatches(agentId, progress.failure?.agent)) return "red-alert";
   if (ctx.dept && ctx.incidentDepts && ctx.incidentDepts.size > 0) {
     if (ctx.dept === "Operations" || ctx.incidentDepts.has(ctx.dept)) {
       return "red-alert";
     }
   }
-  const inMeeting = progress.meetings?.active?.includes(agentId) ?? false;
+  const inMeeting = progress.meetings?.active?.some((id) => agentMatches(agentId, id)) ?? false;
   if (inMeeting) return "talking";
 
   // Parallel-typing signals (any one of these means the agent is working).
   if (
-    progress.current_agent === agentId &&
+    agentMatches(agentId, progress.current_agent) &&
     progress.agent_status === "running"
   ) {
     return "typing";
@@ -95,7 +115,7 @@ export function deriveMinifigState(
   if (isAgentRunningTrack(agentId, progress.conductor)) {
     return "typing";
   }
-  if (parseSpawnAgent(progress.conductor?.current_action) === agentId) {
+  if (agentMatches(agentId, parseSpawnAgent(progress.conductor?.current_action))) {
     return "typing";
   }
   // G-006: service-ops co-spawned in monitor mode is actively streaming.
@@ -106,7 +126,7 @@ export function deriveMinifigState(
     return "typing";
   }
   if (
-    progress.next_agent === agentId &&
+    agentMatches(agentId, progress.next_agent) &&
     progress.agent_status !== "blocked" &&
     progress.agent_status !== "failed"
   ) {
