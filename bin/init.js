@@ -1204,8 +1204,11 @@ function detectMigrationNeeded() {
     progressLegacyRouting: false,
     configMissingCompanyMode: false,
     configLegacyRouting: false,
+    configRuntimeVerificationMissing: false,
     coreSkillsStale: false,
     hrResourcePoolStale: false,
+    harnessMdStale: false,
+    agentsMissingOpsVerificationRules: false,
     rosterCodexPathsMissing: false,
     resourceIndexCodexWordingMissing: false,
     memoryMissingSystemEntries: [],
@@ -1229,6 +1232,12 @@ function detectMigrationNeeded() {
     if (fs.existsSync(path.dirname(poolPath)) && (!fs.existsSync(poolPath) || fs.readFileSync(poolPath, 'utf8') !== srcBody)) {
       flags.hrResourcePoolStale = true;
     }
+  }
+
+  const harnessMdPath = path.join(HARNESS_DIR, 'HARNESS.md');
+  const harnessMdTplPath = path.join(PKG_ROOT, 'assets', 'templates', 'HARNESS.md');
+  if (fs.existsSync(harnessMdTplPath) && (!fs.existsSync(harnessMdPath) || fs.readFileSync(harnessMdPath, 'utf8') !== fs.readFileSync(harnessMdTplPath, 'utf8'))) {
+    flags.harnessMdStale = true;
   }
 
   // Gotcha entry-level diff: for each bundled gotcha file, compare entry IDs.
@@ -1295,12 +1304,28 @@ function detectMigrationNeeded() {
     try {
       const c = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       if (!c.company_mode || c.mode_selection) flags.configMissingCompanyMode = true;
+      if (!c.runtime?.verification?.watch_during_cqo || !c.runtime?.verification?.require_ops_evidence_for_pass) {
+        flags.configRuntimeVerificationMissing = true;
+      }
       if (
         c.behavior?.auto_route_dispatcher !== undefined ||
         c.behavior?.auto_route_dispatcher_description ||
         c.company_mode?.owner === 'conductor' ||
         c.agents?.dispatcher?.skill === 'harness-dispatcher'
       ) flags.configLegacyRouting = true;
+    } catch {}
+  }
+  const agentsPath = path.join(PROJECT_ROOT, 'AGENTS.md');
+  if (fs.existsSync(agentsPath)) {
+    try {
+      const agentsBody = fs.readFileSync(agentsPath, 'utf8');
+      if (
+        !agentsBody.includes('OPS watches CQO verification') &&
+        !agentsBody.includes('OPS는 CQO 검수 중 관제한다') &&
+        !agentsBody.includes('runtime.verification')
+      ) {
+        flags.agentsMissingOpsVerificationRules = true;
+      }
     } catch {}
   }
   if (fs.existsSync(rosterPath)) {
@@ -1410,8 +1435,19 @@ function showMigrationProposal(flags) {
     console.log('  • config.json: company_mode 섹션 동기화 가능');
     console.log('    Owner /goal, /submission, /hot-fix → CEO/CXX/worker 흐름으로 고정합니다.');
   }
+  if (flags.configRuntimeVerificationMissing) {
+    console.log('  • config.json: runtime.verification 섹션 추가 가능');
+    console.log('    CQO 검수 중 OPS runtime watch 와 PASS 차단 조건을 설정합니다.');
+  }
   if (flags.configLegacyRouting) {
     console.log('  • config.json: legacy dispatcher/conductor wording → v7 CEO/CXX wording');
+  }
+  if (flags.harnessMdStale) {
+    console.log('  • .harness/HARNESS.md: 최신 패키지 reference 문서로 refresh 가능');
+  }
+  if (flags.agentsMissingOpsVerificationRules) {
+    console.log('  • AGENTS.md: OPS/CQO 검수관제 시스템 규칙 append 가능');
+    console.log('    사용자 규칙은 보존하고 하네스 migration block 만 끝에 추가합니다.');
   }
   if (flags.coreSkillsStale) {
     console.log('  • .claude/.codex skills: harness-* core skills 최신 패키지로 refresh');
@@ -1475,8 +1511,11 @@ function runMigrate(opts = {}) {
     !flags.progressLegacyRouting &&
     !flags.configMissingCompanyMode &&
     !flags.configLegacyRouting &&
+    !flags.configRuntimeVerificationMissing &&
     !flags.coreSkillsStale &&
     !flags.hrResourcePoolStale &&
+    !flags.harnessMdStale &&
+    !flags.agentsMissingOpsVerificationRules &&
     !flags.rosterCodexPathsMissing &&
     !flags.resourceIndexCodexWordingMissing &&
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
@@ -1526,29 +1565,36 @@ function runMigrate(opts = {}) {
     }
   }
 
-  // 2. config.json — inject company_mode from template if missing
+  // 2. config.json — inject company_mode/runtime verification from template if missing
   const configPath = path.join(HARNESS_DIR, 'config.json');
   const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
-  if ((flags.configMissingCompanyMode || flags.configLegacyRouting) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
+  if ((flags.configMissingCompanyMode || flags.configLegacyRouting || flags.configRuntimeVerificationMissing) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
     const original = fs.readFileSync(configPath, 'utf8');
     const c = JSON.parse(original);
     const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
     if (tpl.company_mode) {
-      c.company_mode = {
-        ...tpl.company_mode,
-        comment: 'v7 — 회사모드는 CEO/CXX/worker 문서 흐름으로 운영된다.',
-        owner: 'ceo',
-      };
-      c.harness = tpl.harness || c.harness;
-      c.agents = tpl.agents || c.agents;
-      c.flow = tpl.flow || c.flow;
-      c.behavior = c.behavior || {};
-      c.behavior.auto_route_ceo = c.behavior.auto_route_ceo ?? c.behavior.auto_route_dispatcher ?? true;
-      c.behavior.auto_route_ceo_description = 'true 이면 /goal, /submission, /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다.';
-      delete c.behavior.auto_route_dispatcher;
-      delete c.behavior.auto_route_dispatcher_description;
-      delete c.mode_selection;
-      log('  config.json: v7 CEO/CXX routing 섹션 동기화');
+      if (flags.configMissingCompanyMode || flags.configLegacyRouting) {
+        c.company_mode = {
+          ...tpl.company_mode,
+          comment: 'v7 — 회사모드는 CEO/CXX/worker 문서 흐름으로 운영된다.',
+          owner: 'ceo',
+        };
+        c.harness = tpl.harness || c.harness;
+        c.agents = tpl.agents || c.agents;
+        c.flow = tpl.flow || c.flow;
+        c.behavior = c.behavior || {};
+        c.behavior.auto_route_ceo = c.behavior.auto_route_ceo ?? c.behavior.auto_route_dispatcher ?? true;
+        c.behavior.auto_route_ceo_description = 'true 이면 /goal, /submission, /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다.';
+        delete c.behavior.auto_route_dispatcher;
+        delete c.behavior.auto_route_dispatcher_description;
+        delete c.mode_selection;
+        log('  config.json: v7 CEO/CXX routing 섹션 동기화');
+      }
+      if (flags.configRuntimeVerificationMissing && tpl.runtime?.verification) {
+        c.runtime = c.runtime || {};
+        c.runtime.verification = deepMerge(tpl.runtime.verification, c.runtime.verification || {});
+        log('  config.json: runtime.verification 섹션 동기화');
+      }
       if (!dryRun) {
         fs.writeFileSync(path.join(backupDir, 'config.json'), original);
         fs.writeFileSync(configPath, JSON.stringify(c, null, 2) + '\n');
@@ -1720,7 +1766,50 @@ function runMigrate(opts = {}) {
     }
   }
 
-  // 5. Bundle version stamp — record which package version was last applied.
+  // 5. Refresh package-owned reference doc. This is not user-authored mission state.
+  if (flags.harnessMdStale) {
+    const harnessMdSrc = path.join(PKG_ROOT, 'assets', 'templates', 'HARNESS.md');
+    const harnessMdDest = path.join(HARNESS_DIR, 'HARNESS.md');
+    if (fs.existsSync(harnessMdSrc)) {
+      log('  .harness/HARNESS.md: 최신 reference 문서로 refresh');
+      if (!dryRun) {
+        if (fs.existsSync(harnessMdDest)) {
+          fs.writeFileSync(path.join(backupDir, 'HARNESS.md'), fs.readFileSync(harnessMdDest, 'utf8'));
+        }
+        copyFile(harnessMdSrc, harnessMdDest);
+      }
+    }
+  }
+
+  // 6. AGENTS.md is user/project-facing, so never replace it during migrate.
+  //    Append only a small system migration block when the OPS verification
+  //    rules are absent.
+  if (flags.agentsMissingOpsVerificationRules) {
+    const agentsPath = path.join(PROJECT_ROOT, 'AGENTS.md');
+    if (fs.existsSync(agentsPath)) {
+      const original = fs.readFileSync(agentsPath, 'utf8');
+      const block = [
+        '',
+        '---',
+        '',
+        '## walwal-harness Migration Rules — v7.1.19',
+        '',
+        '- OPS watches CQO verification for runnable local, preview, Docker, or production-like environments.',
+        '- CQO PASS is blocked when OPS reports an open incident, missing runtime mapping, missing required log, service down, health mismatch, or unmonitored tested service.',
+        '- Production incidents are company events routed by CEO to CTO/CQO/OPS: CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence plus close criteria.',
+        '- `ceo.md`, every `{cxx}.md`, and every worker report must keep the English `## Implementation Notes` section in the same file. Do not create a sidecar notes file.',
+        ''
+      ].join('\n');
+      log('  AGENTS.md: OPS/CQO 검수관제 시스템 규칙 append');
+      if (!dryRun) {
+        fs.writeFileSync(path.join(backupDir, 'AGENTS.md'), original);
+        const sep = original.endsWith('\n') ? '' : '\n';
+        fs.writeFileSync(agentsPath, original + sep + block);
+      }
+    }
+  }
+
+  // 7. Bundle version stamp — record which package version was last applied.
   if (flags.bundleVersionStale) {
     const { current, installed } = flags.bundleVersionStale;
     log(`  .bundle-version: ${installed ?? '(none)'} → ${current}`);

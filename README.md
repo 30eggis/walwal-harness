@@ -223,6 +223,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.19 | `migrate` now carries OPS verification rules into existing installs: runtime.verification merge, HARNESS refresh, and AGENTS migration block |
 | 7.1.18 | OPS watches CQO runnable verification and production incidents; Implementation Notes stay in the same role/worker report |
 | 7.1.17 | Dashboard: fix /submission and /hot-fix missions displaying as /goal; runtime strip shows live owner command in mission flow tab |
 | 7.1.16 | `migrate` now always fully replaces /goal, /submission, /hot-fix commands regardless of current state |
