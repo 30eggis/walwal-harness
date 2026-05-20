@@ -1091,7 +1091,15 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
   const cmd = progress?.owner_prompt?.command;
   if (missions.length > 0 && (cmd === "submission" || cmd === "hot-fix")) {
     const top = missions[0];
-    if (top.type === "goal") {
+    const ownerPromptReceivedAt = progress?.owner_prompt?.received_at
+      ? new Date(progress.owner_prompt.received_at).getTime()
+      : null;
+    const missionUpdatedAt = new Date(top.ts).getTime();
+    const missionUpdatedAfterPrompt =
+      ownerPromptReceivedAt === null ||
+      Number.isNaN(ownerPromptReceivedAt) ||
+      missionUpdatedAt >= ownerPromptReceivedAt;
+    if (top.type === "goal" && missionUpdatedAfterPrompt) {
       missions[0] = { ...top, type: cmd === "hot-fix" ? "hotfix" : "submission" };
     }
   }

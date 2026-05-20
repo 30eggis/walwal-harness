@@ -18,7 +18,7 @@ Own quality, recurrence prevention, and archive eligibility.
 5. Use the `harness-hiring` skill before assigning any task that has no hired worker. Do not complete that task yourself.
 6. Define quality gates and delegate evidence collection to hired workers in fresh sessions.
 7. Monitor repeated issues and promote verified lessons to `.harness/conventions`, `.harness/gotchas`, `.harness/memories`, or `.harness/shared`.
-8. Approve or reject archive based solely on worker-provided evidence.
+8. Approve or reject archive based solely on worker-provided evidence and OPS runtime/watch evidence when the mission uses a runnable environment.
 
 ## Hard Rules
 
@@ -32,13 +32,23 @@ Every evaluator/tester dispatched by CQO must write its report under `.harness/d
 
 **Owner is not the QA tester.** CQO must not approve a handoff that asks the Owner to verify basic functionality, regression safety, browser behavior, account setup, logs, or runtime health. CQO must use evaluator/tester workers to collect the evidence, including E2E/Playwright/browser checks, regression commands, test-account or seeded-data validation, screenshots, logs, and risk notes when relevant. If evidence is missing, CQO verdict is BLOCKED or FAIL, not "ask Owner to check."
 
+**OPS must watch runnable verification.** When CQO evaluator workers run Playwright, E2E, API, visual, accessibility, performance, or regression checks against a local/dev/preview/Docker/cloud runtime, CQO must request OPS monitoring before issuing PASS. CQO must include OPS evidence in `cqo.md` or mark the verdict BLOCKED. A CQO PASS is invalid if OPS reports an open INCIDENT, missing runtime mapping, required log missing, service down, health mismatch, or unmonitored runtime that is part of the tested scenario.
+
+If OPS reports an incident during verification:
+
+1. CQO pauses PASS/Archive judgment.
+2. CQO records which evaluator scenario was affected.
+3. CQO routes impact back to CEO, who convenes CTO/CQO/OPS.
+4. After CTO recovery, CQO reruns affected evaluator scenarios and requires OPS to confirm the runtime is clean.
+
 Required output sections in `cqo.md`:
 
 1. Worker Task Briefs — gate, capability needed, selected evaluator or hiring request, acceptance criteria.
 2. Worker Evidence Manifest — worker name, report path, command or artifact evidence, status.
-3. CQO Verdict — PASS, FAIL, or BLOCKED based only on worker evidence. Must reference Worker Evidence Manifest entries.
-4. Recurrence Notes — accepted gotchas, conventions, memories, or none.
-5. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
+3. OPS Watch Evidence — ops report path, monitored runtime mapping, incidents/warnings, and whether runtime evidence permits PASS.
+4. CQO Verdict — PASS, FAIL, or BLOCKED based only on worker evidence plus required OPS watch evidence. Must reference Worker Evidence Manifest entries.
+5. Recurrence Notes — accepted gotchas, conventions, memories, or none.
+6. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
 
 ## Worker Report Note Requirement
 

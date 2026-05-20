@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { readHarnessState } from "../harness-state";
@@ -190,5 +190,61 @@ describe("readHarnessState", () => {
 
     const snap = readHarnessState(dir);
     expect(snap.archive.all.find((e) => e.dir === "sprint-1")?.result).toBe("PASS");
+  });
+
+  it("marks in-place goal document updates as submission only after the owner prompt", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const missionDir = path.join(harnessDir, "documents", "goal-1-auth-system");
+    mkdirSync(missionDir, { recursive: true });
+    writeFileSync(path.join(missionDir, "ceo.md"), "# Auth system\n");
+    const beforePrompt = new Date("2026-05-20T01:00:00Z");
+    utimesSync(missionDir, beforePrompt, beforePrompt);
+
+    writeFileSync(
+      path.join(harnessDir, "progress.json"),
+      JSON.stringify({
+        owner_prompt: {
+          command: "submission",
+          summary: "/submission add SSO",
+          received_at: "2026-05-20T01:05:00Z",
+          status: "routing",
+        },
+      })
+    );
+
+    expect(readHarnessState(dir).missions[0].type).toBe("goal");
+
+    const afterPrompt = new Date("2026-05-20T01:06:00Z");
+    utimesSync(missionDir, afterPrompt, afterPrompt);
+
+    expect(readHarnessState(dir).missions[0].type).toBe("submission");
+  });
+
+  it("keeps explicit submission subdirectories as submission without relabeling the parent goal", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const goalDir = path.join(harnessDir, "documents", "goal-1-auth-system");
+    const submissionDir = path.join(goalDir, "submission-1-add-sso");
+    mkdirSync(submissionDir, { recursive: true });
+    writeFileSync(path.join(goalDir, "ceo.md"), "# Auth system\n");
+    writeFileSync(path.join(submissionDir, "ceo.md"), "# Add SSO\n");
+    utimesSync(goalDir, new Date("2026-05-20T01:00:00Z"), new Date("2026-05-20T01:00:00Z"));
+    utimesSync(submissionDir, new Date("2026-05-20T01:06:00Z"), new Date("2026-05-20T01:06:00Z"));
+
+    writeFileSync(
+      path.join(harnessDir, "progress.json"),
+      JSON.stringify({
+        owner_prompt: {
+          command: "submission",
+          summary: "/submission add SSO",
+          received_at: "2026-05-20T01:05:00Z",
+          status: "routing",
+        },
+      })
+    );
+
+    const missions = readHarnessState(dir).missions;
+    expect(missions[0].missionId).toBe("goal-1-auth-system/submission-1-add-sso");
+    expect(missions[0].type).toBe("submission");
+    expect(missions.find((mission) => mission.missionId === "goal-1-auth-system")?.type).toBe("goal");
   });
 });

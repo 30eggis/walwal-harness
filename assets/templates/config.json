@@ -213,6 +213,20 @@
         }
       ]
     },
+    "verification": {
+      "comment": "CQO evaluator 가 Playwright/E2E/API/visual/performance/regression 검수를 수행하는 동안 OPS 가 관제할 runtime mapping. 기본값은 build/production mapping 을 재사용하되, 검수 전 CTO/CQO/OPS 가 실제 command/service, port, health_path, log_path 를 확정해야 한다.",
+      "watch_during_cqo": true,
+      "require_ops_evidence_for_pass": true,
+      "reuse": "build_or_production",
+      "block_pass_on": [
+        "open_incident",
+        "missing_runtime_mapping",
+        "missing_required_log",
+        "service_down",
+        "health_mismatch",
+        "unmonitored_tested_service"
+      ]
+    },
     "play": {
       "comment": "/play-harness 가 실행하는 play mode command. release mode 와 공존할 수 없으며, scripts/play.sh 가 상호 배타 상태를 강제한다.",
       "cwd": ".",

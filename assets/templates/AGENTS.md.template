@@ -61,7 +61,7 @@ The Owner is the final acceptance reviewer, not a tester, QA worker, debugger, o
 - Do not hand the Owner broken, unverified, or partially runnable software with "please check this" as the next action.
 - Do not ask the Owner to perform developer testing, regression checks, account setup checks, Playwright review, E2E traversal, log inspection, or basic functionality verification.
 - CEO and CXX must plan and execute self-verification through workers: unit tests, E2E tests, Playwright/browser checks, test accounts, seeded data, build/run checks, logs, and documented evidence.
-- Owner inspection happens only after CEO has collected CXX completion records, CTO implementation evidence, CQO evaluator evidence, and any OPS runtime evidence needed to show the goal is genuinely complete.
+- Owner inspection happens only after CEO has collected CXX completion records, CTO implementation evidence, CQO evaluator evidence, and any OPS verification-watch/runtime evidence needed to show the goal is genuinely complete.
 - A final Owner report may ask for acceptance review, product judgment, or business approval. It must not ask the Owner to discover whether the software works.
 
 ---
@@ -74,6 +74,7 @@ The Owner is the final acceptance reviewer, not a tester, QA worker, debugger, o
 2. CEO sends scoped questions to relevant CXX only.
 3. Each CXX hires workers, collects reports, records decisions in `{cxx}.md`.
 4. CEO aggregates CXX outputs, routes to next CXX or reports to Owner.
+5. If the mission uses a runnable local, preview, Docker, or production-like environment, OPS watches the runtime while CQO evaluator workers run Playwright/E2E/API/visual/performance/regression checks.
 
 **Complete when:** `.harness/documents/goal-{index}-{name}/ceo.md` contains a final Owner report.
 
@@ -131,8 +132,10 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 8. **No CXX self-execution** — CXX agents coordinate and manage only. A CXX that produces deliverables without matching worker records has violated its scope. CEO must reject such reports.
 9. **No verdict without worker evidence** — CQO cannot issue ACCEPTED/REJECTED without a Worker Evidence Manifest referencing at least one evaluator worker. Self-inspection by CQO is not valid evidence.
 10. **Hierarchical worker ownership** — Hired workers are installed under `.claude/skills/{owning-cxx}/{worker}/` and `.codex/skills/{owning-cxx}/{worker}/`; mission worker reports live under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`. Flat `{mission}/workers/` reports are legacy and signal an ownership violation unless explicitly migrated.
-11. **Implementation Notes required** — `ceo.md`, every `{cxx}.md`, and every worker report must end with an English `## Implementation Notes` section containing `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. Use `None` for empty subsections.
+11. **Implementation Notes required** — `ceo.md`, every `{cxx}.md`, and every worker report must end with one English `## Implementation Notes` section containing `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. Use `None` for empty subsections. Do not create a separate sidecar notes file; the notes belong at the bottom of the same role or worker report that produced the decision/evidence.
 12. **Owner is final acceptance only** — Owner is not a tester or QA substitute. CEO/CXX must not report "done, please check" until worker-backed verification proves the goal can be completed. Use unit tests, E2E, Playwright, test accounts, seeded data, build/run checks, logs, and CQO evidence before requesting Owner acceptance.
+13. **OPS watches CQO verification** — For runnable products, CQO PASS is invalid unless OPS has monitored the verification runtime or documented why OPS watch is not applicable. Open OPS incidents, missing runtime mapping, required log gaps, service down, health mismatch, or an unmonitored tested service block Owner acceptance.
+14. **Production incidents are company events** — After launch, user-impacting OPS signals route through CEO to CTO/CQO/OPS. CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence plus close criteria.
 
 ---
 

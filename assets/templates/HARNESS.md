@@ -109,4 +109,4 @@ Flat `.harness/documents/{mission}/workers/` reports are legacy. New worker evid
 - None
 ```
 
-The notes must be written in English. Use `None` when a subsection has no entries.
+The notes must be written in English. Use `None` when a subsection has no entries. Do not create a separate sidecar notes file; keep the notes at the bottom of the same role or worker report that produced the decision/evidence.

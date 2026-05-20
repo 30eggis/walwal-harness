@@ -113,7 +113,7 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 - 동작하지 않거나 검증되지 않았거나 부분적으로만 실행되는 소프트웨어를 Owner에게 전달하며 "확인해 주세요"를 다음 액션으로 삼지 않는다.
 - Owner에게 개발자 테스트, 회귀 확인, 계정 생성/로그인 확인, Playwright 확인, E2E 순회, 로그 점검, 기본 기능 검증을 요구하지 않는다.
 - CEO와 CXX는 worker를 통해 자체 검증을 계획하고 실행한다: unit test, E2E test, Playwright/browser check, test account, seed data, build/run check, log evidence.
-- Owner 검수는 CEO가 CXX 완료 기록, CTO 구현 증거, CQO evaluator 증거, 필요한 OPS 런타임 증거를 모아 goal이 실제로 완수되었음을 보인 뒤에만 요청한다.
+- Owner 검수는 CEO가 CXX 완료 기록, CTO 구현 증거, CQO evaluator 증거, 필요한 OPS 검수관제/런타임 증거를 모아 goal이 실제로 완수되었음을 보인 뒤에만 요청한다.
 - 최종 Owner 보고는 acceptance review, 제품 판단, 비즈니스 승인을 요청할 수 있다. 소프트웨어가 동작하는지 발견해 달라고 요청해서는 안 된다.
 
 ## 8. 미션 플로우
@@ -124,6 +124,7 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 2. CEO가 관련 CXX에게만 범위를 한정한 질문을 전달한다.
 3. 각 CXX가 worker를 고용하고, 위임하고, 결과를 수집하여 `{cxx}.md`에 기록한다.
 4. CEO가 CXX 산출물을 종합하여 다음 CXX에 라우팅하거나 Owner에게 보고한다.
+5. 실행 가능한 local, preview, Docker, production-like 환경이 포함된 mission이면, CQO evaluator worker가 Playwright/E2E/API/visual/performance/regression 검수를 수행하는 동안 OPS가 해당 runtime을 관제한다.
 
 **완료 기준:** `.harness/documents/goal-{index}-{name}/ceo.md`에 최종 Owner 보고가 존재한다.
 
@@ -174,6 +175,9 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 5. **gotcha 등록 생략 금지** — 모든 hot-fix는 `.harness/gotchas/` 또는 `.harness/conventions/`에 최소 하나의 항목을 만든다.
 6. **미션 중 이 파일 편집 금지** — AGENTS.md를 수정하려면 별도 `/goal`을 제출한다.
 7. **Owner는 최종 검수만 수행** — Owner는 tester나 QA 대체자가 아니다. CEO/CXX는 worker-backed verification으로 goal 완료 가능성을 증명하기 전까지 "완료했습니다, 확인해 주세요"라고 보고하지 않는다.
+8. **OPS는 CQO 검수 중 관제한다** — 실행 가능한 제품에서 CQO PASS는 OPS가 검수 runtime을 관제했거나 OPS watch가 불필요한 이유를 기록했을 때만 유효하다. 열린 OPS incident, runtime mapping 누락, 필수 로그 누락, service down, health mismatch, 검수 대상 service 미관제는 Owner acceptance를 막는다.
+9. **Production incident는 회사 이벤트다** — 오픈 후 사용자 영향 OPS signal은 CEO를 통해 CTO/CQO/OPS로 라우팅된다. CTO는 복구, CQO는 회귀 검증, OPS는 증거와 close criteria를 책임진다.
+10. **Implementation Notes는 같은 보고서 하단에 작성** — `ceo.md`, 모든 `{cxx}.md`, 모든 worker report는 하나의 English `## Implementation Notes` 섹션으로 끝나야 한다. 별도 sidecar notes 파일을 만들지 않는다. 결정/증거를 만든 동일한 role 또는 worker report 하단에 `Design Decisions`, `Deviations`, `Tradeoffs`, `Open Questions`를 작성하고 빈 항목은 `None`을 사용한다.
 
 ---
 

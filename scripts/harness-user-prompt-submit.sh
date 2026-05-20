@@ -146,7 +146,7 @@ ${CONTEXT_WARNING}
 ## Route
 - pipeline=none/init → harness-ceo 스킬로 Owner /goal, /submission, /hot-fix를 접수하고 mission 문서를 생성
 - 기본 경로는 v7 CXX 회사 루프다: CEO -> COO/CDO/CTO/CQO/OPS -> harness-resource-manager -> harness-hiring -> hired workers -> CXX review -> CEO report
-- CXX는 직접 전문 산출물을 만들지 않고 worker report를 `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`에 남겨야 한다
+- CXX는 직접 전문 산출물을 만들지 않고 worker report를 \`.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/\`에 남겨야 한다
 - Owner에게 "계속 진행", "진행할까요?", "다음 명령을 입력하세요"를 요구하지 않는다. GOAL이 있고 escalation이 아니면 즉시 next_agent/current_agent 업무를 수행한다
 - Owner 입력은 목표 변경·사고·결과 확인용이지 회사 진행을 펌프하는 신호가 아니다
 - CEO는 필요한 CXX만 호출하고, CXX는 resource-manager/hiring 없이 worker 업무를 수행하지 않는다

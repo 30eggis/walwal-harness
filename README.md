@@ -105,7 +105,7 @@ Owner /submission → CEO → [relevant CXX] → [workers] → [convention updat
 | 7 | No CXX self-execution — deliverables without matching worker records are rejected |
 | 8 | No verdict without worker evidence — CQO self-inspection is not valid |
 | 9 | Hierarchical worker ownership — worker reports live under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/` |
-| 10 | Implementation Notes required — `ceo.md`, every `{cxx}.md`, and every worker report must end with an English `## Implementation Notes` section |
+| 10 | Implementation Notes required — `ceo.md`, every `{cxx}.md`, and every worker report must end with one English `## Implementation Notes` section in the same file |
 
 ### Implementation Notes Format
 
@@ -127,7 +127,7 @@ Every `ceo.md`, `{cxx}.md`, and worker report must end with:
 - What still needs Owner or CXX confirmation
 ```
 
-Use `None` when a subsection has no entries. This section is mandatory even for small or emergency work. CEO must reject any CXX report that omits it. CTO and CQO must not accept worker output that omits it.
+Use `None` when a subsection has no entries. This section is mandatory even for small or emergency work. Do not create a separate sidecar notes file; the notes belong at the bottom of the same role or worker report that produced the decision/evidence. CEO must reject any CXX report that omits it. CTO and CQO must not accept worker output that omits it.
 
 ---
 
@@ -223,6 +223,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.18 | OPS watches CQO runnable verification and production incidents; Implementation Notes stay in the same role/worker report |
 | 7.1.17 | Dashboard: fix /submission and /hot-fix missions displaying as /goal; runtime strip shows live owner command in mission flow tab |
 | 7.1.16 | `migrate` now always fully replaces /goal, /submission, /hot-fix commands regardless of current state |
 | 7.1.15 | Dashboard: reset embedded View Doc state when the selected mission or document target changes |
