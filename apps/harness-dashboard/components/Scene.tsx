@@ -27,7 +27,6 @@ interface SceneProps {
 
 export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const { snapshot, connectionState } = useHarnessStream(initial);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("mission-flow");
   const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
   const [selectedNode, setSelectedNode] = useState<OrgNodeDef | null>(null);
@@ -38,7 +37,6 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     setSelectedAgent(a);
     setSelectedNode(null);
     setDrawerTab("logs");
-    setDrawerOpen(true);
   };
 
   const handleNodeClick = (node: OrgNodeDef) => {
@@ -55,7 +53,6 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     } else {
       setDrawerTab("mission-flow");
     }
-    setDrawerOpen(true);
   };
 
   const handleMissionClick = (mission: MissionDoc) => {
@@ -63,7 +60,6 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     setSelectedNode(null);
     setSelectedAgent(null);
     setDrawerTab("mission-flow");
-    setDrawerOpen(true);
   };
 
   const drawerTitle =
@@ -83,51 +79,110 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       {snapshot.escalations.length > 0 && (
         <EscalationStrip escalations={snapshot.escalations} />
       )}
-      <div className="min-w-0">
-        <section className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-cyan-300/80">
-                Company Structure
-              </p>
-              <h1 className="mt-1 text-2xl font-semibold text-gray-100">
-                {snapshot.projectName || "walwal-harness"} · Organization
-              </h1>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+        <div className="min-w-0">
+          <section className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-cyan-300/80">
+                  Company Structure
+                </p>
+                <h1 className="mt-1 text-2xl font-semibold text-gray-100">
+                  {snapshot.projectName || "walwal-harness"} · Organization
+                </h1>
+              </div>
+              <ActivityIndicator snapshot={snapshot} connectionState={connectionState} />
             </div>
-            <ActivityIndicator snapshot={snapshot} connectionState={connectionState} />
-          </div>
-          <div
-            data-testid="brick-office-stage"
-            className="w-full overflow-hidden rounded-md border border-gray-700/80 bg-[#12151b] shadow-2xl"
-          >
-            <div className="pointer-events-none flex items-center justify-between border-b border-white/10 bg-black/30 px-4 py-2 font-mono text-[10px] text-gray-300 backdrop-blur">
-              <span>Owner → CEO → CXX → Workers</span>
-              <span>
-                {snapshot.missions?.[0]?.missionId ?? "no active mission"}
-                {snapshot.missions?.[0]?.cxxPresent.length
-                  ? ` · ${snapshot.missions[0].cxxPresent.join(" / ")}`
-                  : ""}
-              </span>
+            <div
+              data-testid="brick-office-stage"
+              className="w-full overflow-x-auto rounded-md border border-gray-700/80 bg-[#12151b] shadow-2xl"
+            >
+              <div className="pointer-events-none flex items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-4 py-2 font-mono text-[10px] text-gray-300 backdrop-blur">
+                <span>Owner → CEO → CXX → Workers</span>
+                <span className="truncate">
+                  {snapshot.missions?.[0]?.missionId ?? "no active mission"}
+                  {snapshot.missions?.[0]?.cxxPresent.length
+                    ? ` · ${snapshot.missions[0].cxxPresent.join(" / ")}`
+                    : ""}
+                </span>
+              </div>
+              <OrgTree
+                snapshot={snapshot}
+                activeNodeId={selectedNode?.id ?? null}
+                onNodeClick={handleNodeClick}
+              />
             </div>
-            <OrgTree
-              snapshot={snapshot}
-              activeNodeId={selectedNode?.id ?? null}
-              onNodeClick={handleNodeClick}
-            />
-          </div>
-        </section>
+          </section>
 
-        <section className="mt-4">
-          <div className="mb-2">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">Mission History</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">goal · submission · hot-fix 명령별 파생 작업 흐름</p>
-          </div>
-          <MissionTimeline
-            missions={snapshot.missions ?? []}
-            activeMissionId={selectedMission?.missionId ?? null}
-            onMissionClick={handleMissionClick}
-          />
-        </section>
+          <section className="mt-4">
+            <div className="mb-2">
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">Mission History</p>
+              <p className="text-[11px] text-gray-500 mt-0.5">goal · submission · hot-fix 명령별 파생 작업 흐름</p>
+            </div>
+            <MissionTimeline
+              missions={snapshot.missions ?? []}
+              activeMissionId={selectedMission?.missionId ?? null}
+              onMissionClick={handleMissionClick}
+            />
+          </section>
+        </div>
+
+        <div className="min-w-0">
+          <Drawer
+            mode="inline"
+            open={true}
+            tab={drawerTab}
+            title={drawerTitle}
+            onClose={() => undefined}
+            onTabChange={setDrawerTab}
+          >
+            {drawerTab === "mission-flow" && (
+              <MissionFlowTab
+                mission={selectedMission ?? snapshot.missions?.[0] ?? null}
+                ownerHistory={snapshot.ownerHistory ?? []}
+              />
+            )}
+            {drawerTab === "history" && (
+              <OwnerHistoryTab
+                ownerHistory={snapshot.ownerHistory ?? []}
+                mission={selectedMission ?? snapshot.missions?.[0] ?? null}
+              />
+            )}
+            {drawerTab === "gotchas" && (
+              <GotchasTab gotchas={snapshot.gotchas ?? []} />
+            )}
+            {drawerTab === "mission-doc" && selectedNode && (
+              <MissionDocTab
+                missions={snapshot.missions ?? []}
+                role={
+                  selectedNode.role === "owner"
+                    ? "ceo"
+                    : (selectedNode.role as "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops")
+                }
+                fromLabel={selectedNode.role === "ceo" ? "Owner" : "CEO"}
+                toLabel={
+                  selectedNode.role === "cto"
+                    ? "Workers"
+                    : selectedNode.role === "cqo"
+                    ? "Owner Report"
+                    : "—"
+                }
+              />
+            )}
+            {drawerTab === "logs" && selectedNode && (
+              <AgentLogTab agentId={selectedNode.agentIds[0] ?? selectedNode.id} />
+            )}
+            {drawerTab === "logs" && selectedAgent && !selectedNode && (
+              <AgentLogTab agentId={selectedAgent.id} />
+            )}
+            {drawerTab === "logs" && !selectedNode && !selectedAgent && (
+              <div className="text-gray-500 text-xs">Select a node to view logs.</div>
+            )}
+            {drawerTab === "mission-flow" && !selectedMission && !snapshot.missions?.length && (
+              <div className="text-gray-500 text-xs">No missions found in .harness/documents/</div>
+            )}
+          </Drawer>
+        </div>
       </div>
 
       {/* Hidden DOM index for E2E + a11y */}
@@ -153,60 +208,6 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
           </li>
         ))}
       </ul>
-
-      <Drawer
-        open={drawerOpen}
-        tab={drawerTab}
-        title={drawerTitle}
-        onClose={() => setDrawerOpen(false)}
-        onTabChange={setDrawerTab}
-      >
-        {drawerTab === "mission-flow" && (
-          <MissionFlowTab
-            mission={selectedMission ?? snapshot.missions?.[0] ?? null}
-            ownerHistory={snapshot.ownerHistory ?? []}
-          />
-        )}
-        {drawerTab === "history" && (
-          <OwnerHistoryTab
-            ownerHistory={snapshot.ownerHistory ?? []}
-            mission={selectedMission ?? snapshot.missions?.[0] ?? null}
-          />
-        )}
-        {drawerTab === "gotchas" && (
-          <GotchasTab gotchas={snapshot.gotchas ?? []} />
-        )}
-        {drawerTab === "mission-doc" && selectedNode && (
-          <MissionDocTab
-            missions={snapshot.missions ?? []}
-            role={
-              selectedNode.role === "owner"
-                ? "ceo"
-                : (selectedNode.role as "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops")
-            }
-            fromLabel={selectedNode.role === "ceo" ? "Owner" : "CEO"}
-            toLabel={
-              selectedNode.role === "cto"
-                ? "Workers"
-                : selectedNode.role === "cqo"
-                ? "Owner Report"
-                : "—"
-            }
-          />
-        )}
-        {drawerTab === "logs" && selectedNode && (
-          <AgentLogTab agentId={selectedNode.agentIds[0] ?? selectedNode.id} />
-        )}
-        {drawerTab === "logs" && selectedAgent && !selectedNode && (
-          <AgentLogTab agentId={selectedAgent.id} />
-        )}
-        {drawerTab === "logs" && !selectedNode && !selectedAgent && (
-          <div className="text-gray-500 text-xs">Select a node to view logs.</div>
-        )}
-        {drawerTab === "mission-flow" && !selectedMission && !snapshot.missions?.length && (
-          <div className="text-gray-500 text-xs">No missions found in .harness/documents/</div>
-        )}
-      </Drawer>
     </div>
   );
 }

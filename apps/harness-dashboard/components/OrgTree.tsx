@@ -225,7 +225,8 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
     },
   ];
 
-  // Workers from current mission's workers/, shown under CTO column
+  // Workers are grouped by their owning CXX so evaluator reports sit under CQO,
+  // implementation reports under CTO, and legacy flat reports stay visible.
   const workers = currentMission?.workers ?? [];
 
   return (
@@ -271,7 +272,9 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
       {/* Row 3: CXX nodes with workers below */}
       <div className="flex gap-3 justify-center">
         {cxxNodes.map((node) => {
-          const nodeWorkers = node.role === "cto" ? workers : [];
+          const nodeWorkers = workers.filter(
+            (w) => w.owner === node.role || (w.owner === "unknown" && node.role === "cto")
+          );
 
           return (
             <div key={node.id} className="flex flex-col items-center gap-2">
@@ -293,7 +296,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
                         onClick={() =>
                           onNodeClick({
                             id: `worker-${w.name}`,
-                            role: "cto",
+                            role: node.role,
                             label: w.name,
                             sublabel: w.status,
                             status: w.status === "COMPLETE" ? "idle" : "typing",

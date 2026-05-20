@@ -15,6 +15,7 @@ interface DrawerProps {
   onClose: () => void;
   onTabChange: (tab: DrawerTab) => void;
   children: React.ReactNode;
+  mode?: "overlay" | "inline";
 }
 
 const TABS: Array<{ id: DrawerTab; label: string }> = [
@@ -25,15 +26,54 @@ const TABS: Array<{ id: DrawerTab; label: string }> = [
   { id: "logs", label: "Agent Log" },
 ];
 
-export function Drawer({ open, tab, title, onClose, onTabChange, children }: DrawerProps) {
+export function Drawer({ open, tab, title, onClose, onTabChange, children, mode = "overlay" }: DrawerProps) {
   useEffect(() => {
-    if (!open) return;
+    if (!open || mode === "inline") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [open, onClose, mode]);
+
+  if (mode === "inline") {
+    return (
+      <aside
+        role="complementary"
+        aria-label="Detail panel"
+        data-testid="drawer"
+        data-open="true"
+        className="h-full min-h-[calc(100dvh-2.5rem)] rounded-md border border-brick-wall bg-brick-bg shadow-2xl flex flex-col overflow-hidden"
+      >
+        <header className="flex items-center justify-between border-b border-brick-wall px-4 py-3">
+          <h2 className="text-sm font-mono uppercase tracking-widest text-gray-200 truncate">
+            {title}
+          </h2>
+        </header>
+        <nav className="flex flex-wrap border-b border-brick-wall text-[11px] font-mono">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              data-testid={`drawer-tab-${t.id}`}
+              data-active={t.id === tab}
+              onClick={() => onTabChange(t.id)}
+              className={`min-w-[33%] flex-1 px-2 py-2 transition-colors ${
+                t.id === tab
+                  ? "bg-brick-wall/50 text-gray-100 border-b-2 border-aura-typing"
+                  : "text-gray-500 hover:text-gray-200"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+        <div className="flex-1 overflow-y-auto px-4 py-3 text-xs text-gray-200 font-mono">
+          {children}
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <>
