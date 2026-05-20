@@ -775,6 +775,13 @@ function readFeatureTitles(rootDir: string): Map<string, string> {
 }
 
 type RawWorker = NonNullable<NonNullable<RawProgress["company_state"]>["workers"]>[number];
+type WorkerOwner = WorkerDocEntry["owner"];
+
+interface HiredWorkerEntry {
+  name: string;
+  owner: Exclude<WorkerOwner, "unknown">;
+  sourcePath: string | null;
+}
 
 function deriveWorkerProgress(worker: RawWorker): number | null {
   const status = (worker?.status ?? worker?.spawn_status ?? "").toLowerCase();
@@ -835,6 +842,72 @@ function buildWorkers(rootDir: string, progress: RawProgress | null): WorkerSnap
       next_material: material,
     };
   });
+}
+
+function normalizeWorkerName(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/^harness-/, "")
+    .replace(/\.md$/, "")
+    .trim();
+}
+
+function normalizeWorkerOwner(value: string | null | undefined): HiredWorkerEntry["owner"] | null {
+  const owner = (value ?? "").toLowerCase().replace(/^harness-/, "");
+  if (owner === "coo" || owner === "cdo" || owner === "cto" || owner === "cqo" || owner === "ops") {
+    return owner;
+  }
+  return null;
+}
+
+function readHiredWorkers(rootDir: string): HiredWorkerEntry[] {
+  const rosterPath = path.join(rootDir, ".harness", "shared", "hr-roster.json");
+  const roster = readJsonSafe<{
+    hired?: Array<{
+      worker?: string;
+      name?: string;
+      owner?: string;
+      owningCxx?: string;
+      skillPath?: string;
+      skillPaths?: { source?: string };
+    }>;
+  }>(rosterPath);
+  if (!roster.ok) return [];
+
+  const seen = new Set<string>();
+  const hired: HiredWorkerEntry[] = [];
+  for (const entry of roster.value.hired ?? []) {
+    const name = normalizeWorkerName(entry.worker ?? entry.name);
+    const owner = normalizeWorkerOwner(entry.owner ?? entry.owningCxx);
+    if (!name || !owner) continue;
+
+    const sourcePath = entry.skillPaths?.source ?? entry.skillPath ?? `.harness/shared/HR-Resource/${name}/SKILL.md`;
+    const sourceAbs = path.join(rootDir, sourcePath);
+    if (!existsSync(sourceAbs)) continue;
+
+    const key = `${owner}:${name}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    hired.push({ name, owner, sourcePath });
+  }
+  return hired;
+}
+
+function activeWorkerNames(progress: RawProgress | null): Set<string> {
+  const active = new Set<string>();
+  const workers = [
+    ...(progress?.company_state?.workers ?? []),
+    ...(progress?.company_state?.last_dispatch ?? []),
+  ];
+  for (const worker of workers) {
+    const rawStatus = (worker.status ?? worker.spawn_status ?? "").toLowerCase();
+    if (["completed", "done", "idle"].includes(rawStatus)) continue;
+    for (const value of [worker.agent, worker.feature]) {
+      const normalized = normalizeWorkerName(value);
+      if (normalized) active.add(normalized);
+    }
+  }
+  return active;
 }
 
 function meetingTitleFromMarkdown(text: string, fallback: string): string {
@@ -989,6 +1062,8 @@ function buildRuntime(progress: RawProgress | null): RuntimeSnapshot {
 function readMissions(rootDir: string, progress: RawProgress | null = null, limit = 15): MissionDoc[] {
   const docsDir = path.join(rootDir, ".harness", "documents");
   if (!existsSync(docsDir)) return [];
+  const hiredWorkers = readHiredWorkers(rootDir);
+  const activeWorkers = activeWorkerNames(progress);
 
   const missionDirs: Array<{ rel: string; abs: string }> = [];
   const cxxDocNames = new Set(["ceo.md", "cto.md", "cqo.md", "coo.md", "cdo.md", "ops.md"]);
@@ -1035,7 +1110,8 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
       };
 
       const workers: WorkerDocEntry[] = [];
-      const addWorkersFromDir = (owner: WorkerDocEntry["owner"], relDir: string) => {
+      const workersByKey = new Map<string, WorkerDocEntry>();
+      const addWorkersFromDir = (owner: WorkerOwner, relDir: string) => {
         const workersDir = path.join(missionPath, relDir);
         if (!existsSync(workersDir)) return;
         try {
@@ -1043,12 +1119,19 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
             if (!f.endsWith(".md")) continue;
             const content = readMd(`${relDir}/${f}`) ?? "";
             const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
-            workers.push({
-              name: f.replace(".md", ""),
+            const name = normalizeWorkerName(f);
+            const hired = hiredWorkers.find((w) => w.name === name && (w.owner === owner || owner === "unknown"));
+            const entry: WorkerDocEntry = {
+              name,
               content,
               status: (statusMatch?.[1] as WorkerDocEntry["status"]) ?? "unknown",
-              owner,
-            });
+              owner: hired?.owner ?? owner,
+              hired: !!hired,
+              active: activeWorkers.has(name),
+              sourcePath: hired?.sourcePath ?? null,
+              reportPath: path.relative(rootDir, path.join(missionPath, relDir, f)),
+            };
+            workersByKey.set(`${entry.owner}:${entry.name}`, entry);
           }
         } catch { /* ignore */ }
       };
@@ -1059,6 +1142,23 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
       addWorkersFromDir("cdo", "cdo/workers");
       addWorkersFromDir("ops", "ops/workers");
       addWorkersFromDir("unknown", "workers");
+
+      for (const hired of hiredWorkers) {
+        const key = `${hired.owner}:${hired.name}`;
+        if (workersByKey.has(key)) continue;
+        workersByKey.set(key, {
+          name: hired.name,
+          content: "",
+          status: activeWorkers.has(hired.name) ? "IN_PROGRESS" : "unknown",
+          owner: hired.owner,
+          hired: true,
+          active: activeWorkers.has(hired.name),
+          sourcePath: hired.sourcePath,
+          reportPath: null,
+        });
+      }
+
+      workers.push(...workersByKey.values());
 
       const cxxRoles = ["ceo", "cto", "cqo", "coo", "cdo", "ops"] as const;
       const cxxPresent = cxxRoles.filter(role => existsSync(path.join(missionPath, `${role}.md`)));

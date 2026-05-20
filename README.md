@@ -181,7 +181,7 @@ npx walwal-harness init --force --project-root /path/to/project
 Features:
 
 - **Split Workspace** — full-viewport left/right panes keep Org Tree + Mission Timeline beside the selected mission detail; both panes scroll independently with hidden scrollbars, and the detail pane resets to top on selection changes
-- **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards grouped under their owning CXX; clicking any node initializes the right pane to the relevant history, CXX document, or worker report
+- **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards created only from hired `hr-roster.json` entries backed by `.harness/shared/HR-Resource/{worker}/SKILL.md`; running hired workers are highlighted under their owning CXX
 - **Mission Timeline** — clickable history of goal/submission/hot-fix missions showing the full dispatch chain
 - **Mission Flow tab** — per-mission flow: Owner prompt → CEO routing → CXX → owner-specific worker evidence → CQO verdict
 - **History tab** — mission-specific Owner request (from CEO summary + closest progress.log match)

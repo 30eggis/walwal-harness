@@ -247,4 +247,54 @@ describe("readHarnessState", () => {
     expect(missions[0].type).toBe("submission");
     expect(missions.find((mission) => mission.missionId === "goal-1-auth-system")?.type).toBe("goal");
   });
+
+  it("positions only hired HR-Resource workers and marks active workers", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
+    mkdirSync(path.join(missionDir, "cto", "workers"), { recursive: true });
+    mkdirSync(path.join(harnessDir, "shared", "HR-Resource", "react-ui-worker"), { recursive: true });
+    writeFileSync(path.join(missionDir, "ceo.md"), "# Dashboard\n");
+    writeFileSync(
+      path.join(missionDir, "cto", "workers", "react-ui-worker.md"),
+      "## Status\nIN_PROGRESS\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "shared", "HR-Resource", "react-ui-worker", "SKILL.md"),
+      "# React UI Worker\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "shared", "hr-roster.json"),
+      JSON.stringify({
+        hired: [
+          {
+            worker: "react-ui-worker",
+            owner: "cto",
+            skillPath: ".harness/shared/HR-Resource/react-ui-worker/SKILL.md",
+          },
+          {
+            worker: "missing-worker",
+            owner: "cto",
+            skillPath: ".harness/shared/HR-Resource/missing-worker/SKILL.md",
+          },
+        ],
+      })
+    );
+    writeFileSync(
+      path.join(harnessDir, "progress.json"),
+      JSON.stringify({
+        company_state: {
+          workers: [{ agent: "react-ui-worker", status: "running", feature: "F1" }],
+        },
+      })
+    );
+
+    const workers = readHarnessState(dir).missions[0].workers;
+    expect(workers.map((w) => w.name)).toEqual(["react-ui-worker"]);
+    expect(workers[0]).toMatchObject({
+      owner: "cto",
+      hired: true,
+      active: true,
+      sourcePath: ".harness/shared/HR-Resource/react-ui-worker/SKILL.md",
+    });
+  });
 });

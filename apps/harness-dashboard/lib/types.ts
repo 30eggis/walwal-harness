@@ -300,6 +300,10 @@ export interface WorkerDocEntry {
   content: string;
   status: "COMPLETE" | "IN_PROGRESS" | "unknown";
   owner: "cto" | "cqo" | "coo" | "cdo" | "ops" | "unknown";
+  hired: boolean;
+  active: boolean;
+  sourcePath?: string | null;
+  reportPath?: string | null;
 }
 
 export interface MissionDoc {

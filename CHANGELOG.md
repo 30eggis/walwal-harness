@@ -31,13 +31,17 @@ docmeta:
 
 ## Unreleased
 
+### Changed
+- Dashboard Org Tree now positions only hired HR-Resource workers from `hr-roster.json`, requiring a backing `.harness/shared/HR-Resource/{worker}/SKILL.md`.
+- Running hired workers are highlighted under their owning CXX instead of showing queue jobs as worker seats.
+
 ### Added
 - Hourly wake can now run either `claude -p` or `codex exec` via `HARNESS_WAKE_EXECUTOR=claude|codex`.
 - Hourly wake supports `HARNESS_WAKE_MODE=headless|tmux|record`; `tmux` creates a separate time-boxed session per hourly company tick for easier inspection.
 - Deterministic conductor fallback runs after each hourly review so meeting decisions can advance even when the LLM runtime is unavailable.
 - Hourly meeting minutes now split meaningful progress from paperwork-only artifacts and track strategy cadence drift.
 
-### Changed
+### Runtime Changed
 - launchd wake PATH now includes `$HOME/.local/bin` so local Claude/Codex installs are found from non-interactive jobs.
 - Service-Ops records repeated incident signatures and marks repeated incidents as `recovery_required`, causing hourly meetings to route to CTO runtime recovery instead of repeating discussion.
 

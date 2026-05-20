@@ -225,9 +225,9 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
     },
   ];
 
-  // Workers are grouped by their owning CXX so evaluator reports sit under CQO,
-  // implementation reports under CTO, and legacy flat reports stay visible.
-  const workers = currentMission?.workers ?? [];
+  // Only hired HR-Resource workers are positioned in the org chart. Legacy
+  // report-only workers remain visible in mission documents, but not as seats.
+  const workers = (currentMission?.workers ?? []).filter((w) => w.hired);
 
   return (
     <div className="w-full px-4 py-6 select-none">
@@ -272,9 +272,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
       {/* Row 3: CXX nodes with workers below */}
       <div className="flex gap-3 justify-center">
         {cxxNodes.map((node) => {
-          const nodeWorkers = workers.filter(
-            (w) => w.owner === node.role || (w.owner === "unknown" && node.role === "cto")
-          );
+          const nodeWorkers = workers.filter((w) => w.owner === node.role);
 
           return (
             <div key={node.id} className="flex flex-col items-center gap-2">
@@ -289,38 +287,53 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
                 <>
                   <div className="w-px h-3 bg-gray-700/60" />
                   <div className="flex flex-col gap-1.5 w-full">
-                    {nodeWorkers.map((w) => (
+                    {nodeWorkers.map((w) => {
+                      const workerNodeId = `worker-${node.role}-${w.name}`;
+                      const workerActive = activeNodeId === workerNodeId || w.active;
+                      return (
                       <button
-                        key={w.name}
+                        key={`${node.role}-${w.name}`}
                         type="button"
                         onClick={() =>
                           onNodeClick({
-                            id: `worker-${w.name}`,
+                            id: workerNodeId,
                             role: node.role,
                             label: w.name,
-                            sublabel: w.status,
-                            status: w.status === "COMPLETE" ? "idle" : "typing",
-                            activity: null,
+                            sublabel: w.active ? "running" : w.status,
+                            status: w.active ? "typing" : w.status === "COMPLETE" ? "idle" : "queued",
+                            activity: w.sourcePath ?? null,
                             agentIds: [],
                           })
                         }
-                        className={`rounded border border-gray-700/40 bg-gray-800/30 px-2 py-1.5 text-left min-w-[130px] max-w-[160px] transition-all hover:border-white/20 ${
-                          activeNodeId === `worker-${w.name}` ? "ring-1 ring-cyan-300" : ""
-                        }`}
+                        className={`relative rounded border px-2 py-1.5 text-left min-w-[130px] max-w-[160px] transition-all hover:border-white/20 ${
+                          workerActive
+                            ? "border-cyan-300/70 bg-cyan-400/10 shadow-[0_0_18px_rgba(34,211,238,0.18)]"
+                            : "border-gray-700/40 bg-gray-800/30"
+                        } ${activeNodeId === workerNodeId ? "ring-1 ring-cyan-300" : ""}`}
                       >
-                        <div className="font-mono text-[9px] text-gray-500">worker</div>
-                        <div className="text-[11px] font-medium text-gray-200 truncate">
+                        {w.active && (
+                          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
+                        )}
+                        <div className={`font-mono text-[9px] ${w.active ? "text-cyan-300/80" : "text-gray-500"}`}>
+                          hired worker
+                        </div>
+                        <div className="text-[11px] font-medium text-gray-200 truncate pr-3">
                           {w.name}
                         </div>
                         <div
                           className={`text-[9px] font-mono mt-0.5 ${
-                            w.status === "COMPLETE" ? "text-emerald-400" : "text-amber-400"
-                          }`}
+                            w.active
+                              ? "text-cyan-300"
+                              : w.status === "COMPLETE"
+                              ? "text-emerald-400"
+                              : "text-amber-400"
+                        }`}
                         >
-                          {w.status}
+                          {w.active ? "RUNNING" : w.status}
                         </div>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>
               )}
