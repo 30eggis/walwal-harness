@@ -77,7 +77,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     selectedAgent?.id ?? "",
   ].join(":");
   const selectedWorkerName = selectedNode?.id.startsWith("worker-")
-    ? selectedNode.label
+    ? selectedNode.id.replace(/^worker-[^-]+-/, "")
     : undefined;
   const selectedDocumentRole = selectedWorkerName
     ? "worker"

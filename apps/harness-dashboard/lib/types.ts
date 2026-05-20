@@ -297,6 +297,7 @@ export interface HarnessSnapshot {
 // Real harness mission documents
 export interface WorkerDocEntry {
   name: string;
+  displayName: string;
   content: string;
   status: "COMPLETE" | "IN_PROGRESS" | "unknown";
   owner: "cto" | "cqo" | "coo" | "cdo" | "ops" | "unknown";
@@ -304,6 +305,7 @@ export interface WorkerDocEntry {
   active: boolean;
   sourcePath?: string | null;
   reportPath?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface MissionDoc {

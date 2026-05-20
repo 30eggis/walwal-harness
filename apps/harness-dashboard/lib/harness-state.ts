@@ -41,6 +41,7 @@ import type {
 
 const SNAPSHOT_VERSION = "1.2.0";
 const GOAL_DESC_TRUNCATE = 200;
+const RECENT_WORKER_ACTIVE_MS = 10 * 60 * 1000;
 
 interface RawProgress {
   goals?: {
@@ -781,6 +782,9 @@ interface HiredWorkerEntry {
   name: string;
   owner: Exclude<WorkerOwner, "unknown">;
   sourcePath: string | null;
+  mission: string | null;
+  task: string | null;
+  capability: string | null;
 }
 
 function deriveWorkerProgress(worker: RawWorker): number | null {
@@ -868,6 +872,9 @@ function readHiredWorkers(rootDir: string): HiredWorkerEntry[] {
       name?: string;
       owner?: string;
       owningCxx?: string;
+      mission?: string;
+      task?: string;
+      capability?: string;
       skillPath?: string;
       skillPaths?: { source?: string };
     }>;
@@ -888,9 +895,43 @@ function readHiredWorkers(rootDir: string): HiredWorkerEntry[] {
     const key = `${owner}:${name}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    hired.push({ name, owner, sourcePath });
+    hired.push({
+      name,
+      owner,
+      sourcePath,
+      mission: entry.mission ?? null,
+      task: entry.task ?? null,
+      capability: entry.capability ?? null,
+    });
   }
   return hired;
+}
+
+function hiredForMission(
+  hiredWorkers: HiredWorkerEntry[],
+  name: string,
+  owner: WorkerOwner,
+  missionId: string,
+): HiredWorkerEntry | undefined {
+  const candidates = hiredWorkers.filter(
+    (w) => w.name === name && (w.owner === owner || owner === "unknown")
+  );
+  return candidates.find((w) => w.mission === missionId) ?? candidates[0];
+}
+
+function workerDisplayName(content: string, hired: HiredWorkerEntry | undefined, fallback: string): string {
+  const title = content.match(/^\s*title:\s*["']?(.+?)["']?\s*$/m)?.[1]?.trim();
+  if (title) return truncateText(title.replace(/\s+—\s+Worker Report$/i, ""), 42);
+
+  const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (heading) return truncateText(heading.replace(/\s+—\s+.*$/i, ""), 42);
+
+  if (hired?.task) {
+    const capability = hired.capability ? ` · ${hired.capability}` : "";
+    return truncateText(`${hired.task}${capability}`, 42);
+  }
+
+  return fallback;
 }
 
 function activeWorkerNames(progress: RawProgress | null): Set<string> {
@@ -1117,19 +1158,30 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
         try {
           for (const f of readdirSync(workersDir)) {
             if (!f.endsWith(".md")) continue;
+            const reportAbs = path.join(missionPath, relDir, f);
             const content = readMd(`${relDir}/${f}`) ?? "";
             const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
+            const status = (statusMatch?.[1] as WorkerDocEntry["status"]) ?? "unknown";
             const name = normalizeWorkerName(f);
-            const hired = hiredWorkers.find((w) => w.name === name && (w.owner === owner || owner === "unknown"));
+            const hired = hiredForMission(hiredWorkers, name, owner, rel);
+            let updatedAt: string | null = null;
+            let recentlyTouched = false;
+            try {
+              const mtime = statSync(reportAbs).mtime;
+              updatedAt = mtime.toISOString();
+              recentlyTouched = Date.now() - mtime.getTime() < RECENT_WORKER_ACTIVE_MS;
+            } catch { /* ignore */ }
             const entry: WorkerDocEntry = {
               name,
+              displayName: workerDisplayName(content, hired, name),
               content,
-              status: (statusMatch?.[1] as WorkerDocEntry["status"]) ?? "unknown",
+              status,
               owner: hired?.owner ?? owner,
               hired: !!hired,
-              active: activeWorkers.has(name),
+              active: activeWorkers.has(name) || (recentlyTouched && status !== "COMPLETE"),
               sourcePath: hired?.sourcePath ?? null,
-              reportPath: path.relative(rootDir, path.join(missionPath, relDir, f)),
+              reportPath: path.relative(rootDir, reportAbs),
+              updatedAt,
             };
             workersByKey.set(`${entry.owner}:${entry.name}`, entry);
           }
@@ -1148,6 +1200,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
         if (workersByKey.has(key)) continue;
         workersByKey.set(key, {
           name: hired.name,
+          displayName: workerDisplayName("", hired, hired.name),
           content: "",
           status: activeWorkers.has(hired.name) ? "IN_PROGRESS" : "unknown",
           owner: hired.owner,
@@ -1155,6 +1208,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
           active: activeWorkers.has(hired.name),
           sourcePath: hired.sourcePath,
           reportPath: null,
+          updatedAt: null,
         });
       }
 

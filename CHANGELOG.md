@@ -34,6 +34,8 @@ docmeta:
 ### Changed
 - Dashboard Org Tree now positions only hired HR-Resource workers from `hr-roster.json`, requiring a backing `.harness/shared/HR-Resource/{worker}/SKILL.md`.
 - Running hired workers are highlighted under their owning CXX instead of showing queue jobs as worker seats.
+- Dashboard SSE now watches mission documents, hired-worker roster, and HR-Resource changes so worker updates appear without browser refresh.
+- Dashboard worker cards now prefer mission/report task labels and mark recently updated unfinished worker reports as active when runtime active-worker state is absent.
 
 ### Added
 - Hourly wake can now run either `claude -p` or `codex exec` via `HARNESS_WAKE_EXECUTOR=claude|codex`.

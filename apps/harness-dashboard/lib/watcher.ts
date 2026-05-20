@@ -10,9 +10,8 @@ export interface WatchOptions {
   debounceMs?: number;
 }
 
-// Watches the .harness/ directory for changes that affect the dashboard
-// snapshot — progress.json (state), progress.log (activity), actions/* (sprint
-// artifacts), archive/* (sprint history).
+// Watches .harness paths that affect the dashboard snapshot: runtime progress,
+// actions, mission documents, hired-worker roster/resources, and archive state.
 export function watchHarness(
   rootDir: string,
   onChange: (changedPath: string) => void,
@@ -25,6 +24,9 @@ export function watchHarness(
       path.join(harnessDir, "progress.json"),
       path.join(harnessDir, "progress.log"),
       path.join(harnessDir, "actions"),
+      path.join(harnessDir, "documents"),
+      path.join(harnessDir, "shared", "hr-roster.json"),
+      path.join(harnessDir, "shared", "HR-Resource"),
       path.join(harnessDir, "archive"),
     ],
     {

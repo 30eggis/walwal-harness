@@ -273,11 +273,15 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
       <div className="flex gap-3 justify-center">
         {cxxNodes.map((node) => {
           const nodeWorkers = workers.filter((w) => w.owner === node.role);
+          const hasActiveWorker = nodeWorkers.some((w) => w.active);
+          const displayNode = hasActiveWorker
+            ? { ...node, status: "typing" as const, activity: "Worker active" }
+            : node;
 
           return (
             <div key={node.id} className="flex flex-col items-center gap-2">
               <OrgCard
-                node={node}
+                node={displayNode}
                 size="md"
                 active={activeNodeId === node.id}
                 onClick={onNodeClick}
@@ -298,8 +302,8 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
                           onNodeClick({
                             id: workerNodeId,
                             role: node.role,
-                            label: w.name,
-                            sublabel: w.active ? "running" : w.status,
+                            label: w.displayName,
+                            sublabel: w.active ? `running · ${w.name}` : `${w.status} · ${w.name}`,
                             status: w.active ? "typing" : w.status === "COMPLETE" ? "idle" : "queued",
                             activity: w.sourcePath ?? null,
                             agentIds: [],
@@ -318,7 +322,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
                           hired worker
                         </div>
                         <div className="text-[11px] font-medium text-gray-200 truncate pr-3">
-                          {w.name}
+                          {w.displayName}
                         </div>
                         <div
                           className={`text-[9px] font-mono mt-0.5 ${
