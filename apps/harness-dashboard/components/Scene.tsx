@@ -70,17 +70,23 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       : selectedNode
       ? selectedNode.label
       : "Mission Flow";
+  const drawerScrollResetKey = [
+    drawerTab,
+    selectedMission?.missionId ?? "",
+    selectedNode?.id ?? "",
+    selectedAgent?.id ?? "",
+  ].join(":");
 
   // Suppress unused lang warning — kept for future i18n
   void lang;
 
   return (
-    <div className="mx-auto flex h-[100dvh] max-w-[1920px] flex-col overflow-hidden px-4 py-5">
+    <div className="flex h-[100dvh] w-full flex-col overflow-hidden px-4 py-5">
       {snapshot.escalations.length > 0 && (
         <EscalationStrip escalations={snapshot.escalations} />
       )}
       <div className="grid min-h-0 flex-1 min-w-0 gap-4 lg:grid-cols-2">
-        <div className="min-h-0 min-w-0 overflow-y-auto pr-1">
+        <div className="scrollbar-hidden min-h-0 min-w-0 overflow-y-auto pr-1">
           <section className="min-w-0">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -135,6 +141,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
             title={drawerTitle}
             onClose={() => undefined}
             onTabChange={setDrawerTab}
+            scrollResetKey={drawerScrollResetKey}
           >
             {drawerTab === "mission-flow" && (
               <MissionFlowTab

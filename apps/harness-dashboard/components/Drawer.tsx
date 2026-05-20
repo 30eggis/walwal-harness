@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export type DrawerTab =
   | "mission-flow"      // Mission document hierarchy (PRIMARY)
@@ -16,6 +16,7 @@ interface DrawerProps {
   onTabChange: (tab: DrawerTab) => void;
   children: React.ReactNode;
   mode?: "overlay" | "inline";
+  scrollResetKey?: string;
 }
 
 const TABS: Array<{ id: DrawerTab; label: string }> = [
@@ -26,7 +27,9 @@ const TABS: Array<{ id: DrawerTab; label: string }> = [
   { id: "logs", label: "Agent Log" },
 ];
 
-export function Drawer({ open, tab, title, onClose, onTabChange, children, mode = "overlay" }: DrawerProps) {
+export function Drawer({ open, tab, title, onClose, onTabChange, children, mode = "overlay", scrollResetKey }: DrawerProps) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!open || mode === "inline") return;
     const onKey = (e: KeyboardEvent) => {
@@ -35,6 +38,10 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children, mode 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose, mode]);
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0, left: 0 });
+  }, [scrollResetKey]);
 
   if (mode === "inline") {
     return (
@@ -68,7 +75,7 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children, mode 
             </button>
           ))}
         </nav>
-        <div className="flex-1 overflow-y-auto px-4 py-3 text-xs text-gray-200 font-mono">
+        <div ref={contentRef} className="scrollbar-hidden flex-1 overflow-y-auto px-4 py-3 text-xs text-gray-200 font-mono">
           {children}
         </div>
       </aside>
@@ -128,7 +135,7 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children, mode 
             </button>
           ))}
         </nav>
-        <div className="flex-1 overflow-y-auto px-4 py-3 text-xs text-gray-200 font-mono">
+        <div ref={contentRef} className="scrollbar-hidden flex-1 overflow-y-auto px-4 py-3 text-xs text-gray-200 font-mono">
           {children}
         </div>
       </aside>
