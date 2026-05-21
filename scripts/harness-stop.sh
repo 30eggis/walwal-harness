@@ -52,8 +52,11 @@ if [ "${STOP_CHAIN_COUNT:-0}" -ge "${STOP_CHAIN_MAX:-200}" ]; then exit 0; fi
 
 # 회사 루프 상태 확인
 CONDUCTOR_STATE=$(jq -r '.conductor.state // "idle"' "$PROGRESS" 2>/dev/null || echo "idle")
+COMPANY_STATE=$(jq -r '.company_state.state // "idle"' "$PROGRESS" 2>/dev/null || echo "idle")
+CURRENT_AGENT=$(jq -r '.current_agent // "none"' "$PROGRESS" 2>/dev/null || echo "none")
 NEXT_AGENT=$(jq -r '.next_agent // "none"' "$PROGRESS" 2>/dev/null || echo "none")
 AGENT_STATUS=$(jq -r '.agent_status // "pending"' "$PROGRESS" 2>/dev/null || echo "pending")
+OWNER_PROMPT_STATUS=$(jq -r '.owner_prompt.status // "none"' "$PROGRESS" 2>/dev/null || echo "none")
 TASK_STOP_ACTIVE=$(jq -r '.task_stop.active // false' "$PROGRESS" 2>/dev/null || echo "false")
 ESCALATION=$(jq -r '.conductor.escalation // "null"' "$PROGRESS" 2>/dev/null || echo "null")
 SPRINT_STATUS=$(jq -r '.sprint.status // "init"' "$PROGRESS" 2>/dev/null || echo "init")
@@ -66,18 +69,29 @@ if [ "$HOOK_EVENT" = "Stop" ]; then
 fi
 
 # 자동 연쇄 조건:
-#   conductor 가 running
-#   AND task_stop 비활성
+#   conductor/company loop 가 running
 #   AND task_stop 비활성
 #   AND (next_agent 가 명시되어 있거나, agent_status=completed 라서 다음 tick 결정 필요)
+# v7 CEO 루프는 conductor-tick 없이 CEO/CXX 상태로 시작될 수 있다.
+# current_agent=ceo running + owner_prompt.routing 은 기존 설치본이 conductor/company
+# state를 아직 쓰지 않은 stuck 상태에서도 turn 종료 차단 대상으로 본다.
 should_chain="false"
-if [ "$CONDUCTOR_STATE" = "running" ] \
+if { [ "$CONDUCTOR_STATE" = "running" ] || [ "$COMPANY_STATE" = "running" ]; } \
   && [ "$TASK_STOP_ACTIVE" != "true" ]; then
   if [ "$NEXT_AGENT" != "none" ] && [ "$NEXT_AGENT" != "null" ]; then
     should_chain="true"
   elif [ "$AGENT_STATUS" = "completed" ]; then
     should_chain="true"
+  elif [ "$CURRENT_AGENT" = "ceo" ] && [ "$AGENT_STATUS" = "running" ] && [ "$OWNER_PROMPT_STATUS" = "routing" ]; then
+    should_chain="true"
   fi
+fi
+if [ "$should_chain" != "true" ] \
+  && [ "$TASK_STOP_ACTIVE" != "true" ] \
+  && [ "$CURRENT_AGENT" = "ceo" ] \
+  && [ "$AGENT_STATUS" = "running" ] \
+  && [ "$OWNER_PROMPT_STATUS" = "routing" ]; then
+  should_chain="true"
 fi
 
 if [ "$should_chain" != "true" ]; then exit 0; fi
@@ -91,9 +105,9 @@ jq --argjson n "$NEW_COUNT" '.conductor.stop_chain_count = $n |
 
 # Claude 에게 다음 행동 지시
 if [ "$ESCALATION" != "null" ]; then
-  REASON="자율 회사 루프 진행 중. escalation=${ESCALATION} 는 정지 사유가 아니라 meeting-manager/service-ops 공유 대상이다. next_agent=${NEXT_AGENT}, agent_status=${AGENT_STATUS}, conductor=${CONDUCTOR_STATE}. SKILL 에 따라 conductor-tick 을 굴려 meeting-manager 회의로 라우팅하거나 다음 부서를 spawn 하라. progress.log 에는 절대 미래 시각을 쓰지 말 것. 진짜로 끝났을 때만 turn 을 종료하라."
+  REASON="자율 회사 루프 진행 중. escalation=${ESCALATION} 는 정지 사유가 아니라 meeting-manager/service-ops 공유 대상이다. current_agent=${CURRENT_AGENT}, next_agent=${NEXT_AGENT}, agent_status=${AGENT_STATUS}, conductor=${CONDUCTOR_STATE}, company=${COMPANY_STATE}. SKILL 에 따라 CEO/CXX/worker 흐름을 계속하거나 conductor-tick 을 굴려 meeting-manager 회의로 라우팅하라. progress.log 에는 절대 미래 시각을 쓰지 말 것. 진짜로 끝났을 때만 turn 을 종료하라."
 else
-  REASON="자율 회사 루프 진행 중. next_agent=${NEXT_AGENT}, agent_status=${AGENT_STATUS}, conductor=${CONDUCTOR_STATE}. SKILL 에 따라 다음 부서를 spawn 하거나 conductor-tick 을 한 번 더 굴려라. progress.log 에는 절대 미래 시각을 쓰지 말 것. 진짜로 끝났을 때만 turn 을 종료하라."
+  REASON="자율 회사 루프 진행 중. current_agent=${CURRENT_AGENT}, next_agent=${NEXT_AGENT}, agent_status=${AGENT_STATUS}, conductor=${CONDUCTOR_STATE}, company=${COMPANY_STATE}. SKILL 에 따라 CEO/CXX/worker 흐름을 계속하고, 필요한 CXX/worker fresh session 을 실행하라. progress.log 에는 절대 미래 시각을 쓰지 말 것. 진짜로 끝났을 때만 turn 을 종료하라."
 fi
 
 jq -nc \

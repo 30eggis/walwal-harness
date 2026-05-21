@@ -9,6 +9,7 @@
     "scripts/harness-meeting-doc.sh",
     "scripts/harness-next.sh",
     "scripts/harness-worker-dispatch.sh",
+    "scripts/harness-company-complete.sh",
     "scripts/harness-stop.sh",
     "scripts/harness-session-start.sh",
     "scripts/harness-progress-set.sh",

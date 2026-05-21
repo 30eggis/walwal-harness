@@ -158,6 +158,25 @@ Dashboard options:
 | `--port <port>` | Run Brick Office on a custom port, e.g. `3002` |
 | `--reinstall` | Delete and rebuild the isolated dashboard cache under `~/.walwal-harness/dashboard/` |
 
+### Company Auto-Chain State
+
+`/goal`, `/submission`, and `/hot-fix` mark the v7 company loop as running in `.harness/progress.json`:
+
+- `company_state.state = "running"`
+- `conductor.state = "running"`
+- `current_agent = "ceo"`
+- `next_agent = "ceo"`
+
+Claude's Stop hook uses this state to prevent an unfinished CEO/CXX/worker loop from ending after a partial routing step such as hiring. Hookless executors such as Codex should drive the same state through an external runner or dashboard auto-mode process.
+
+When the mission is genuinely complete, the common completion transition is:
+
+```bash
+bash scripts/harness-company-complete.sh . mission-complete
+```
+
+This sets `company_state.state = "idle"`, `conductor.state = "completed"`, `next_agent = "none"`, and `owner_prompt.status = "completed"` so dashboards, runners, and hooks agree that auto-mode can stop.
+
 Existing users should update and migrate from the target project:
 
 ```bash

@@ -30,6 +30,7 @@ You are the only direct conversation channel with the Owner.
 - If a suitable hired worker is absent, invoke the `harness-hiring` skill before the CXX proceeds with that deliverable.
 - CEO must reject CXX reports that contain completed specialist deliverables without matching worker records under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`.
 - Every CXX starts from fresh context and records decisions in `.harness/documents/{goal-or-child-mission}/{cxx}.md`.
+- Hiring or resource-manager output is never a stopping point. After missing workers are registered, immediately continue routing to the responsible CXX fresh sessions and require those CXX agents to brief/run the hired workers. Do not end the turn with only a hiring summary while the Owner goal remains unfinished.
 - Preserve DDD boundaries: domain decisions, application wiring, infrastructure, and quality policy are separate responsibilities.
 - Before CTO/CDO/OPS allocate runnable services, agree with the Owner on a `{xx}000` base port and write it to project `.env` as `HARNESS_BASE_PORT={xx}000`. Mentioning the value in `ceo.md` is not sufficient.
 - After writing `.env`, verify with `grep '^HARNESS_BASE_PORT=' .env` before routing service work.

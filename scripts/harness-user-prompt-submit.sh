@@ -83,6 +83,10 @@ if [ -n "$PROMPT" ] && [ -d "$CWD/.harness" ]; then
           .current_agent = "ceo" |
           .agent_status = "running" |
           .next_agent = "ceo" |
+          .company_state.state = "running" |
+          .conductor.state = "running" |
+          .conductor.current_action = ("owner-" + $command + "-to-ceo") |
+          .conductor.stop_chain_count = 0 |
           .updated_at = $now |
           .owner_prompt = {
             command: $command,

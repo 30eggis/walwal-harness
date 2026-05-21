@@ -48,10 +48,18 @@
     "sprint-contract.md": { "status": "pending", "updated_by": null, "updated_at": null }
   },
   "company_state": {
+    "state": "idle",
     "active_workers": 0,
     "concurrency": 3,
     "paused_at": null,
     "resume_from": null
+  },
+  "conductor": {
+    "state": "idle",
+    "tracks": [],
+    "rendezvous": null,
+    "fork_meeting_id": null,
+    "stop_chain_count": 0
   },
   "updated_at": "{{DATE}}",
   "history": []

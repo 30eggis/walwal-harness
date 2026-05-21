@@ -31,6 +31,15 @@ docmeta:
 
 ## Unreleased
 
+### Fixed
+- v7 `/goal`, `/submission`, and `/hot-fix` now mark both `company_state.state` and `conductor.state` as `running`, so Claude Stop hook auto-chain does not stop after CEO routing or hiring-only summaries.
+- Stop hook now treats v7 CEO routing state (`current_agent=ceo`, `agent_status=running`, `owner_prompt.status=routing`) as an unfinished company loop, including migrated projects that do not yet have running conductor/company state.
+- CEO skill now explicitly forbids ending a mission turn with only hiring/resource-manager output while the Owner goal remains unfinished.
+
+### Added
+- `scripts/harness-company-complete.sh` provides the shared running → idle/completed transition for dashboard auto-mode, external runners, hooks, and final CEO handoff paths.
+- New progress templates include `company_state.state` and default `conductor` fields for consistent runner/dashboard state.
+
 ### Changed
 - Dashboard Org Tree now positions only hired HR-Resource workers from `hr-roster.json`, requiring a backing `.harness/shared/HR-Resource/{worker}/SKILL.md`.
 - Running hired workers are highlighted under their owning CXX instead of showing queue jobs as worker seats.
