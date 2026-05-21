@@ -89,6 +89,7 @@ Flat `.harness/documents/{mission}/workers/` reports are legacy. New worker evid
 - CEO must not dispatch, hire, or brief workers directly.
 - CXX agents must not directly execute specialist deliverables.
 - CTO worker dispatch requires `cto.md` first.
+- CDO completion requires `.harness/documents/{mission}/cdo/preview.html`; CEO/Owner can view it from the dashboard by clicking `harness-cdo`.
 - CQO verdicts require evaluator/tester worker evidence.
 - Owner is final acceptance only. Do not report "done, please check" until worker-backed verification proves the goal is complete.
 - Every `ceo.md`, `{cxx}.md`, and worker report must end with:

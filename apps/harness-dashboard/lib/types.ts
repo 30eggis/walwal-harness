@@ -318,6 +318,7 @@ export interface MissionDoc {
   cqo: string | null;
   coo: string | null;
   cdo: string | null;
+  cdoPreview: string | null;
   ops: string | null;
   workers: WorkerDocEntry[];
   cxxPresent: string[];

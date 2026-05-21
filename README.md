@@ -203,6 +203,7 @@ Features:
 - **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards created only from hired `hr-roster.json` entries backed by `.harness/shared/HR-Resource/{worker}/SKILL.md`; running hired workers are highlighted under their owning CXX
 - **Mission Timeline** — clickable history of goal/submission/hot-fix missions showing the full dispatch chain
 - **Mission Flow tab** — per-mission flow: Owner prompt → CEO routing → CXX → owner-specific worker evidence → CQO verdict
+- **CDO Preview** — clicking `harness-cdo` opens a dashboard iframe preview from `.harness/documents/{mission}/cdo/preview.html`; CDO completion requires this visual summary artifact
 - **History tab** — mission-specific Owner request (from CEO summary + closest progress.log match)
 - **Gotchas tab** — searchable `.harness/gotchas/*.md` knowledge base, click to read full markdown
 - **Document tab** — per-CXX markdown doc viewer

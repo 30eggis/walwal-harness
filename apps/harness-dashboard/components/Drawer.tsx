@@ -5,6 +5,7 @@ export type DrawerTab =
   | "mission-flow"      // Mission document hierarchy (PRIMARY)
   | "history"           // Owner prompt history
   | "gotchas"           // Harness gotcha knowledge base
+  | "design-preview"    // CDO visual sample iframe
   | "mission-doc"       // Single doc markdown view
   | "logs";             // Agent log (technical)
 
@@ -23,6 +24,7 @@ const TABS: Array<{ id: DrawerTab; label: string }> = [
   { id: "mission-flow", label: "Mission Flow" },
   { id: "history", label: "History" },
   { id: "gotchas", label: "Gotchas" },
+  { id: "design-preview", label: "Preview" },
   { id: "mission-doc", label: "Document" },
   { id: "logs", label: "Agent Log" },
 ];

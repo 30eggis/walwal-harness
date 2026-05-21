@@ -1229,6 +1229,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
         cqo: readMd("cqo.md"),
         coo: readMd("coo.md"),
         cdo: readMd("cdo.md"),
+        cdoPreview: readMd("cdo/preview.html"),
         ops: readMd("ops.md"),
         workers,
         cxxPresent: [...cxxPresent],

@@ -31,6 +31,20 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.23 — Dashboard CDO preview + radial org tree (2026-05-21)
+
+### Added
+- Dashboard CDO Preview tab: clicking `harness-cdo` opens an iframe preview from `.harness/documents/{mission}/cdo/preview.html`.
+- CDO skill and harness reference now require the preview artifact before CDO completion, with CEO/Owner handoff guidance to view it in the dashboard.
+- Dashboard mission state now reads `cdo/preview.html` alongside CXX markdown docs.
+
+### Changed
+- Dashboard Org Tree now uses a compact radial/sunflower layout with Owner/CEO centered and CXX roles arranged around them.
+- Org Tree now has independent zoom controls, ctrl/meta-wheel zoom, and drag panning inside a reduced-height scroll surface.
+
+### Fixed
+- CDO dashboard navigation now opens the visual Preview tab instead of only the markdown document flow.
+
 ### Fixed
 - v7 `/goal`, `/submission`, and `/hot-fix` now mark both `company_state.state` and `conductor.state` as `running`, so Claude Stop hook auto-chain does not stop after CEO routing or hiring-only summaries.
 - Stop hook now treats v7 CEO routing state (`current_agent=ceo`, `agent_status=running`, `owner_prompt.status=routing`) as an unfinished company loop, including migrated projects that do not yet have running conductor/company state.

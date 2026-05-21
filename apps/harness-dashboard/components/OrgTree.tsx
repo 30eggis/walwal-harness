@@ -1,4 +1,5 @@
 "use client";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { AgentId, HarnessSnapshot, MinifigState, OrgNodeDef } from "@/lib/types";
 
 interface OrgTreeProps {
@@ -66,38 +67,12 @@ function OrgCard({
   );
 }
 
-function BranchConnector({ count }: { count: number }) {
-  const h = 44;
-  const stepPct = 100 / count;
-  const midY = h * 0.5;
-  const centers = Array.from({ length: count }, (_, i) => stepPct * i + stepPct / 2);
-  return (
-    <svg width="100%" height={h} className="overflow-visible pointer-events-none">
-      <line x1="50%" y1="0" x2="50%" y2={midY} stroke="#374151" strokeWidth="1.5" />
-      <line
-        x1={`${centers[0]}%`}
-        y1={midY}
-        x2={`${centers[centers.length - 1]}%`}
-        y2={midY}
-        stroke="#374151"
-        strokeWidth="1.5"
-      />
-      {centers.map((x, i) => (
-        <line
-          key={i}
-          x1={`${x}%`}
-          y1={midY}
-          x2={`${x}%`}
-          y2={h}
-          stroke="#374151"
-          strokeWidth="1.5"
-        />
-      ))}
-    </svg>
-  );
-}
-
 export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
+  const defaultZoom = 0.74;
+  const [zoom, setZoom] = useState(defaultZoom);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+
   const agentMap = new Map(snapshot.agents.map((a) => [a.id, a]));
 
   const getStatus = (ids: AgentId[]): MinifigState => {
@@ -229,68 +204,205 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
   // report-only workers remain visible in mission documents, but not as seats.
   const workers = (currentMission?.workers ?? []).filter((w) => w.hired);
 
+  const setBoundedZoom = useCallback((next: number) => {
+    setZoom(Math.min(1.35, Math.max(0.62, Number(next.toFixed(2)))));
+  }, []);
+
+  const handleWheel = useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      setBoundedZoom(zoom + (event.deltaY > 0 ? -0.06 : 0.06));
+    },
+    [setBoundedZoom, zoom],
+  );
+
+  const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: node.scrollLeft,
+      top: node.scrollTop,
+    };
+    node.setPointerCapture(event.pointerId);
+  }, []);
+
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const start = dragRef.current;
+    const node = scrollRef.current;
+    if (!start || !node) return;
+    node.scrollLeft = start.left - (event.clientX - start.x);
+    node.scrollTop = start.top - (event.clientY - start.y);
+  }, []);
+
+  const endDrag = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    scrollRef.current?.releasePointerCapture(event.pointerId);
+    dragRef.current = null;
+  }, []);
+
+  const canvas = { width: 1160, height: 600 };
+  const center = { x: 500, y: 240 };
+
+  const layout = useMemo(() => {
+    const cxxAngles = [-150, -78, 0, 78, 150];
+    const cxxRadius = 280;
+    const workerRadius = 150;
+
+    return cxxNodes.map((node, index) => {
+      const angle = (cxxAngles[index] * Math.PI) / 180;
+      const x = center.x + Math.cos(angle) * cxxRadius;
+      const y = center.y + Math.sin(angle) * cxxRadius * 0.58;
+      const outwardX = Math.cos(angle) * workerRadius;
+      const outwardY = Math.sin(angle) * workerRadius * 0.48;
+      return {
+        node,
+        x,
+        y,
+        workerX: x + outwardX,
+        workerY: y + outwardY,
+      };
+    });
+  }, [cxxNodes]);
+
   return (
-    <div className="w-full px-4 py-6 select-none">
-      {/* Mission label */}
-      {currentMission && (
-        <div className="mb-4 text-center">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">
-            current mission
-          </span>
-          <div className="mt-0.5 font-mono text-xs text-gray-400">{currentMission.missionId}</div>
+    <div className="select-none">
+      <div className="flex items-center justify-between border-b border-white/10 bg-black/20 px-3 py-2">
+        <div className="min-w-0">
+          {currentMission && (
+            <div className="truncate font-mono text-[10px] text-cyan-300/70">
+              current mission · {currentMission.missionId}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* Row 1: Owner */}
-      <div className="flex justify-center">
-        <OrgCard
-          node={ownerNode}
-          size="lg"
-          active={activeNodeId === "owner"}
-          onClick={onNodeClick}
-        />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setBoundedZoom(zoom - 0.08)}
+            className="h-7 w-7 rounded border border-gray-700 bg-gray-900/80 font-mono text-xs text-gray-200 hover:border-cyan-300/60"
+            title="Zoom out"
+          >
+            -
+          </button>
+          <button
+            type="button"
+            onClick={() => setBoundedZoom(defaultZoom)}
+            className="h-7 min-w-12 rounded border border-gray-700 bg-gray-900/80 px-2 font-mono text-[10px] text-gray-300 hover:border-cyan-300/60"
+            title="Reset zoom"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={() => setBoundedZoom(zoom + 0.08)}
+            className="h-7 w-7 rounded border border-gray-700 bg-gray-900/80 font-mono text-xs text-gray-200 hover:border-cyan-300/60"
+            title="Zoom in"
+          >
+            +
+          </button>
+        </div>
       </div>
 
-      {/* Connector: Owner → CEO */}
-      <div className="flex justify-center">
-        <div className="w-px h-6 bg-gray-700" />
-      </div>
+      <div
+        ref={scrollRef}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        className="scrollbar-hidden h-[390px] cursor-grab overflow-auto active:cursor-grabbing"
+      >
+        <div
+          className="relative"
+          style={{
+            width: canvas.width * zoom,
+            height: canvas.height * zoom,
+          }}
+        >
+          <div
+            className="absolute left-0 top-0 origin-top-left"
+            style={{
+              width: canvas.width,
+              height: canvas.height,
+              transform: `scale(${zoom})`,
+            }}
+          >
+            <svg
+              className="pointer-events-none absolute inset-0"
+              width={canvas.width}
+              height={canvas.height}
+            >
+              <line x1={center.x} y1={center.y - 26} x2={center.x} y2={center.y + 26} stroke="#374151" strokeWidth="1.5" />
+              {layout.map(({ node, x, y }) => (
+                <line
+                  key={node.id}
+                  x1={center.x}
+                  y1={center.y}
+                  x2={x}
+                  y2={y}
+                  stroke="#374151"
+                  strokeDasharray="4 5"
+                  strokeWidth="1.5"
+                />
+              ))}
+              {layout.map(({ node, x, y, workerX, workerY }) => {
+                const nodeWorkers = workers.filter((w) => w.owner === node.role);
+                if (nodeWorkers.length === 0) return null;
+                return (
+                  <line
+                    key={`${node.id}-workers`}
+                    x1={x}
+                    y1={y}
+                    x2={workerX}
+                    y2={workerY}
+                    stroke="#374151"
+                    strokeWidth="1.5"
+                  />
+                );
+              })}
+            </svg>
 
-      {/* Row 2: CEO */}
-      <div className="flex justify-center">
-        <OrgCard
-          node={ceoNode}
-          size="lg"
-          active={activeNodeId === "ceo"}
-          onClick={onNodeClick}
-        />
-      </div>
-
-      {/* Branch connector: CEO → CXX */}
-      <BranchConnector count={cxxNodes.length} />
-
-      {/* Row 3: CXX nodes with workers below */}
-      <div className="flex gap-3 justify-center">
-        {cxxNodes.map((node) => {
-          const nodeWorkers = workers.filter((w) => w.owner === node.role);
-          const hasActiveWorker = nodeWorkers.some((w) => w.active);
-          const displayNode = hasActiveWorker
-            ? { ...node, status: "typing" as const, activity: "Worker active" }
-            : node;
-
-          return (
-            <div key={node.id} className="flex flex-col items-center gap-2">
+            <div className="absolute left-[390px] top-[170px] grid w-[220px] gap-2">
               <OrgCard
-                node={displayNode}
-                size="md"
-                active={activeNodeId === node.id}
+                node={ownerNode}
+                size="lg"
+                active={activeNodeId === "owner"}
                 onClick={onNodeClick}
               />
-              {/* Worker mini-cards under CTO */}
-              {nodeWorkers.length > 0 && (
-                <>
-                  <div className="w-px h-3 bg-gray-700/60" />
-                  <div className="flex flex-col gap-1.5 w-full">
+              <OrgCard
+                node={ceoNode}
+                size="lg"
+                active={activeNodeId === "ceo"}
+                onClick={onNodeClick}
+              />
+            </div>
+
+            {layout.map(({ node, x, y, workerX, workerY }) => {
+              const nodeWorkers = workers.filter((w) => w.owner === node.role);
+              const hasActiveWorker = nodeWorkers.some((w) => w.active);
+              const displayNode = hasActiveWorker
+                ? { ...node, status: "typing" as const, activity: "Worker active" }
+                : node;
+
+              return (
+                <div
+                  key={node.id}
+                  className="absolute"
+                  style={{ left: x - 82, top: y - 38 }}
+                >
+                  <OrgCard
+                    node={displayNode}
+                    size="md"
+                    active={activeNodeId === node.id}
+                    onClick={onNodeClick}
+                  />
+                  {nodeWorkers.length > 0 && (
+                  <div
+                    className="absolute flex w-[170px] flex-col gap-1.5"
+                    style={{ left: workerX - x, top: workerY - y }}
+                  >
                     {nodeWorkers.map((w) => {
                       const workerNodeId = `worker-${node.role}-${w.name}`;
                       const workerActive = activeNodeId === workerNodeId || w.active;
@@ -339,11 +451,12 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
                       );
                     })}
                   </div>
-                </>
-              )}
-            </div>
-          );
-        })}
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

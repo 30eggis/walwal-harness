@@ -17,6 +17,7 @@ import { OwnerHistoryTab } from "./drawer/OwnerHistoryTab";
 import { MissionDocTab } from "./drawer/MissionDocTab";
 import { MissionFlowTab } from "./drawer/MissionFlowTab";
 import { GotchasTab } from "./drawer/GotchasTab";
+import { DesignPreviewTab } from "./drawer/DesignPreviewTab";
 import { MissionTimeline } from "./MissionTimeline";
 import { OrgTree } from "./OrgTree";
 
@@ -48,6 +49,8 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     }
     if (node.id === "owner") {
       setDrawerTab("history");
+    } else if (node.id === "cdo") {
+      setDrawerTab("design-preview");
     } else if (node.id.startsWith("worker-")) {
       setDrawerTab("mission-doc");
     } else {
@@ -166,6 +169,9 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
             )}
             {drawerTab === "gotchas" && (
               <GotchasTab gotchas={snapshot.gotchas ?? []} />
+            )}
+            {drawerTab === "design-preview" && (
+              <DesignPreviewTab mission={selectedMission ?? snapshot.missions?.[0] ?? null} />
             )}
             {drawerTab === "mission-doc" && selectedNode && (
               <MissionDocTab
