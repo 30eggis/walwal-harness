@@ -130,10 +130,17 @@ start_headless_tick() {
   local idle="$2"
   local force="$3"
   local review_path="$4"
-  local mode executor agent_bin stamp wake_dir ops_dir prompt_rel log_rel prompt_path log_path pid_file old_pid pid status tmux_session session_name session_safe
+  local mode executor wake_model agent_bin stamp wake_dir ops_dir prompt_rel log_rel prompt_path log_path pid_file old_pid pid status tmux_session session_name session_safe
 
-  mode="${HARNESS_WAKE_MODE:-headless}"
-  executor="${HARNESS_WAKE_EXECUTOR:-claude}"
+  if command -v jq >/dev/null 2>&1 && [ -f "$project_root/.harness/config.json" ]; then
+    mode="${HARNESS_WAKE_MODE:-$(jq -r '.company_mode.hourly_wake_mode // "headless"' "$project_root/.harness/config.json" 2>/dev/null || echo headless)}"
+    executor="${HARNESS_WAKE_EXECUTOR:-$(jq -r '.company_mode.hourly_wake_executor // "claude"' "$project_root/.harness/config.json" 2>/dev/null || echo claude)}"
+    wake_model="${HARNESS_WAKE_MODEL:-$(jq -r '.company_mode.hourly_wake_model // ""' "$project_root/.harness/config.json" 2>/dev/null || true)}"
+  else
+    mode="${HARNESS_WAKE_MODE:-headless}"
+    executor="${HARNESS_WAKE_EXECUTOR:-claude}"
+    wake_model="${HARNESS_WAKE_MODEL:-}"
+  fi
   stamp="$(date -u "+%Y%m%dT%H%M%SZ")"
   wake_dir="$project_root/.harness/actions/wake"
   ops_dir="$project_root/.harness/ops/wake"
@@ -154,28 +161,58 @@ start_headless_tick() {
   fi
 
   cat > "$prompt_path" <<EOF
-You are the walwal-harness autonomous hourly wake tick.
+You are harness-ceo waking for the walwal-harness hourly executive loop.
 
 Project root: $project_root
 Wake reason: idle=${idle}s force=${force}
 Hourly review: ${review_path:-"(not available)"}
 
+One-line command:
+Convene CXX + OPS, collect current progress and decisions, decide the next action as CEO with the active goal in mind, drive all teams without asking Owner, and use CQO verification until the goal demonstrably works.
+
 Policy:
-- Owner input after the initial GOAL is an interrupt or additional request, never a reason to wait.
+- Owner already provided the GOAL. Owner input after the initial GOAL is an interrupt or additional request, never a reason to wait.
+- Do not ask Owner what to do next. Convert uncertainty into CXX/OPS tasks, CQO checks, or a bounded assumption written to artifacts.
 - Never set conductor.state to waiting_owner. Normalize any waiting_owner state to waiting_meeting and continue.
-- meeting-manager is the default synchronization loop. Incidents, service warnings, goal drift, and escalations go to meeting-manager first.
+- meeting-manager is the synchronization loop, not the stopping point. Incidents, service warnings, goal drift, and escalations go to meeting-manager first, then route execution.
 - Keep this to one bounded autonomous tick. Do not run an endless loop.
 - Do not write future timestamps to .harness/progress.log or artifacts.
 - Keep terminal output concise; write evidence to project files.
+- Treat paperwork-only output as insufficient. A meeting that does not create or advance executable next actions is incomplete.
+
+ADHD/autonomy support pattern:
+- Act as an external executive-function scaffold: break blocked work into tiny executable next steps, name the first action, and start it.
+- Use body-doubling behavior: check the active work state, ask each role for a concise status through artifacts, and keep the loop moving.
+- Use context-transition support: summarize what just finished, what starts next, and the handoff artifact path.
+- Use time-guardian behavior: identify hidden sub-tasks that make the work longer than expected, set a realistic next checkpoint, and avoid vague "later" states.
+- Use open-loop triage: classify discovered work as NOW / NEXT / PARKED. Execute or dispatch NOW items only.
 
 Tasks:
 1. Read CONVENTIONS.md if present, .harness/conventions/shared.md, relevant .harness/conventions/<role>.md, .harness/gotchas/<role>.md, .harness/memory.md, .harness/progress.json, and the hourly review above.
-2. If service_ops.requested_mode is monitor, run or trigger one service-ops monitor pass and record last_check. stream_active may be true only during the pass and must be false when finished.
-3. Treat the hourly review as Executive Meeting Minutes. Verify it contains CEO/COO/CTO/CQO/Service-Ops role positions, discussion, decision JSON, and action items.
-4. Check conductor state against the current GOAL and route the next department without waiting for Owner.
-5. If there is an active incident or operational warning, make sure meeting-manager has shared context and an action decision that names CTO/CQO/Service-Ops responsibilities.
-6. Split meaningful progress from paperwork-only artifacts in your summary.
-7. Append a short factual summary to .harness/progress.log and any normal harness artifacts used by this project.
+2. Determine the active GOAL/submission/hot-fix from progress.json and .harness/documents. Restate it in one sentence for yourself.
+3. Convene the executive loop through artifacts: CEO + COO + CDO + CTO + CQO + OPS. Collect only concise status, blocker, decision-needed, and evidence-path information.
+4. If service_ops.requested_mode is monitor, run or trigger one service-ops monitor pass and record last_check. stream_active may be true only during the pass and must be false when finished.
+5. Treat the hourly review as Executive Meeting Minutes. Verify it contains role positions, discussion, decision JSON, action items, and CQO/OPS evidence requirements.
+6. As CEO, decide exactly one NOW action package:
+   - owner CXX/role,
+   - action_type,
+   - deliverable_path,
+   - success_condition,
+   - verifier, preferably CQO when goal behavior must be proven.
+7. Route all teams needed for that NOW action. Do not stop after hiring, planning, status reporting, or meeting note creation.
+8. Use CQO to verify whether the goal is actually satisfied. If verification fails or is missing, route implementation/fix work again.
+9. If there is an active incident or operational warning, make sure meeting-manager has shared context and an action decision that names CTO/CQO/OPS responsibilities.
+10. Split meaningful progress from paperwork-only artifacts in your summary.
+11. Append a short factual summary to .harness/progress.log and update normal harness artifacts used by this project.
+
+Required final shape for this tick:
+- GOAL:
+- CXX/OPS status collected:
+- CEO decision:
+- NOW action dispatched:
+- CQO/OPS verification required:
+- NEXT checkpoint:
+- Evidence paths:
 EOF
 
   case "$mode" in
@@ -189,7 +226,11 @@ EOF
           if [ "$executor" = "codex" ]; then
             "$agent_bin" exec -C "$project_root" "$(cat "$prompt_path")" > "$log_path" 2>&1
           else
-            "$agent_bin" -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+            if [ -n "$wake_model" ]; then
+              "$agent_bin" -p "$(cat "$prompt_path")" --model "$wake_model" > "$log_path" 2>&1
+            else
+              "$agent_bin" -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+            fi
           fi
         ) &
         pid=$!
@@ -208,7 +249,11 @@ EOF
         if [ "$executor" = "codex" ]; then
           tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' exec -C '$project_root' - < '$prompt_path' 2>&1 | tee '$log_path'"
         else
-          tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_path')\" 2>&1 | tee '$log_path'"
+          if [ -n "$wake_model" ]; then
+            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_path')\" --model '$wake_model' 2>&1 | tee '$log_path'"
+          else
+            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_path')\" 2>&1 | tee '$log_path'"
+          fi
         fi
         status="spawned-tmux executor=$executor session=$session_name"
       else

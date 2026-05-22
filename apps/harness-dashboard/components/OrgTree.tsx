@@ -243,29 +243,23 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
     dragRef.current = null;
   }, []);
 
-  const canvas = { width: 1160, height: 600 };
-  const center = { x: 500, y: 240 };
+  const canvas = { width: 1280, height: 500 };
+  const ownerPos = { x: 70, y: 196 };
+  const ceoPos = { x: 320, y: 196 };
+  const cxxX = 610;
+  const workerX = 890;
 
   const layout = useMemo(() => {
-    const cxxAngles = [-150, -78, 0, 78, 150];
-    const cxxRadius = 280;
-    const workerRadius = 150;
+    const startY = 50;
+    const rowGap = 86;
 
     return cxxNodes.map((node, index) => {
-      const angle = (cxxAngles[index] * Math.PI) / 180;
-      const x = center.x + Math.cos(angle) * cxxRadius;
-      const y = center.y + Math.sin(angle) * cxxRadius * 0.58;
-      const outwardX = Math.cos(angle) * workerRadius;
-      const outwardY = Math.sin(angle) * workerRadius * 0.48;
-      return {
-        node,
-        x,
-        y,
-        workerX: x + outwardX,
-        workerY: y + outwardY,
-      };
+      const nodeWorkers = workers.filter((w) => w.owner === node.role);
+      const y = startY + index * rowGap;
+      const workerHeight = Math.max(58, nodeWorkers.length * 54 + Math.max(0, nodeWorkers.length - 1) * 6);
+      return { node, x: cxxX, y, workerX, workerY: y - workerHeight / 2 + 30, nodeWorkers };
     });
-  }, [cxxNodes]);
+  }, [cxxNodes, workers]);
 
   return (
     <div className="select-none">
@@ -329,48 +323,51 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
               transform: `scale(${zoom})`,
             }}
           >
-            <svg
-              className="pointer-events-none absolute inset-0"
-              width={canvas.width}
-              height={canvas.height}
-            >
-              <line x1={center.x} y1={center.y - 26} x2={center.x} y2={center.y + 26} stroke="#374151" strokeWidth="1.5" />
-              {layout.map(({ node, x, y }) => (
-                <line
-                  key={node.id}
-                  x1={center.x}
-                  y1={center.y}
-                  x2={x}
-                  y2={y}
-                  stroke="#374151"
-                  strokeDasharray="4 5"
-                  strokeWidth="1.5"
-                />
-              ))}
-              {layout.map(({ node, x, y, workerX, workerY }) => {
-                const nodeWorkers = workers.filter((w) => w.owner === node.role);
-                if (nodeWorkers.length === 0) return null;
-                return (
-                  <line
-                    key={`${node.id}-workers`}
-                    x1={x}
-                    y1={y}
-                    x2={workerX}
-                    y2={workerY}
+            <svg className="pointer-events-none absolute inset-0" width={canvas.width} height={canvas.height}>
+              <path
+                d={`M ${ownerPos.x + 235} ${ownerPos.y + 56} H ${ceoPos.x}`}
+                stroke="#374151"
+                strokeWidth="1.5"
+                fill="none"
+              />
+              <path
+                d={`M ${ceoPos.x + 235} ${ceoPos.y + 56} H ${cxxX - 54}`}
+                stroke="#374151"
+                strokeWidth="1.5"
+                fill="none"
+              />
+              <path
+                d={`M ${cxxX - 54} ${layout[0]?.y ?? 80} V ${layout[layout.length - 1]?.y ?? 420}`}
+                stroke="#374151"
+                strokeWidth="1.5"
+                fill="none"
+              />
+              {layout.map(({ node, x, y, nodeWorkers }) => (
+                <g key={node.id}>
+                  <path
+                    d={`M ${x - 54} ${y} H ${x - 10}`}
                     stroke="#374151"
+                    strokeDasharray="4 5"
                     strokeWidth="1.5"
+                    fill="none"
                   />
-                );
-              })}
+                  {nodeWorkers.length > 0 && (
+                    <path
+                      d={`M ${x + 166} ${y} H ${workerX - 16}`}
+                      stroke="#374151"
+                      strokeWidth="1.5"
+                      fill="none"
+                    />
+                  )}
+                </g>
+              ))}
             </svg>
 
-            <div className="absolute left-[390px] top-[170px] grid w-[220px] gap-2">
-              <OrgCard
-                node={ownerNode}
-                size="lg"
-                active={activeNodeId === "owner"}
-                onClick={onNodeClick}
-              />
+            <div className="absolute" style={{ left: ownerPos.x, top: ownerPos.y }}>
+              <OrgCard node={ownerNode} size="lg" active={activeNodeId === "owner"} onClick={onNodeClick} />
+            </div>
+
+            <div className="absolute" style={{ left: ceoPos.x, top: ceoPos.y }}>
               <OrgCard
                 node={ceoNode}
                 size="lg"
@@ -379,8 +376,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
               />
             </div>
 
-            {layout.map(({ node, x, y, workerX, workerY }) => {
-              const nodeWorkers = workers.filter((w) => w.owner === node.role);
+            {layout.map(({ node, x, y, workerX, workerY, nodeWorkers }) => {
               const hasActiveWorker = nodeWorkers.some((w) => w.active);
               const displayNode = hasActiveWorker
                 ? { ...node, status: "typing" as const, activity: "Worker active" }
@@ -390,7 +386,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
                 <div
                   key={node.id}
                   className="absolute"
-                  style={{ left: x - 82, top: y - 38 }}
+                  style={{ left: x, top: y - 38 }}
                 >
                   <OrgCard
                     node={displayNode}

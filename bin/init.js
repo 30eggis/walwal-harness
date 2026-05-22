@@ -99,6 +99,19 @@ function copyDir(src, dest) {
   }
 }
 
+function chmodShellScripts(dir) {
+  if (!fs.existsSync(dir)) return;
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      chmodShellScripts(full);
+    } else if (entry.name.endsWith('.sh')) {
+      try { fs.chmodSync(full, '755'); } catch (e) {}
+    }
+  }
+}
+
 function fileExists(p) {
   return fs.existsSync(p);
 }
@@ -728,23 +741,27 @@ function installScripts() {
 
   if (fs.existsSync(scriptsSrc)) {
     copyDir(scriptsSrc, scriptsDest);
-
-    // chmod +x for all .sh files (recursive)
-    function chmodRecursive(dir) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          chmodRecursive(full);
-        } else if (entry.name.endsWith('.sh')) {
-          try { fs.chmodSync(full, '755'); } catch (e) {}
-        }
-      }
-    }
-    chmodRecursive(scriptsDest);
+    chmodShellScripts(scriptsDest);
   }
 
   log('Scripts installation complete');
+}
+
+function refreshScriptsForMigrate({ dryRun = false, backupDir = null } = {}) {
+  const scriptsSrc = path.join(PKG_ROOT, 'scripts');
+  const scriptsDest = path.join(PROJECT_ROOT, 'scripts');
+  if (!fs.existsSync(scriptsSrc)) return;
+
+  log('  scripts/: package runtime scripts refresh');
+  if (dryRun) return;
+
+  if (backupDir && fs.existsSync(scriptsDest)) {
+    const scriptsBackup = path.join(backupDir, 'scripts');
+    copyDir(scriptsDest, scriptsBackup);
+  }
+
+  copyDir(scriptsSrc, scriptsDest);
+  chmodShellScripts(scriptsDest);
 }
 
 // ─────────────────────────────────────────
@@ -1205,6 +1222,7 @@ function detectMigrationNeeded() {
     configMissingCompanyMode: false,
     configLegacyRouting: false,
     configRuntimeVerificationMissing: false,
+    configWakeModelMissing: false,
     coreSkillsStale: false,
     hrResourcePoolStale: false,
     harnessMdStale: false,
@@ -1306,6 +1324,9 @@ function detectMigrationNeeded() {
       if (!c.company_mode || c.mode_selection) flags.configMissingCompanyMode = true;
       if (!c.runtime?.verification?.watch_during_cqo || !c.runtime?.verification?.require_ops_evidence_for_pass) {
         flags.configRuntimeVerificationMissing = true;
+      }
+      if (c.company_mode && c.company_mode.hourly_wake_model === undefined) {
+        flags.configWakeModelMissing = true;
       }
       if (
         c.behavior?.auto_route_dispatcher !== undefined ||
@@ -1439,6 +1460,10 @@ function showMigrationProposal(flags) {
     console.log('  • config.json: runtime.verification 섹션 추가 가능');
     console.log('    CQO 검수 중 OPS runtime watch 와 PASS 차단 조건을 설정합니다.');
   }
+  if (flags.configWakeModelMissing) {
+    console.log('  • config.json: company_mode.hourly_wake_model 추가 가능');
+    console.log('    Claude wake tick 에서 --model 을 환경변수/설정으로 지정할 수 있습니다.');
+  }
   if (flags.configLegacyRouting) {
     console.log('  • config.json: legacy dispatcher/conductor wording → v7 CEO/CXX wording');
   }
@@ -1499,11 +1524,13 @@ function runMigrate(opts = {}) {
   // Always refresh owner-facing commands (full replacement regardless of current state).
   if (dryRun) {
     log('  (dry-run) commands: /goal, /submission, /hot-fix 교체 예정');
+    log('  (dry-run) scripts/: package runtime scripts refresh 예정');
   } else {
     installCommands();
   }
 
   const flags = detectMigrationNeeded();
+  const runtimeScriptsAlwaysRefresh = true;
   const gotchaMissingTotal = Object.values(flags.gotchaMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   const conventionMissingTotal = Object.values(flags.conventionMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   if (
@@ -1512,6 +1539,7 @@ function runMigrate(opts = {}) {
     !flags.configMissingCompanyMode &&
     !flags.configLegacyRouting &&
     !flags.configRuntimeVerificationMissing &&
+    !flags.configWakeModelMissing &&
     !flags.coreSkillsStale &&
     !flags.hrResourcePoolStale &&
     !flags.harnessMdStale &&
@@ -1521,7 +1549,8 @@ function runMigrate(opts = {}) {
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
     gotchaMissingTotal === 0 &&
     conventionMissingTotal === 0 &&
-    !flags.bundleVersionStale
+    !flags.bundleVersionStale &&
+    !runtimeScriptsAlwaysRefresh
   ) {
     console.log('');
     let pkgVer = 'unknown';
@@ -1536,6 +1565,10 @@ function runMigrate(opts = {}) {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const backupDir = path.join(HARNESS_DIR, 'archive', `migration-${ts}`);
   if (!dryRun) ensureDir(backupDir);
+
+  // Runtime scripts are package-owned. Migrate must refresh them so existing
+  // projects receive wake/meeting/OPS fixes without requiring a full init.
+  refreshScriptsForMigrate({ dryRun, backupDir });
 
   // 1. progress.json
   const progressPath = path.join(HARNESS_DIR, 'progress.json');
@@ -1568,10 +1601,11 @@ function runMigrate(opts = {}) {
   // 2. config.json — inject company_mode/runtime verification from template if missing
   const configPath = path.join(HARNESS_DIR, 'config.json');
   const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
-  if ((flags.configMissingCompanyMode || flags.configLegacyRouting || flags.configRuntimeVerificationMissing) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
+  if ((flags.configMissingCompanyMode || flags.configLegacyRouting || flags.configRuntimeVerificationMissing || flags.configWakeModelMissing) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
     const original = fs.readFileSync(configPath, 'utf8');
     const c = JSON.parse(original);
     const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
+    let configChanged = false;
     if (tpl.company_mode) {
       if (flags.configMissingCompanyMode || flags.configLegacyRouting) {
         c.company_mode = {
@@ -1588,14 +1622,23 @@ function runMigrate(opts = {}) {
         delete c.behavior.auto_route_dispatcher;
         delete c.behavior.auto_route_dispatcher_description;
         delete c.mode_selection;
+        configChanged = true;
         log('  config.json: v7 CEO/CXX routing 섹션 동기화');
+      }
+      if (flags.configWakeModelMissing) {
+        c.company_mode = c.company_mode || {};
+        c.company_mode.hourly_wake_model = tpl.company_mode.hourly_wake_model ?? '';
+        c.company_mode.hourly_wake_model_description = tpl.company_mode.hourly_wake_model_description;
+        configChanged = true;
+        log('  config.json: hourly_wake_model 섹션 동기화');
       }
       if (flags.configRuntimeVerificationMissing && tpl.runtime?.verification) {
         c.runtime = c.runtime || {};
         c.runtime.verification = deepMerge(tpl.runtime.verification, c.runtime.verification || {});
+        configChanged = true;
         log('  config.json: runtime.verification 섹션 동기화');
       }
-      if (!dryRun) {
+      if (!dryRun && configChanged) {
         fs.writeFileSync(path.join(backupDir, 'config.json'), original);
         fs.writeFileSync(configPath, JSON.stringify(c, null, 2) + '\n');
       }

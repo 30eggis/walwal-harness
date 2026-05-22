@@ -31,6 +31,15 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.24 — Hourly CEO wake loop + migrate script refresh (2026-05-22)
+
+### Changed
+- Hourly wake prompting now explicitly wakes CEO to convene CXX + OPS, collect current progress and decisions, dispatch one NOW action, and continue through CQO/OPS verification without asking Owner for next steps.
+- Hourly wake prompts now include external executive-function scaffolding: body-doubling status checks, context-transition summaries, time-guardian hidden-task detection, and NOW/NEXT/PARKED open-loop triage.
+- Hourly wake now supports `HARNESS_WAKE_MODEL` / `company_mode.hourly_wake_model` for Claude model pinning.
+- `migrate` now refreshes package-owned runtime scripts, including `scripts/harness-wake.sh`, while archiving the previous target scripts directory.
+- Dashboard Org Tree now uses a left-to-right depth layout while keeping zoom, ctrl/meta-wheel zoom, and drag panning.
+
 ## 7.1.23 — Dashboard CDO preview + radial org tree (2026-05-21)
 
 ### Added

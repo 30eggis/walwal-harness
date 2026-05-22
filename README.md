@@ -209,6 +209,13 @@ Features:
 - **Document tab** — per-CXX markdown doc viewer
 - **Owner Acceptance Gate** — Owner is final acceptance only; CEO/CXX must complete worker-backed verification before asking for Owner review
 
+Hourly autonomous wake:
+
+- `HARNESS_WAKE_EXECUTOR=claude|codex` selects `claude -p` or `codex exec`.
+- `HARNESS_WAKE_MODEL=<model>` optionally pins the Claude model for wake ticks.
+- Each wake tick prompts CEO to convene CXX + OPS, collect progress and decisions, dispatch the next action without asking Owner, and require CQO/OPS verification until the active goal works.
+- `npx @walwal-harness/cli migrate` refreshes package-owned runtime scripts, so existing projects receive wake prompt updates without a full re-init.
+
 ---
 
 ## Harness Runtime Paths
