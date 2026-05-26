@@ -168,6 +168,33 @@ function mergeClaudePermissionAllow(settings, entries) {
   return changed;
 }
 
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function harnessScriptCommand(scriptName) {
+  return `bash ${shellQuote(path.join(PROJECT_ROOT, 'scripts', scriptName))}`;
+}
+
+function replaceHarnessHookCommand(entries, marker, command) {
+  let changed = false;
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (Array.isArray(entry.hooks)) {
+      for (const hook of entry.hooks) {
+        if (hook && hook.command && hook.command.includes(marker) && hook.command !== command) {
+          hook.command = command;
+          changed = true;
+        }
+      }
+    } else if (entry.type === 'command' && entry.command && entry.command.includes(marker) && entry.command !== command) {
+      entry.command = command;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 const V7_REMOVED_CONVENTION_FILES = [
   'conductor.md',
   'coo-developer.md',
@@ -820,7 +847,7 @@ function installSessionHook() {
 
   // Migrate any legacy flat entries (created by older walwal-harness versions)
   // into the correct matcher + hooks-array shape that Claude Code expects.
-  const hookCmd = 'bash scripts/harness-session-start.sh';
+  const hookCmd = harnessScriptCommand('harness-session-start.sh');
   let migrated = false;
   settings.hooks.SessionStart = settings.hooks.SessionStart
     .map((entry) => {
@@ -845,6 +872,8 @@ function installSessionHook() {
       )
   );
 
+  const hookUpdated = replaceHarnessHookCommand(settings.hooks.SessionStart, 'harness-session-start', hookCmd);
+
   if (!alreadyInstalled) {
     settings.hooks.SessionStart.push({
       matcher: '',
@@ -852,9 +881,9 @@ function installSessionHook() {
     });
     writeClaudeSettings(settings);
     log('SessionStart hook installed in .claude/settings.json');
-  } else if (migrated) {
+  } else if (migrated || hookUpdated) {
     writeClaudeSettings(settings);
-    log('SessionStart hook migrated to matcher + hooks-array format');
+    log('SessionStart hook migrated in .claude/settings.json');
   } else {
     log('SessionStart hook already installed');
   }
@@ -872,16 +901,9 @@ function installStatusline() {
 
   let settings = readClaudeSettings();
 
-  // Check if statusLine is already configured
-  if (settings.statusLine && settings.statusLine.command &&
-      settings.statusLine.command.includes('harness-statusline')) {
-    log('Statusline already installed');
-    return;
-  }
-
   settings.statusLine = {
     type: 'command',
-    command: 'bash scripts/harness-statusline.sh',
+    command: harnessScriptCommand('harness-statusline.sh'),
     refreshInterval: 3
   };
 
@@ -904,7 +926,7 @@ function installUserPromptSubmitHook() {
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.UserPromptSubmit) settings.hooks.UserPromptSubmit = [];
 
-  const hookCmd = 'bash scripts/harness-user-prompt-submit.sh';
+  const hookCmd = harnessScriptCommand('harness-user-prompt-submit.sh');
 
   // Detect existing harness UserPromptSubmit hook (any shape)
   const alreadyInstalled = settings.hooks.UserPromptSubmit.some((entry) => {
@@ -920,6 +942,8 @@ function installUserPromptSubmitHook() {
     return false;
   });
 
+  const hookUpdated = replaceHarnessHookCommand(settings.hooks.UserPromptSubmit, 'harness-user-prompt-submit', hookCmd);
+
   if (!alreadyInstalled) {
     settings.hooks.UserPromptSubmit.push({
       matcher: '',
@@ -930,6 +954,9 @@ function installUserPromptSubmitHook() {
     log('  → /goal, /submission, and /hot-fix are guided through harness-ceo and CXX workflow');
     log('  → Opt-out per message: say "harness skip" or "without harness"');
     log('  → Disable globally: set .harness/config.json behavior.auto_route_ceo = false');
+  } else if (hookUpdated) {
+    writeClaudeSettings(settings);
+    log('UserPromptSubmit hook migrated in .claude/settings.json');
   } else {
     log('UserPromptSubmit hook already installed');
   }
@@ -950,7 +977,7 @@ function installStopHook() {
   if (!settings.hooks) settings.hooks = {};
   if (!settings.hooks.Stop) settings.hooks.Stop = [];
 
-  const hookCmd = 'bash scripts/harness-stop.sh';
+  const hookCmd = harnessScriptCommand('harness-stop.sh');
 
   const alreadyInstalled = settings.hooks.Stop.some((entry) => {
     if (!entry || typeof entry !== 'object') return false;
@@ -965,6 +992,8 @@ function installStopHook() {
     return false;
   });
 
+  const hookUpdated = replaceHarnessHookCommand(settings.hooks.Stop, 'harness-stop', hookCmd);
+
   if (!alreadyInstalled) {
     settings.hooks.Stop.push({
       matcher: '',
@@ -975,6 +1004,9 @@ function installStopHook() {
     log('  → Conductor 가 running 인 동안 turn 종료 시 자동으로 다음 tick 으로 연쇄');
     log('  → 비활성: .harness/config.json behavior.auto_chain_on_stop = false');
     log('  → 상한: behavior.auto_chain_max_per_sprint (기본 200)');
+  } else if (hookUpdated) {
+    writeClaudeSettings(settings);
+    log('Stop hook migrated in .claude/settings.json');
   } else {
     log('Stop hook already installed');
   }
@@ -1227,6 +1259,7 @@ function detectMigrationNeeded() {
     hrResourcePoolStale: false,
     harnessMdStale: false,
     agentsMissingOpsVerificationRules: false,
+    agentsMissingCodexAdapterRules: false,
     rosterCodexPathsMissing: false,
     resourceIndexCodexWordingMissing: false,
     memoryMissingSystemEntries: [],
@@ -1346,6 +1379,12 @@ function detectMigrationNeeded() {
         !agentsBody.includes('runtime.verification')
       ) {
         flags.agentsMissingOpsVerificationRules = true;
+      }
+      if (
+        !agentsBody.includes('Codex Runtime Adapter') &&
+        !agentsBody.includes('.codex/skills/harness-ceo/SKILL.md')
+      ) {
+        flags.agentsMissingCodexAdapterRules = true;
       }
     } catch {}
   }
@@ -1846,6 +1885,32 @@ function runMigrate(opts = {}) {
       log('  AGENTS.md: OPS/CQO 검수관제 시스템 규칙 append');
       if (!dryRun) {
         fs.writeFileSync(path.join(backupDir, 'AGENTS.md'), original);
+        const sep = original.endsWith('\n') ? '' : '\n';
+        fs.writeFileSync(agentsPath, original + sep + block);
+      }
+    }
+  }
+
+
+  if (flags.agentsMissingCodexAdapterRules) {
+    const agentsPath = path.join(PROJECT_ROOT, 'AGENTS.md');
+    if (fs.existsSync(agentsPath)) {
+      const original = fs.readFileSync(agentsPath, 'utf8');
+      const block = [
+        '',
+        '---',
+        '',
+        '## walwal-harness Codex Runtime Adapter',
+        '',
+        '- Codex does not require .codex/agents/; repo-local .codex/skills/**/SKILL.md files are the Codex runtime protocol.',
+        '- For /goal, /submission, and /hot-fix, read .codex/commands/{goal,submission,hot-fix}.md and .codex/skills/harness-ceo/SKILL.md if Codex does not auto-load them.',
+        '- Do not report walwal-harness as unavailable just because skills are not listed in the global Available Skills panel.',
+        '- Emulate fresh CXX context by reading the role skill, active mission files, and required conventions/gotchas before writing that role\'s {cxx}.md.',
+        ''
+      ].join('\n');
+      log('  AGENTS.md: Codex runtime adapter rules append');
+      if (!dryRun) {
+        fs.writeFileSync(path.join(backupDir, 'AGENTS.codex-adapter.md'), original);
         const sep = original.endsWith('\n') ? '' : '\n';
         fs.writeFileSync(agentsPath, original + sep + block);
       }

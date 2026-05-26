@@ -19,6 +19,18 @@ Internal routing uses agent/skill wiring only.
 
 ---
 
+## 1.1 Codex Runtime Adapter
+
+Codex does not need `.codex/agents/` to run this harness. The installed Codex contract is:
+
+- Owner entrypoints are `.codex/commands/goal.md`, `.codex/commands/submission.md`, and `.codex/commands/hot-fix.md`.
+- Harness role protocols live in `.codex/skills/harness-{ceo,coo,cdo,cto,cqo,ops,hiring,resource-manager,brick-office}/SKILL.md`.
+- If Codex does not auto-list these as available skills, manually read the relevant `SKILL.md` file and follow it. Do not report that the harness is unavailable just because `.codex/agents/` is absent.
+- When a command asks for a "fresh session context", Codex must create a role-scoped context by reading only the role skill, the active mission files, and required conventions/gotchas before writing that role's `{cxx}.md`. If Codex sub-agent tooling is explicitly available and requested, it may be used; otherwise execute the role protocol sequentially with clear role boundaries.
+- Codex must not treat `.codex/skills` as passive documentation. These files are the installed runtime protocol for Codex.
+
+---
+
 ## 2. Think Before Acting
 
 Don't assume. Don't hide confusion.

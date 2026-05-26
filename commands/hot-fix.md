@@ -7,6 +7,11 @@ argument-hint: "<incident or fix request>"
 
 Route the Owner request to the installed `harness-ceo` agent/skill as an emergency mission under the active goal.
 
+Codex adapter:
+- If Codex does not auto-load `harness-ceo`, manually read `.codex/skills/harness-ceo/SKILL.md` and follow it.
+- Absence of `.codex/agents/` is not a failure. `.codex/skills/**/SKILL.md` is the Codex runtime protocol.
+- For CXX "fresh session context", use role-scoped context: read the CXX skill, active mission files, and required conventions/gotchas before writing that role's `{cxx}.md`.
+
 Required flow:
 1. Locate the active goal document root under `.harness/documents/{goal_name}/`. If no active goal exists, CEO must create/select one before proceeding.
 2. Create `.harness/documents/{goal_name}/hotfix-{hotfix_index}-{hotfix_name}/ceo.md`.
