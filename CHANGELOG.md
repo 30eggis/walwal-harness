@@ -31,6 +31,16 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.25 — Absolute Claude hook paths + Codex adapter docs (2026-05-26)
+
+### Fixed
+- Claude hooks and statusline now install with project-root absolute script paths, preventing `UserPromptSubmit hook error: scripts/harness-user-prompt-submit.sh: No such file or directory` when Claude runs hooks outside the project root.
+- Existing relative-path harness hooks are migrated to absolute paths on re-init.
+
+### Changed
+- Codex command and AGENTS templates now explain that `.codex/skills/**/SKILL.md` is the Codex runtime protocol and `.codex/agents/` is not required.
+- `migrate` appends a Codex Runtime Adapter block to existing AGENTS.md files when missing.
+
 ## 7.1.24 — Hourly CEO wake loop + migrate script refresh (2026-05-22)
 
 ### Changed

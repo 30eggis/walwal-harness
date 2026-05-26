@@ -7,6 +7,11 @@ argument-hint: "<additional requirement>"
 
 Route the Owner request to the installed `harness-ceo` agent/skill as an additional requirement under the active goal.
 
+Codex adapter:
+- If Codex does not auto-load `harness-ceo`, manually read `.codex/skills/harness-ceo/SKILL.md` and follow it.
+- Absence of `.codex/agents/` is not a failure. `.codex/skills/**/SKILL.md` is the Codex runtime protocol.
+- For CXX "fresh session context", use role-scoped context: read the CXX skill, active mission files, and required conventions/gotchas before writing that role's `{cxx}.md`.
+
 Required flow:
 1. Locate the active goal document root under `.harness/documents/{goal_name}/`. If no active goal exists, CEO must ask the Owner to create or select one with `/goal` before proceeding.
 2. Create a submission record under `.harness/documents/{goal_name}/submission-{submission_index}-{submission_name}/`.

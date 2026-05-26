@@ -215,6 +215,7 @@ Hourly autonomous wake:
 - `HARNESS_WAKE_MODEL=<model>` optionally pins the Claude model for wake ticks.
 - Each wake tick prompts CEO to convene CXX + OPS, collect progress and decisions, dispatch the next action without asking Owner, and require CQO/OPS verification until the active goal works.
 - `npx @walwal-harness/cli migrate` refreshes package-owned runtime scripts, so existing projects receive wake prompt updates without a full re-init.
+- In Codex, `.codex/skills/**/SKILL.md` files are the runtime protocol. `.codex/agents/` is not required; Codex should manually read the relevant skill if it is not auto-listed.
 
 ---
 
