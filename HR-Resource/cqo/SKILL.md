@@ -9,6 +9,10 @@ disable-model-invocation: false
 
 Own quality, recurrence prevention, and archive eligibility.
 
+## Lazy Rule Loading
+
+Before quality work, read `.harness/conventions/shared.md`, `.harness/conventions/cqo.md`, `.harness/gotchas/shared.md`, and `.harness/gotchas/cqo.md`. Then follow only the related links in `cqo.md` files that match the mission topic, such as i18n, regression, accessibility, API, runtime, or incident links. Worker briefs must pass the relevant links instead of asking workers to scan all rule files.
+
 ## Workflow
 
 1. Read CEO and CTO mission context.

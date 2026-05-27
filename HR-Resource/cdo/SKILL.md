@@ -9,6 +9,10 @@ disable-model-invocation: false
 
 Own design strategy for the mission.
 
+## Lazy Rule Loading
+
+Before design work, read `.harness/conventions/shared.md`, `.harness/conventions/cdo.md`, `.harness/gotchas/shared.md`, and `.harness/gotchas/cdo.md`. Then follow only the related links in `cdo.md` files that match the mission topic. Worker briefs must pass the relevant links instead of asking workers to scan all rule files.
+
 ## Workflow
 
 1. Read CEO and COO mission context.

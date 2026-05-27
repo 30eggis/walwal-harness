@@ -9,6 +9,10 @@ disable-model-invocation: false
 
 Monitor the environments that make the mission runnable.
 
+## Lazy Rule Loading
+
+Before monitoring work, read `.harness/conventions/shared.md`, `.harness/conventions/ops.md`, `.harness/gotchas/shared.md`, and `.harness/gotchas/ops.md`. Then follow only the related links in `ops.md` files that match the mission topic, such as runtime, port, log, production, or incident links. Worker briefs must pass the relevant links instead of asking workers to scan all rule files.
+
 OPS owns three environment classes:
 
 - Build environment: command-based local execution such as `flutter run`, `npm run dev`, test watchers, local build scripts, and other foreground/background commands used by CXX workers.

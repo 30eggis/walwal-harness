@@ -26,7 +26,11 @@ Hire workers from `.harness/shared/HR-Resource/`.
 5. Update `.harness/shared/hr-roster.json` without deleting existing hired entries. Record `owner` as the owning CXX, `skillPath` as `.harness/shared/HR-Resource/{name}/SKILL.md`, and `skillPaths.claude` / `skillPaths.codex` as tool-specific hierarchical installed paths.
 6. The owning CXX must write worker reports under `.harness/documents/{mission}/{owning-cxx}/workers/{name}.md`. Do not write flat `.harness/documents/{mission}/workers/{name}.md` except when migrating legacy missions.
 7. Ask the `harness-resource-manager` skill to update trigger wording.
-8. Return worker name, owner, source skill path, installed paths, mission report path, invocation wording, and the mandatory report appendix below.
+8. Return worker name, owner, source skill path, installed paths, mission report path, invocation wording, related convention/gotcha links supplied by the owning CXX, and the mandatory report appendix below.
+
+## Worker Rule Links
+
+Every hired worker receives the owning CXX's relevant convention/gotcha links in the worker brief. Workers read those linked topic files only when they match the assigned task.
 
 ## Mandatory Worker Report Appendix
 

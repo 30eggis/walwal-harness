@@ -15,4 +15,6 @@ Only company-level roles are provided by default:
 - `resource-manager.md`
 - `brick-office.md`
 
-Specialist worker gotchas are not bundled. CQO promotes recurring verified failures into this store as the company learns.
+Topic-specific gotcha files may use descriptive names such as `i18n-locale-hotfix.md`.
+
+CXX files such as `cto.md` and `cqo.md` act as lazy-loading indexes. Add links there when a topic file applies to that CXX.

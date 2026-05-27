@@ -262,7 +262,7 @@
     "actions": ".harness/actions",
     "archive": ".harness/archive",
     "gotchas": ".harness/gotchas",
-    "conventions": "CONVENTIONS.md",
+    "conventions": ".harness/conventions",
     "progress_state": ".harness/progress.json",
     "progress_log": ".harness/progress.log"
   },
@@ -284,16 +284,18 @@
     "statuses": ["start", "complete", "fail", "pass", "skip", "warn"]
   },
   "conventions": {
-    "comment": "House-style registry. 루트 CONVENTIONS.md(사용자 자유 기술) + .harness/conventions/<scope>.md(Dispatcher 자동 누적). 모든 에이전트가 세션 시작 시 읽고 적용한다. Gotcha 의 긍정 대칭판.",
+    "comment": "House-style registry. CXX files act as lazy-loading indexes that link to topic-specific convention/gotcha documents.",
     "root_file": "CONVENTIONS.md",
     "scoped_dir": ".harness/conventions/",
-    "scopes": ["shared", "planner", "generator-backend", "generator-frontend", "evaluator-code-quality", "evaluator-functional", "evaluator-visual"],
+    "gotcha_scoped_dir": ".harness/gotchas/",
+    "cxx_scopes": ["ceo", "coo", "cdo", "cto", "cqo", "ops", "hiring", "resource-manager", "brick-office"],
     "entry_id_prefix": "C",
-    "read_by": "all_agents",
-    "read_order": ["CONVENTIONS.md", ".harness/conventions/shared.md", ".harness/conventions/<self>.md", ".harness/gotchas/<self>.md", ".harness/memory.md"],
-    "conflict_priority": "self > shared > root",
-    "write_by": "dispatcher (auto-append C-NNN) or user_only (manual edit)",
-    "read_timing": "session_start",
+    "read_by": "CEO, CXX, and hired workers",
+    "cxx_read_order": [".harness/conventions/shared.md", ".harness/conventions/<cxx>.md", "follow relevant links in <cxx>.md", ".harness/gotchas/shared.md", ".harness/gotchas/<cxx>.md", "follow relevant links in <cxx>.md", ".harness/memory.md"],
+    "worker_read_order": ["links explicitly provided by owning CXX in the worker brief"],
+    "conflict_priority": "linked topic > owning-cxx > shared > memory > root",
+    "write_by": "CQO/gotcha-register, CXX, or Owner-approved manual edit",
+    "read_timing": "before each role or worker starts mission work",
     "preserve_on_postinstall": true
   },
   "recommended_skills": {

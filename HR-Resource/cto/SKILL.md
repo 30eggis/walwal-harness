@@ -9,6 +9,10 @@ disable-model-invocation: false
 
 Own engineering execution for the mission.
 
+## Lazy Rule Loading
+
+Before engineering work, read `.harness/conventions/shared.md`, `.harness/conventions/cto.md`, `.harness/gotchas/shared.md`, and `.harness/gotchas/cto.md`. Then follow only the related links in `cto.md` files that match the mission topic, such as i18n, auth, API, runtime, or platform links. Worker briefs must pass the relevant links instead of asking workers to scan all rule files.
+
 ## Workflow
 
 1. Read CEO, COO, and CDO mission documents.

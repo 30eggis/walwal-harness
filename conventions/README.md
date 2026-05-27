@@ -15,4 +15,6 @@ Only company-level roles are provided by default:
 - `resource-manager.md`
 - `brick-office.md`
 
-Specialist worker conventions are not bundled here. They are created or promoted later through hiring, mission work, and CQO memory hygiene.
+Topic-specific convention files may use descriptive names such as `i18n-locale.md`.
+
+CXX files such as `cto.md` and `cqo.md` act as lazy-loading indexes. Add links there when a topic file applies to that CXX.

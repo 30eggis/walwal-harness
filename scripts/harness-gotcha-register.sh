@@ -70,6 +70,7 @@ TODAY="$(date +%Y-%m-%d)"
 register_one() {
   local target="$1" rule_id="$2" title="$3" wrong="$4" right="$5" why="$6" scope="$7" source="$8"
   local file="$GOTCHAS_DIR/${target}.md"
+  mkdir -p "$(dirname "$file")"
 
   # Ensure file exists with header
   if [ ! -f "$file" ]; then
@@ -184,6 +185,7 @@ register_convention_one() {
   local scope="$1" rule_id="$2" title="$3" rule="$4" why="$5" source="$6"
   mkdir -p "$CONVENTIONS_DIR"
   local file="$CONVENTIONS_DIR/${scope}.md"
+  mkdir -p "$(dirname "$file")"
 
   if [ ! -f "$file" ]; then
     cat > "$file" <<EOF

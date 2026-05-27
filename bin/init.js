@@ -527,7 +527,6 @@ function scaffoldHarness() {
       copyFile(srcPath, destPath);
     }
   }
-
   // Copy conventions — mirror gotchas preservation: never overwrite files with
   // accumulated `### [C-NNN]` entries.
   const conventionsSrc = path.join(PKG_ROOT, 'conventions');
@@ -550,7 +549,6 @@ function scaffoldHarness() {
       copyFile(srcPath, destPath);
     }
   }
-
   // First-install migration: extract Convention/Gotcha-shaped sections from
   // existing CLAUDE.md / AGENTS.md and copy into the hierarchical stores.
   if (isFirstInstall) {
@@ -1265,6 +1263,7 @@ function detectMigrationNeeded() {
     memoryMissingSystemEntries: [],
     gotchaMissingEntries: {},   // { "<filename>": [G-IDs...] }
     conventionMissingEntries: {}, // { "<filename>": [C-IDs...] }
+    ruleRegistryLinks: [],
     bundleVersionStale: null,    // { current, installed }
   };
 
@@ -1418,6 +1417,7 @@ function detectMigrationNeeded() {
       flags.memoryMissingSystemEntries = tplEntryIds.filter((id) => !userEntryIds.has(id));
     } catch {}
   }
+  flags.ruleRegistryLinks = detectRuleRegistryLinks();
   return flags;
 }
 
@@ -1477,6 +1477,136 @@ function extractConventionEntryBlock(md, id) {
   );
   const m = md.match(re);
   return m ? m[1].trimEnd() : null;
+}
+
+const CANONICAL_RULE_SCOPES = new Set([
+  'README.md',
+  'shared.md',
+  'ceo.md',
+  'coo.md',
+  'cdo.md',
+  'cto.md',
+  'cqo.md',
+  'ops.md',
+  'hiring.md',
+  'resource-manager.md',
+  'brick-office.md',
+]);
+
+const CXX_RULE_LINK_MARKER = '<!-- walwal-harness:related-rule-links -->';
+
+function collectKnownWorkerNames() {
+  const names = new Set();
+  const hrRoot = path.join(HARNESS_DIR, 'shared', 'HR-Resource');
+  if (fs.existsSync(hrRoot)) {
+    for (const entry of fs.readdirSync(hrRoot, { withFileTypes: true })) {
+      if (entry.isDirectory()) names.add(entry.name);
+    }
+  }
+  const rosterPath = path.join(HARNESS_DIR, 'shared', 'hr-roster.json');
+  if (fs.existsSync(rosterPath)) {
+    try {
+      const roster = JSON.parse(fs.readFileSync(rosterPath, 'utf8'));
+      for (const entry of Array.isArray(roster.hired) ? roster.hired : []) {
+        if (entry?.worker) names.add(entry.worker);
+      }
+    } catch {}
+  }
+  return names;
+}
+
+function classifyRuleRegistryFile(file, kind, knownWorkers, body = '') {
+  const base = path.basename(file, '.md');
+  const ext = path.extname(file);
+  if (ext !== '.md') return null;
+  if (LEGACY_V7_FILE_OWNER[file]) {
+    return { targets: [path.basename(LEGACY_V7_FILE_OWNER[file], '.md')], reason: 'legacy-role' };
+  }
+  const haystack = `${base}\n${body}`.toLowerCase();
+  const targets = new Set();
+
+  if (/\b(i18n|intl|locale|localization|translation|translate|multilingual|language|aria|rtl|l10n)\b/.test(haystack)) {
+    targets.add('cto');
+    targets.add('cqo');
+  }
+  if (/\b(ui|ux|design|brand|visual|layout|accessibility|a11y|responsive|color|typography)\b/.test(haystack)) {
+    targets.add('cdo');
+    targets.add('cqo');
+  }
+  if (/\b(api|backend|frontend|database|schema|auth|flutter|react|next|build|deploy|port|integration|migration)\b/.test(haystack)) {
+    targets.add('cto');
+  }
+  if (/\b(test|qa|quality|regression|e2e|playwright|bug|hotfix|incident|failure|risk)\b/.test(haystack)) {
+    targets.add('cqo');
+  }
+  if (/\b(ops|runtime|server|log|monitor|health|production|docker|port)\b/.test(haystack)) {
+    targets.add('ops');
+  }
+  if (/\b(plan|research|market|hypothesis|requirement|product|scope)\b/.test(haystack)) {
+    targets.add('coo');
+  }
+  if (knownWorkers.has(base)) {
+    return { targets: ['coo', 'cto', 'cqo', 'ops'].filter(Boolean), reason: 'worker-topic' };
+  }
+  if (!targets.size) targets.add('shared');
+  return { targets: [...targets], reason: targets.has('shared') ? 'unclassified-topic' : 'topic-keywords' };
+}
+
+function detectRuleRegistryLinks() {
+  const links = [];
+  const knownWorkers = collectKnownWorkerNames();
+  for (const kind of ['conventions', 'gotchas']) {
+    const root = path.join(HARNESS_DIR, kind);
+    if (!fs.existsSync(root)) continue;
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (entry.isDirectory()) continue;
+      if (!entry.isFile() || !entry.name.endsWith('.md')) continue;
+      if (CANONICAL_RULE_SCOPES.has(entry.name)) continue;
+      const sourcePath = path.join(root, entry.name);
+      const body = fs.existsSync(sourcePath) ? fs.readFileSync(sourcePath, 'utf8') : '';
+      const classification = classifyRuleRegistryFile(entry.name, kind, knownWorkers, body);
+      if (!classification) continue;
+      links.push({
+        kind,
+        sourceRel: entry.name,
+        targets: classification.targets,
+        reason: classification.reason,
+      });
+    }
+  }
+  return links.filter((item) => item.targets.some((target) => !ruleRegistryLinkExists(item.kind, target, item.sourceRel)));
+}
+
+function ruleRegistryLinkExists(kind, target, sourceRel) {
+  const targetPath = path.join(HARNESS_DIR, kind, `${target}.md`);
+  if (!fs.existsSync(targetPath)) return false;
+  return fs.readFileSync(targetPath, 'utf8').includes(`](${sourceRel})`);
+}
+
+function updateRuleRegistryLinks(links, { dryRun, backupDir }) {
+  if (!links.length) return;
+  for (const item of links) {
+    const root = path.join(HARNESS_DIR, item.kind);
+    const sourcePath = path.join(root, item.sourceRel);
+    if (!fs.existsSync(sourcePath)) continue;
+    for (const target of item.targets) {
+      const targetPath = path.join(root, `${target}.md`);
+      if (path.resolve(sourcePath) === path.resolve(targetPath) || ruleRegistryLinkExists(item.kind, target, item.sourceRel)) continue;
+      log(`  ${item.kind}/${target}.md: link ${item.sourceRel} (${item.reason})`);
+      if (dryRun) continue;
+      ensureDir(path.dirname(targetPath));
+      const existing = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8').trimEnd() : `# ${target.toUpperCase()} ${item.kind === 'gotchas' ? 'Gotchas' : 'Conventions'}`;
+      if (fs.existsSync(targetPath)) {
+        const backupTarget = path.join(backupDir, `${item.kind}-${target}.md`);
+        fs.copyFileSync(targetPath, backupTarget);
+      }
+      const header = existing.includes(CXX_RULE_LINK_MARKER)
+        ? ''
+        : `\n\n## Related ${item.kind === 'gotchas' ? 'Gotcha' : 'Convention'} Links\n${CXX_RULE_LINK_MARKER}\n`;
+      const line = `- [${item.sourceRel}](${item.sourceRel}) — ${item.reason}`;
+      fs.writeFileSync(targetPath, `${existing}${header}${header ? '' : '\n'}${line}\n`);
+    }
+  }
 }
 
 function showMigrationProposal(flags) {
@@ -1544,6 +1674,12 @@ function showMigrationProposal(flags) {
       console.log(`    ${file}: [${ids.join(', ')}]`);
     }
   }
+  if (flags.ruleRegistryLinks && flags.ruleRegistryLinks.length) {
+    console.log('  • conventions/gotchas: topic 파일을 CXX index 에 link 하여 lazy-load 가능하게 보강');
+    for (const item of flags.ruleRegistryLinks) {
+      console.log(`    ${item.kind}/${item.sourceRel} → ${item.targets.map((t) => `${item.kind}/${t}.md`).join(', ')} (${item.reason})`);
+    }
+  }
   if (flags.bundleVersionStale) {
     const { current, installed } = flags.bundleVersionStale;
     console.log(`  • bundle: ${installed ?? '(없음)'} → ${current} 스탬프 갱신 필요`);
@@ -1572,6 +1708,7 @@ function runMigrate(opts = {}) {
   const runtimeScriptsAlwaysRefresh = true;
   const gotchaMissingTotal = Object.values(flags.gotchaMissingEntries || {}).reduce((n, a) => n + a.length, 0);
   const conventionMissingTotal = Object.values(flags.conventionMissingEntries || {}).reduce((n, a) => n + a.length, 0);
+  const ruleRegistryLinkTotal = (flags.ruleRegistryLinks || []).length;
   if (
     !flags.progressV3toV4 &&
     !flags.progressLegacyRouting &&
@@ -1588,6 +1725,7 @@ function runMigrate(opts = {}) {
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
     gotchaMissingTotal === 0 &&
     conventionMissingTotal === 0 &&
+    ruleRegistryLinkTotal === 0 &&
     !flags.bundleVersionStale &&
     !runtimeScriptsAlwaysRefresh
   ) {
@@ -1608,6 +1746,7 @@ function runMigrate(opts = {}) {
   // Runtime scripts are package-owned. Migrate must refresh them so existing
   // projects receive wake/meeting/OPS fixes without requiring a full init.
   refreshScriptsForMigrate({ dryRun, backupDir });
+  updateRuleRegistryLinks(flags.ruleRegistryLinks || [], { dryRun, backupDir });
 
   // 1. progress.json
   const progressPath = path.join(HARNESS_DIR, 'progress.json');

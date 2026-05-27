@@ -31,6 +31,16 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.26 — Lazy rule links + MCP steward (2026-05-27)
+
+### Added
+- COO planning can hire `support-support-mcp-registry-steward` to inventory Claude/Codex MCP capabilities, registration risk, credentials, and maintenance notes.
+- CXX convention/gotcha files now act as lazy-loading indexes that link to topic files such as `i18n-locale-hotfix.md`.
+
+### Changed
+- `migrate` preserves topic-specific convention/gotcha files and adds related links to matching CXX index files instead of merging or deleting them.
+- CXX and worker guidance now passes only relevant convention/gotcha links to workers, avoiding full-registry scans.
+
 ## 7.1.25 — Absolute Claude hook paths + Codex adapter docs (2026-05-26)
 
 ### Fixed

@@ -216,6 +216,8 @@ Hourly autonomous wake:
 - Each wake tick prompts CEO to convene CXX + OPS, collect progress and decisions, dispatch the next action without asking Owner, and require CQO/OPS verification until the active goal works.
 - `npx @walwal-harness/cli migrate` refreshes package-owned runtime scripts, so existing projects receive wake prompt updates without a full re-init.
 - In Codex, `.codex/skills/**/SKILL.md` files are the runtime protocol. `.codex/agents/` is not required; Codex should manually read the relevant skill if it is not auto-listed.
+- Convention/gotcha topic files lazy-load through CXX index links: `migrate` preserves files such as `.harness/gotchas/i18n-locale-hotfix.md` and links them from relevant CXX files like `cto.md` and `cqo.md`.
+- COO can use `support-support-mcp-registry-steward` to inventory Claude/Codex MCP capabilities, registration risk, credentials, and maintenance notes before recommending MCP use.
 
 ---
 
@@ -227,8 +229,8 @@ Hourly autonomous wake:
 | `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/` | Additional requirement under the active goal |
 | `.harness/documents/goal-{index}-{name}/hotfix-{index}-{name}/` | Emergency fix under the active goal |
 | `.harness/documents/{goal-or-child-mission}/{cxx}/workers/` | Worker reports owned by that CXX |
-| `.harness/conventions/` | Durable rules (CQO writes, survives missions) |
-| `.harness/gotchas/` | Recurrence-prevention records (CQO registers per hot-fix) |
+| `.harness/conventions/` | Durable rules and CXX lazy-loading indexes |
+| `.harness/gotchas/` | Recurrence-prevention records and CXX lazy-loading indexes |
 | `.harness/shared/HR-Resource/` | Hireable worker skill pool |
 | `.harness/archive/` | CQO-approved completed missions (immutable) |
 | `.harness/logs/YYYY-MM-DD/` | OPS exception logs |

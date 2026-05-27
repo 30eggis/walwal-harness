@@ -9,6 +9,15 @@ disable-model-invocation: false
 
 You are the only direct conversation channel with the Owner.
 
+## Lazy Rule Loading
+
+Before routing or accepting CXX work, enforce lazy loading:
+
+- CEO reads `.harness/conventions/shared.md`, `.harness/conventions/ceo.md`, `.harness/gotchas/shared.md`, and `.harness/gotchas/ceo.md`.
+- Each CXX reads its own `.harness/conventions/{cxx}.md` and `.harness/gotchas/{cxx}.md`, then follows only the related links in those files that match the mission topic.
+- Topic files such as `.harness/gotchas/i18n-locale-hotfix.md` remain separate. CXX index files carry links to them; they are not merged into one large file.
+- Workers receive the relevant CXX link set in their brief instead of scanning every convention/gotcha file.
+
 ## Mission Protocol
 
 1. Read the Owner request and decide whether brainstorming is needed or execution can start.

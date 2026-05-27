@@ -1,7 +1,7 @@
 {
   "source": "/Users/ted/Downloads/agency-agents-main",
   "imported_at": "2026-05-11T08:05:46.803Z",
-  "count": 179,
+  "count": 180,
   "resources": [
     {
       "sourceRel": "academic/academic-anthropologist.md",
@@ -678,6 +678,10 @@
     {
       "sourceRel": "support/support-infrastructure-maintainer.md",
       "skillName": "support-support-infrastructure-maintainer"
+    },
+    {
+      "sourceRel": "support/support-mcp-registry-steward.md",
+      "skillName": "support-support-mcp-registry-steward"
     },
     {
       "sourceRel": "support/support-legal-compliance-checker.md",
