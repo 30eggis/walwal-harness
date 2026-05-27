@@ -50,7 +50,7 @@ function OrgCard({
     <button
       type="button"
       onClick={() => onClick(node)}
-      className={`relative rounded-lg border p-3 text-left transition-all cursor-pointer ${roleColor} ${widths[size]} ${active ? "ring-2 ring-cyan-300 border-cyan-300/60" : "hover:border-white/30"}`}
+      className={`brutal-tile relative rounded-md p-3 text-left transition-all cursor-pointer ${roleColor} ${widths[size]} ${active ? "ring-2 ring-cyan-300 border-cyan-300/80" : "hover:border-white/35"}`}
     >
       <StatusDot status={node.status} />
       <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-gray-500 mb-0.5">{node.role}</div>
@@ -263,7 +263,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
 
   return (
     <div className="select-none">
-      <div className="flex items-center justify-between border-b border-white/10 bg-black/20 px-3 py-2">
+      <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-3 py-2 backdrop-blur">
         <div className="min-w-0">
           {currentMission && (
             <div className="truncate font-mono text-[10px] text-cyan-300/70">
@@ -275,7 +275,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
           <button
             type="button"
             onClick={() => setBoundedZoom(zoom - 0.08)}
-            className="h-7 w-7 rounded border border-gray-700 bg-gray-900/80 font-mono text-xs text-gray-200 hover:border-cyan-300/60"
+            className="h-7 w-7 rounded-md border border-white/15 bg-black/35 font-mono text-xs text-gray-200 hover:border-cyan-300/60"
             title="Zoom out"
           >
             -
@@ -283,7 +283,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
           <button
             type="button"
             onClick={() => setBoundedZoom(defaultZoom)}
-            className="h-7 min-w-12 rounded border border-gray-700 bg-gray-900/80 px-2 font-mono text-[10px] text-gray-300 hover:border-cyan-300/60"
+            className="h-7 min-w-12 rounded-md border border-white/15 bg-black/35 px-2 font-mono text-[10px] text-gray-300 hover:border-cyan-300/60"
             title="Reset zoom"
           >
             {Math.round(zoom * 100)}%
@@ -291,7 +291,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
           <button
             type="button"
             onClick={() => setBoundedZoom(zoom + 0.08)}
-            className="h-7 w-7 rounded border border-gray-700 bg-gray-900/80 font-mono text-xs text-gray-200 hover:border-cyan-300/60"
+            className="h-7 w-7 rounded-md border border-white/15 bg-black/35 font-mono text-xs text-gray-200 hover:border-cyan-300/60"
             title="Zoom in"
           >
             +
@@ -306,7 +306,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
         onPointerMove={handlePointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className="scrollbar-hidden h-[390px] cursor-grab overflow-auto active:cursor-grabbing"
+        className="scrollbar-hidden isometric-stage h-[390px] cursor-grab overflow-auto active:cursor-grabbing"
       >
         <div
           className="relative"
@@ -417,7 +417,7 @@ export function OrgTree({ snapshot, activeNodeId, onNodeClick }: OrgTreeProps) {
                             agentIds: [],
                           })
                         }
-                        className={`relative rounded border px-2 py-1.5 text-left min-w-[130px] max-w-[160px] transition-all hover:border-white/20 ${
+                        className={`brutal-tile relative rounded-md px-2 py-1.5 text-left min-w-[130px] max-w-[160px] transition-all hover:border-white/25 ${
                           workerActive
                             ? "border-cyan-300/70 bg-cyan-400/10 shadow-[0_0_18px_rgba(34,211,238,0.18)]"
                             : "border-gray-700/40 bg-gray-800/30"

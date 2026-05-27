@@ -10,6 +10,8 @@ if [ -z "$CWD" ]; then CWD="$PWD"; fi
 # 조건 1: 하네스 초기화 확인
 if [ ! -f "$CWD/.harness/config.json" ]; then exit 0; fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+STRUCTURED_LIB="$SCRIPT_DIR/lib/harness-structured-log.sh"
+[ -f "$STRUCTURED_LIB" ] && source "$STRUCTURED_LIB"
 
 # 조건 2: opt-out 플래그 확인
 AUTO_ROUTE="true"
@@ -71,7 +73,47 @@ if [ -n "$PROMPT" ] && [ -d "$CWD/.harness" ]; then
       COMMAND_TYPE="hot-fix"
     fi
     echo "$(date +"%Y-%m-%d %H:%M") | user-prompt | ${COMMAND_TYPE} | ${PROMPT_SHORT}" >> "$PROGRESS_LOG"
+    if declare -f harness_emit_event >/dev/null 2>&1; then
+      NOW_ISO_EVENT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+      EVENT_JSON=$(jq -nc \
+        --arg ts "$NOW_ISO_EVENT" \
+        --arg command "$COMMAND_TYPE" \
+        --arg summary "$PROMPT_SHORT" \
+        '{ts:$ts,type:"user_prompt",command:$command,summary:$summary,source:"UserPromptSubmit"}')
+      harness_emit_event "$CWD" "$EVENT_JSON"
+    fi
     if [ "$COMMAND_TYPE" = "goal" ] || [ "$COMMAND_TYPE" = "submission" ] || [ "$COMMAND_TYPE" = "hot-fix" ]; then
+      if declare -f harness_todo_upsert >/dev/null 2>&1; then
+        NOW_ISO_TODO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        PRIORITY=50
+        KIND="$COMMAND_TYPE"
+        [ "$COMMAND_TYPE" = "hot-fix" ] && PRIORITY=100 && KIND="hotfix"
+        TODO_ID="ceo-${COMMAND_TYPE}-$(date -u +%Y%m%dT%H%M%SZ)"
+        TODO_JSON=$(jq -nc \
+          --arg id "$TODO_ID" \
+          --arg owner "ceo" \
+          --arg kind "$KIND" \
+          --arg title "$PROMPT_SHORT" \
+          --arg status "active" \
+          --arg now "$NOW_ISO_TODO" \
+          --argjson priority "$PRIORITY" \
+          '{
+            id:$id,
+            owner:$owner,
+            kind:$kind,
+            title:$title,
+            status:$status,
+            priority:$priority,
+            command:$kind,
+            mission_path:null,
+            required_artifacts:[],
+            created_at:$now,
+            updated_at:$now,
+            last_heartbeat_at:$now,
+            blocked_reason:null
+          }')
+        harness_todo_upsert "$CWD" "$TODO_JSON"
+      fi
       if [ -f "$CWD/.harness/progress.json" ] && command -v jq >/dev/null 2>&1; then
         TMP_PROGRESS="${CWD}/.harness/progress.json.tmp.$$"
         NOW_ISO=$(date -u +"%Y-%m-%dT%H:%M:%SZ")

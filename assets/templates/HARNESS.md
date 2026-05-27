@@ -51,10 +51,15 @@ Owner is the final acceptance reviewer, not a tester, QA substitute, debugger, o
 | `.harness/shared/HR-Resource/` | Hireable worker skill pool |
 | `.harness/shared/hr-roster.json` | Hired worker roster |
 | `.harness/archive/` | CQO-approved completed mission records |
-| `.harness/progress.log` | Append-only command and status history |
+| `.harness/events.jsonl` | Structured append-only runtime event stream |
+| `.harness/todos/state.json` | Machine-readable CXX todo queues |
+| `.harness/todos/events.jsonl` | Structured todo transition history |
+| `.harness/progress.log` | Legacy human-readable command and status history |
 | `.harness/progress.json` | Machine-readable current runtime state |
 
 Flat `.harness/documents/{mission}/workers/` reports are legacy. New worker evidence must be under `{owning-cxx}/workers/`.
+
+Runtime state that the harness must parse belongs in JSON or JSONL, not Markdown. Markdown remains valid for instructions, skills, conventions, gotchas, and human-facing mission narrative, but queues, events, heartbeats, preemption/resume state, and completion evidence must be machine-readable.
 
 ## Required Flow
 

@@ -52,14 +52,14 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children, mode 
         aria-label="Detail panel"
         data-testid="drawer"
         data-open="true"
-        className="h-full min-h-0 rounded-md border border-brick-wall bg-brick-bg shadow-2xl flex flex-col overflow-hidden"
+        className="glass-panel h-full min-h-0 rounded-lg flex flex-col overflow-hidden"
       >
-        <header className="flex items-center justify-between border-b border-brick-wall px-4 py-3">
-          <h2 className="text-sm font-mono uppercase tracking-widest text-gray-200 truncate">
+        <header className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+          <h2 className="text-sm font-semibold tracking-tight text-gray-100 truncate">
             {title}
           </h2>
         </header>
-        <nav className="flex flex-wrap border-b border-brick-wall text-[11px] font-mono">
+        <nav className="flex flex-wrap border-b border-white/10 px-2 py-2 text-[11px] font-mono">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -67,10 +67,10 @@ export function Drawer({ open, tab, title, onClose, onTabChange, children, mode 
               data-testid={`drawer-tab-${t.id}`}
               data-active={t.id === tab}
               onClick={() => onTabChange(t.id)}
-              className={`min-w-[33%] flex-1 px-2 py-2 transition-colors ${
+              className={`min-w-[33%] flex-1 rounded-md px-2 py-2 transition-colors ${
                 t.id === tab
-                  ? "bg-brick-wall/50 text-gray-100 border-b-2 border-aura-typing"
-                  : "text-gray-500 hover:text-gray-200"
+                  ? "bg-white/12 text-gray-100 shadow-inner"
+                  : "text-gray-500 hover:bg-white/6 hover:text-gray-200"
               }`}
             >
               {t.label}

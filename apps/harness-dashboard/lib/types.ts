@@ -292,6 +292,33 @@ export interface HarnessSnapshot {
   missions: MissionDoc[];
   ownerHistory: OwnerPromptEntry[];
   gotchas: GotchaEntry[];
+  todos: CxxTodo[];
+  events: HarnessEvent[];
+}
+
+export interface CxxTodo {
+  id: string;
+  owner: "ceo" | "coo" | "cdo" | "cto" | "cqo" | "ops" | string;
+  title: string;
+  status: "pending" | "active" | "paused" | "blocked" | "done" | string;
+  priority: number;
+  kind: string;
+  missionPath?: string | null;
+  requiredArtifacts: string[];
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastHeartbeatAt?: string | null;
+  blockedReason?: string | null;
+}
+
+export interface HarnessEvent {
+  ts: string | null;
+  type: string;
+  owner?: string | null;
+  command?: string | null;
+  summary?: string | null;
+  title?: string | null;
+  status?: string | null;
 }
 
 // Real harness mission documents

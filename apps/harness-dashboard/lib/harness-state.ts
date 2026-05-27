@@ -18,6 +18,7 @@ import type {
   FeatureSummary,
   GoalCard,
   HarnessSnapshot,
+  HarnessEvent,
   HypothesisEntry,
   IncidentEntry,
   MeetingCadence,
@@ -37,6 +38,7 @@ import type {
   TrackStatus,
   WorkerDocEntry,
   WorkerSnapshot,
+  CxxTodo,
 } from "./types";
 
 const SNAPSHOT_VERSION = "1.2.0";
@@ -224,6 +226,8 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     missions: [],
     ownerHistory: [],
     gotchas: [],
+    todos: [],
+    events: [],
   };
 }
 
@@ -1315,6 +1319,89 @@ function readGotchas(rootDir: string): GotchaEntry[] {
   return results.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+function normalizeTodoStatus(raw: unknown): CxxTodo["status"] {
+  const value = String(raw ?? "pending").toLowerCase();
+  if (["pending", "active", "paused", "blocked", "done"].includes(value)) return value;
+  return value;
+}
+
+function readTodos(rootDir: string): CxxTodo[] {
+  const todoPath = path.join(rootDir, ".harness", "todos", "state.json");
+  const result = readJsonSafe<{
+    owners?: Record<string, Array<{
+      id?: string;
+      owner?: string;
+      title?: string;
+      status?: string;
+      priority?: number;
+      kind?: string;
+      mission_path?: string | null;
+      missionPath?: string | null;
+      required_artifacts?: string[];
+      requiredArtifacts?: string[];
+      created_at?: string | null;
+      createdAt?: string | null;
+      updated_at?: string | null;
+      updatedAt?: string | null;
+      last_heartbeat_at?: string | null;
+      lastHeartbeatAt?: string | null;
+      blocked_reason?: string | null;
+      blockedReason?: string | null;
+    }>>;
+  }>(todoPath);
+  if (!result.ok) return [];
+  const todos: CxxTodo[] = [];
+  for (const [owner, list] of Object.entries(result.value.owners ?? {})) {
+    for (const item of list ?? []) {
+      const id = item.id ?? `${owner}-${todos.length + 1}`;
+      todos.push({
+        id,
+        owner: item.owner ?? owner,
+        title: item.title ?? id,
+        status: normalizeTodoStatus(item.status),
+        priority: item.priority ?? 0,
+        kind: item.kind ?? "task",
+        missionPath: item.mission_path ?? item.missionPath ?? null,
+        requiredArtifacts: item.required_artifacts ?? item.requiredArtifacts ?? [],
+        createdAt: item.created_at ?? item.createdAt ?? null,
+        updatedAt: item.updated_at ?? item.updatedAt ?? null,
+        lastHeartbeatAt: item.last_heartbeat_at ?? item.lastHeartbeatAt ?? null,
+        blockedReason: item.blocked_reason ?? item.blockedReason ?? null,
+      });
+    }
+  }
+  return todos.sort((a, b) => (b.priority - a.priority) || ((b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")));
+}
+
+function readJsonlTail<T extends Record<string, unknown>>(filePath: string, limit: number): T[] {
+  if (!existsSync(filePath)) return [];
+  let raw = "";
+  try { raw = readFileSync(filePath, "utf8"); } catch { return []; }
+  const rows: T[] = [];
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      rows.push(JSON.parse(trimmed) as T);
+    } catch {
+      // Ignore malformed legacy/manual lines in append-only logs.
+    }
+  }
+  return rows.slice(-limit).reverse();
+}
+
+function readEvents(rootDir: string, limit = 40): HarnessEvent[] {
+  return readJsonlTail<Record<string, unknown>>(path.join(rootDir, ".harness", "events.jsonl"), limit).map((e) => ({
+    ts: typeof e.ts === "string" ? e.ts : null,
+    type: typeof e.type === "string" ? e.type : "event",
+    owner: typeof e.owner === "string" ? e.owner : null,
+    command: typeof e.command === "string" ? e.command : null,
+    summary: typeof e.summary === "string" ? e.summary : null,
+    title: typeof e.title === "string" ? e.title : null,
+    status: typeof e.status === "string" ? e.status : null,
+  }));
+}
+
 export function readHarnessState(rootDir: string): HarnessSnapshot {
   const harnessDir = path.join(rootDir, ".harness");
   if (!existsSync(harnessDir)) {
@@ -1344,6 +1431,8 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     snapshot.missions = readMissions(rootDir, null);
     snapshot.ownerHistory = readOwnerHistory(rootDir);
     snapshot.gotchas = readGotchas(rootDir);
+    snapshot.todos = readTodos(rootDir);
+    snapshot.events = readEvents(rootDir);
     return snapshot;
   }
 
@@ -1396,6 +1485,8 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     missions: readMissions(rootDir, progress),
     ownerHistory: readOwnerHistory(rootDir),
     gotchas: readGotchas(rootDir),
+    todos: readTodos(rootDir),
+    events: readEvents(rootDir),
   };
 }
 

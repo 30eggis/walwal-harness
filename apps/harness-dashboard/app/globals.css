@@ -5,9 +5,10 @@
 html,
 body {
   background:
-    radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.08), transparent 26rem),
-    radial-gradient(circle at 88% 6%, rgba(251, 191, 36, 0.06), transparent 24rem),
-    #101216;
+    radial-gradient(circle at 16% -8%, rgba(125, 211, 252, 0.24), transparent 30rem),
+    radial-gradient(circle at 78% 2%, rgba(216, 180, 254, 0.2), transparent 28rem),
+    radial-gradient(circle at 52% 104%, rgba(52, 211, 153, 0.14), transparent 34rem),
+    linear-gradient(135deg, #080b13 0%, #101728 48%, #070910 100%);
   color: #e5e7eb;
 }
 
@@ -23,4 +24,35 @@ body {
 
 .scrollbar-hidden::-webkit-scrollbar {
   display: none;
+}
+
+.glass-panel {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.045)),
+    rgba(7, 10, 18, 0.58);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(22px) saturate(150%);
+}
+
+.brutal-tile {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(3, 7, 18, 0.64);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.34);
+}
+
+.aurora-line {
+  background: linear-gradient(90deg, #67e8f9, #c084fc, #f0abfc, #34d399);
+}
+
+.isometric-stage {
+  background:
+    linear-gradient(30deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
+    linear-gradient(30deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
+    linear-gradient(150deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
+    linear-gradient(60deg, rgba(103, 232, 249, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(103, 232, 249, 0.08) 75%, rgba(103, 232, 249, 0.08)),
+    linear-gradient(60deg, rgba(103, 232, 249, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(103, 232, 249, 0.08) 75%, rgba(103, 232, 249, 0.08));
+  background-position: 0 0, 0 0, 20px 35px, 20px 35px, 0 0, 20px 35px;
+  background-size: 40px 70px;
 }

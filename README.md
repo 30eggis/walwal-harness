@@ -52,6 +52,9 @@ What `init` installs:
 | `.claude/commands/hot-fix.md` | `/hot-fix` Owner command |
 | `.claude/skills/harness-{ceo,coo,cdo,cto,cqo,ops}/` | CXX agent skills |
 | `.harness/shared/HR-Resource/` | Hireable worker skill pool |
+| `.harness/events.jsonl` | Structured append-only runtime event stream |
+| `.harness/todos/state.json` | Machine-readable CXX todo queues |
+| `.harness/todos/events.jsonl` | Structured todo transition history |
 | `AGENTS.md` ← `CLAUDE.md` symlink | Project harness config |
 
 ---
@@ -106,6 +109,7 @@ Owner /submission → CEO → [relevant CXX] → [workers] → [convention updat
 | 8 | No verdict without worker evidence — CQO self-inspection is not valid |
 | 9 | Hierarchical worker ownership — worker reports live under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/` |
 | 10 | Implementation Notes required — `ceo.md`, every `{cxx}.md`, and every worker report must end with one English `## Implementation Notes` section in the same file |
+| 11 | Structured runtime state — queues, heartbeats, preemption/resume state, and harness-parsed evidence belong in JSON/JSONL, not free-form Markdown |
 
 ### Implementation Notes Format
 
@@ -133,7 +137,7 @@ Use `None` when a subsection has no entries. This section is mandatory even for 
 
 ## Harness Dashboard
 
-The harness ships with a real-time dashboard that reads `.harness/documents/` directly.
+The harness ships with a real-time dashboard that reads `.harness/` runtime state directly. The current dashboard is process-oriented: it highlights CXX todo readiness, active workers, incidents, mission flow, and structured runtime events alongside the organization view.
 
 ```bash
 bash scripts/harness-dashboard-up.sh
@@ -199,6 +203,8 @@ npx walwal-harness init --force --project-root /path/to/project
 
 Features:
 
+- **Company Harness Observatory** — glass/aurora process monitor showing active CXX todos, workers, incidents, missions, and current loop state
+- **Structured Runtime State** — `/goal`, `/submission`, and `/hot-fix` append to `.harness/events.jsonl` and update `.harness/todos/state.json`; `migrate` backfills these files for existing projects
 - **Split Workspace** — full-viewport left/right panes keep Org Tree + Mission Timeline beside the selected mission detail; both panes scroll independently with hidden scrollbars, and the detail pane resets to top on selection changes
 - **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards created only from hired `hr-roster.json` entries backed by `.harness/shared/HR-Resource/{worker}/SKILL.md`; running hired workers are highlighted under their owning CXX
 - **Mission Timeline** — clickable history of goal/submission/hot-fix missions showing the full dispatch chain

@@ -121,6 +121,9 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 | `.harness/documents/goal-{index}-{name}/` | Goal-level CXX decisions and worker reports |
 | `.harness/documents/goal-{index}-{name}/submission-{index}-{name}/` | Additional requirement under the active goal |
 | `.harness/documents/goal-{index}-{name}/hotfix-{index}-{name}/` | Emergency fix under the active goal |
+| `.harness/events.jsonl` | Structured append-only runtime event stream |
+| `.harness/todos/state.json` | Machine-readable CXX todo queues |
+| `.harness/todos/events.jsonl` | Structured todo transition history |
 | `.harness/conventions/` | Durable rules (CQO writes, survives missions) |
 | `.harness/gotchas/` | Recurrence-prevention records (CQO writes per hot-fix) |
 | `.harness/memories/` | Long-term shared context |
@@ -145,10 +148,11 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 9. **No verdict without worker evidence** — CQO cannot issue ACCEPTED/REJECTED without a Worker Evidence Manifest referencing at least one evaluator worker. Self-inspection by CQO is not valid evidence.
 10. **Hierarchical worker ownership** — Hired workers are installed under `.claude/skills/{owning-cxx}/{worker}/` and `.codex/skills/{owning-cxx}/{worker}/`; mission worker reports live under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`. Flat `{mission}/workers/` reports are legacy and signal an ownership violation unless explicitly migrated.
 11. **Lazy convention/gotcha loading** — CXX roles read `.harness/conventions/shared.md`, `.harness/conventions/{cxx}.md`, `.harness/gotchas/shared.md`, and `.harness/gotchas/{cxx}.md`, then follow only the related topic links listed in those CXX files. Workers read only the related links supplied by their owning CXX.
-11. **Implementation Notes required** — `ceo.md`, every `{cxx}.md`, and every worker report must end with one English `## Implementation Notes` section containing `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. Use `None` for empty subsections. Do not create a separate sidecar notes file; the notes belong at the bottom of the same role or worker report that produced the decision/evidence.
-12. **Owner is final acceptance only** — Owner is not a tester or QA substitute. CEO/CXX must not report "done, please check" until worker-backed verification proves the goal can be completed. Use unit tests, E2E, Playwright, test accounts, seeded data, build/run checks, logs, and CQO evidence before requesting Owner acceptance.
-13. **OPS watches CQO verification** — For runnable products, CQO PASS is invalid unless OPS has monitored the verification runtime or documented why OPS watch is not applicable. Open OPS incidents, missing runtime mapping, required log gaps, service down, health mismatch, or an unmonitored tested service block Owner acceptance.
-14. **Production incidents are company events** — After launch, user-impacting OPS signals route through CEO to CTO/CQO/OPS. CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence plus close criteria.
+12. **Implementation Notes required** — `ceo.md`, every `{cxx}.md`, and every worker report must end with one English `## Implementation Notes` section containing `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`. Use `None` for empty subsections. Do not create a separate sidecar notes file; the notes belong at the bottom of the same role or worker report that produced the decision/evidence.
+13. **Structured runtime state** — If the harness must parse it, record it in JSON or JSONL. CXX todo queues, event history, heartbeat timestamps, preemption/resume state, and completion evidence belong in `.harness/todos/*.json*` or `.harness/events.jsonl`, not in free-form Markdown tables. Markdown remains for instructions, conventions, gotchas, skills, and human-readable mission narrative.
+14. **Owner is final acceptance only** — Owner is not a tester or QA substitute. CEO/CXX must not report "done, please check" until worker-backed verification proves the goal can be completed. Use unit tests, E2E, Playwright, test accounts, seeded data, build/run checks, logs, and CQO evidence before requesting Owner acceptance.
+15. **OPS watches CQO verification** — For runnable products, CQO PASS is invalid unless OPS has monitored the verification runtime or documented why OPS watch is not applicable. Open OPS incidents, missing runtime mapping, required log gaps, service down, health mismatch, or an unmonitored tested service block Owner acceptance.
+16. **Production incidents are company events** — After launch, user-impacting OPS signals route through CEO to CTO/CQO/OPS. CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence plus close criteria.
 
 ---
 

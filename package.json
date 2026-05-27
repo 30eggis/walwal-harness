@@ -1,6 +1,6 @@
 {
   "name": "@walwal-harness/cli",
-  "version": "7.1.26",
+  "version": "7.1.27",
   "description": "Company-style AI agent harness for Claude and Codex. Installs commands, CXX agents, skills, HR-Resource hiring pool, and project-local .harness runtime state.",
   "bin": {
     "walwal-harness": "bin/init.js"

@@ -96,7 +96,11 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       {snapshot.escalations.length > 0 && (
         <EscalationStrip escalations={snapshot.escalations} />
       )}
-      <div className="grid min-h-0 flex-1 min-w-0 gap-4 lg:grid-cols-2">
+      <div className="mb-4 grid gap-3 xl:grid-cols-[1.25fr_1fr]">
+        <CommandDeck snapshot={snapshot} connectionState={connectionState} />
+        <ProcessPulse snapshot={snapshot} />
+      </div>
+      <div className="grid min-h-0 flex-1 min-w-0 gap-4 lg:grid-cols-[1.12fr_0.88fr]">
         <div className="scrollbar-hidden min-h-0 min-w-0 overflow-y-auto pr-1">
           <section className="min-w-0">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
@@ -112,9 +116,9 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
             </div>
             <div
               data-testid="brick-office-stage"
-              className="w-full overflow-x-auto rounded-md border border-gray-700/80 bg-[#12151b] shadow-2xl"
+              className="glass-panel w-full overflow-x-auto rounded-lg"
             >
-              <div className="pointer-events-none flex items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-4 py-2 font-mono text-[10px] text-gray-300 backdrop-blur">
+              <div className="pointer-events-none flex items-center justify-between gap-3 border-b border-white/10 bg-white/5 px-4 py-2 font-mono text-[10px] text-gray-300 backdrop-blur">
                 <span>Owner → CEO → CXX → Workers</span>
                 <span className="truncate">
                   {snapshot.missions?.[0]?.missionId ?? "no active mission"}
@@ -236,6 +240,133 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         ))}
       </ul>
     </div>
+  );
+}
+
+function CommandDeck({
+  snapshot,
+  connectionState,
+}: {
+  snapshot: HarnessSnapshot;
+  connectionState: ConnectionState;
+}) {
+  const activeMission = snapshot.missions?.[0];
+  const cxxCount = activeMission?.cxxPresent.length ?? 0;
+  const activeWorkers = activeMission?.workers.filter((w) => w.active).length ?? 0;
+  const activeTodos = snapshot.todos.filter((t) => t.status === "active").length;
+  const blockedSignals =
+    snapshot.escalations.length +
+    snapshot.incidents.length +
+    snapshot.dashboard.features.filter((f) => f.status === "blocked" || f.status === "failed").length;
+  const stateLabel = blockedSignals > 0 ? "Needs Attention" : activeWorkers > 0 ? "In Motion" : "Observing";
+
+  return (
+    <section className="glass-panel relative overflow-hidden rounded-lg px-5 py-4">
+      <div className="aurora-line absolute inset-x-0 top-0 h-1" />
+      <div className="relative flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-cyan-200/80">
+            Company Harness Observatory
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+            {snapshot.projectName || "walwal-harness"}
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
+            {activeMission?.missionId ?? snapshot.goal?.title ?? "No active mission detected"}
+          </p>
+        </div>
+        <div className="brutal-tile min-w-[170px] rounded-md px-3 py-2">
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">state</div>
+          <div className="mt-1 text-lg font-semibold text-white">{stateLabel}</div>
+          <div className="mt-1 font-mono text-[10px] text-slate-400">
+            {connectionState} · {snapshot.runtime.currentAgent ?? snapshot.runtime.nextAgent ?? "idle"}
+          </div>
+        </div>
+      </div>
+      <div className="relative mt-4 grid gap-2 sm:grid-cols-4">
+        <MetricTile label="CXX Present" value={String(cxxCount)} tone="cyan" />
+        <MetricTile label="Active Todos" value={String(activeTodos)} tone="green" />
+        <MetricTile label="Open Incidents" value={String(snapshot.incidents.length)} tone="rose" />
+        <MetricTile label="Missions" value={String(snapshot.missions.length)} tone="violet" />
+      </div>
+    </section>
+  );
+}
+
+function MetricTile({ label, value, tone }: { label: string; value: string; tone: "cyan" | "green" | "rose" | "violet" }) {
+  const toneClass = {
+    cyan: "text-cyan-200 border-cyan-300/35",
+    green: "text-emerald-200 border-emerald-300/35",
+    rose: "text-rose-200 border-rose-300/35",
+    violet: "text-violet-200 border-violet-300/35",
+  }[tone];
+  return (
+    <div className={`brutal-tile rounded-md px-3 py-2 ${toneClass}`}>
+      <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</div>
+      <div className="mt-1 text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function ProcessPulse({ snapshot }: { snapshot: HarnessSnapshot }) {
+  const roles = ["ceo", "coo", "cdo", "cto", "cqo", "ops"] as const;
+  const activeMission = snapshot.missions?.[0];
+  const activeRoles = new Set(activeMission?.cxxPresent ?? []);
+  const roleStatus = roles.map((role) => {
+    const todos = snapshot.todos.filter((t) => t.owner === role);
+    const activeTodos = todos.filter((t) => t.status === "active").length;
+    const blockedTodos = todos.filter((t) => t.status === "blocked").length;
+    const workerCount = activeMission?.workers.filter((w) => w.owner === role).length ?? 0;
+    const activeCount = activeMission?.workers.filter((w) => w.owner === role && w.active).length ?? 0;
+    return { role, workerCount, activeCount, activeTodos, blockedTodos, present: activeRoles.has(role) || todos.length > 0 };
+  });
+  return (
+    <section className="glass-panel rounded-lg px-4 py-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-fuchsia-200/75">
+            Process Monitor
+          </p>
+          <h2 className="mt-1 text-base font-semibold text-white">CXX queue readiness</h2>
+        </div>
+        <div className="rounded-full border border-white/15 bg-white/8 px-3 py-1 font-mono text-[10px] text-slate-300">
+          {snapshot.runtime.agentStatus}
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {roleStatus.map((item) => (
+          <div key={item.role} className="brutal-tile rounded-md px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.role}</span>
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  item.blockedTodos > 0
+                    ? "bg-rose-400"
+                    : item.activeTodos > 0 || item.activeCount > 0
+                    ? "bg-cyan-300 animate-pulse"
+                    : item.present
+                    ? "bg-emerald-300"
+                    : "bg-slate-600"
+                }`}
+              />
+            </div>
+            <div className="mt-2 text-xs text-slate-300">
+              {item.blockedTodos > 0
+                ? `${item.blockedTodos} blocked`
+                : item.activeTodos > 0
+                ? `${item.activeTodos} todo`
+                : item.activeCount > 0
+                ? `${item.activeCount} active`
+                : item.workerCount > 0
+                ? `${item.workerCount} workers`
+                : item.present
+                ? "documented"
+                : "waiting"}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

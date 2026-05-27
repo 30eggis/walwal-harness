@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "updated_at": "{{DATE_ISO}}",
+  "owners": {
+    "ceo": [],
+    "coo": [],
+    "cdo": [],
+    "cto": [],
+    "cqo": [],
+    "ops": []
+  }
+}

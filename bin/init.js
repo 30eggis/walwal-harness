@@ -562,6 +562,7 @@ function scaffoldHarness() {
   // Copy templates as initial files
   const templateMap = {
     'progress.json.template': path.join(HARNESS_DIR, 'progress.json'),
+    'todos-state.json.template': path.join(HARNESS_DIR, 'todos', 'state.json'),
   };
 
   const templatesDir = path.join(PKG_ROOT, 'assets', 'templates');
@@ -569,12 +570,21 @@ function scaffoldHarness() {
     for (const [template, dest] of Object.entries(templateMap)) {
       const src = path.join(templatesDir, template);
       if (fs.existsSync(src) && (!fileExists(dest) || isForce)) {
+        ensureDir(path.dirname(dest));
         let content = fs.readFileSync(src, 'utf8');
         content = content.replace(/\{\{DATE\}\}/g, new Date().toISOString().split('T')[0]);
+        content = content.replace(/\{\{DATE_ISO\}\}/g, new Date().toISOString());
         fs.writeFileSync(dest, content);
       }
     }
   }
+
+  ensureDir(path.join(HARNESS_DIR, 'todos'));
+  for (const rel of ['events.jsonl', path.join('todos', 'events.jsonl')]) {
+    const p = path.join(HARNESS_DIR, rel);
+    if (!fileExists(p) || isForce) fs.writeFileSync(p, '');
+  }
+  ensureStructuredRuntimeFiles();
 
   // Migrate progress.json v1 → v2 (add mode + team_state fields)
   const progressPath = path.join(HARNESS_DIR, 'progress.json');
@@ -709,6 +719,38 @@ function ensureHarnessEnv() {
   const block = `${prefix}${content ? '\n' : ''}# Walwal Harness — CEO must agree on a {xx}000 base port with the Owner.\n# Set HARNESS_BASE_PORT before CXX agents allocate any service ports.\n# HARNESS_BASE_PORT=\n`;
   fs.writeFileSync(envPath, content + block);
   log('.env: HARNESS_BASE_PORT placeholder added — set value with Owner approval before starting services');
+}
+
+function ensureStructuredRuntimeFiles({ dryRun = false } = {}) {
+  const todosDir = path.join(HARNESS_DIR, 'todos');
+  const statePath = path.join(todosDir, 'state.json');
+  const eventsPath = path.join(HARNESS_DIR, 'events.jsonl');
+  const todoEventsPath = path.join(todosDir, 'events.jsonl');
+  const todoTplPath = path.join(PKG_ROOT, 'assets', 'templates', 'todos-state.json.template');
+
+  const missing = [eventsPath, statePath, todoEventsPath].filter((p) => !fileExists(p));
+  if (!missing.length) return false;
+
+  log(`  structured runtime: ${missing.map((p) => path.relative(HARNESS_DIR, p)).join(', ')} 생성`);
+  if (dryRun) return true;
+
+  ensureDir(todosDir);
+  if (!fileExists(eventsPath)) fs.writeFileSync(eventsPath, '');
+  if (!fileExists(todoEventsPath)) fs.writeFileSync(todoEventsPath, '');
+  if (!fileExists(statePath)) {
+    let content;
+    if (fileExists(todoTplPath)) {
+      content = fs.readFileSync(todoTplPath, 'utf8').replace(/\{\{DATE_ISO\}\}/g, new Date().toISOString());
+    } else {
+      content = JSON.stringify({
+        version: 1,
+        updated_at: new Date().toISOString(),
+        owners: { ceo: [], coo: [], cdo: [], cto: [], cqo: [], ops: [] },
+      }, null, 2) + '\n';
+    }
+    fs.writeFileSync(statePath, content);
+  }
+  return true;
 }
 
 // ─────────────────────────────────────────
@@ -1742,6 +1784,7 @@ function runMigrate(opts = {}) {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const backupDir = path.join(HARNESS_DIR, 'archive', `migration-${ts}`);
   if (!dryRun) ensureDir(backupDir);
+  ensureStructuredRuntimeFiles({ dryRun });
 
   // Runtime scripts are package-owned. Migrate must refresh them so existing
   // projects receive wake/meeting/OPS fixes without requiring a full init.
