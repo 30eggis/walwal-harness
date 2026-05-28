@@ -1,722 +1,1724 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type {
-  AgentState,
-  EnvFileSummary,
-  EscalationEntry,
+  ConventionEntry,
+  CxxTodo,
+  GotchaEntry,
   HarnessSnapshot,
   MissionDoc,
-  OpsServiceHealth,
-  OrgNodeDef,
-  WorkerSnapshot,
+  OwnerPromptEntry,
+  WorkerDocEntry,
 } from "@/lib/types";
-import { useHarnessStream, type ConnectionState } from "@/hooks/useHarnessStream";
-import { Drawer, type DrawerTab } from "./Drawer";
-import { AgentLogTab } from "./drawer/AgentLogTab";
-import { OwnerHistoryTab } from "./drawer/OwnerHistoryTab";
-import { MissionDocTab } from "./drawer/MissionDocTab";
-import { MissionFlowTab } from "./drawer/MissionFlowTab";
-import { GotchasTab } from "./drawer/GotchasTab";
-import { DesignPreviewTab } from "./drawer/DesignPreviewTab";
-import { MissionTimeline } from "./MissionTimeline";
-import { OrgTree } from "./OrgTree";
+import { useHarnessStream } from "@/hooks/useHarnessStream";
+import { Wordmark } from "./Wordmark";
 
 interface SceneProps {
   snapshot: HarnessSnapshot;
   lang?: "ko" | "en";
 }
 
+type AgentLane = {
+  id: string;
+  label: string;
+  role: string;
+  group: string;
+  kind: "cxx" | "worker";
+  status: "normal" | "waiting" | "error";
+  todos: number;
+  workers: WorkerDocEntry[];
+  worker?: WorkerDocEntry;
+  mission: MissionDoc | null;
+};
+
+type HeatCell = {
+  x: number;
+  y: number;
+  laneId: string;
+  laneLabel: string;
+  bucketLabel: string;
+  count: number;
+  hotfix: boolean;
+  mission: MissionDoc | null;
+};
+
+type HeatSample = {
+  ts: number;
+  laneId: string;
+  count: number;
+  hotfix: boolean;
+  missionId: string | null;
+};
+
+type GoalGroup = { goal: MissionDoc; children: MissionDoc[] };
+
+const CXX_ROLES = ["ceo", "coo", "cdo", "cto", "cqo", "ops"] as const;
+type CxxRole = typeof CXX_ROLES[number];
+// Workers always sit under a non-CEO CXX (CEO delegates, never owns workers).
+const WORKER_OWNERS = ["coo", "cdo", "cto", "cqo", "ops"] as const;
+type WorkerOwnerRole = typeof WORKER_OWNERS[number];
+const BUCKET_MS = 60_000;
+const VISIBLE_BUCKETS = 60;
+const LANE_LABEL_WIDTH = 110;
+const TIME_LABEL_HEIGHT = 18;
+const LANE_ROW_HEIGHT = 18;
+const MIN_BUCKET_PX = 8;
+
+const CXX_COLOR: Record<CxxRole, string> = {
+  ceo: "bg-cyan-500",
+  coo: "bg-emerald-500",
+  cdo: "bg-violet-500",
+  cto: "bg-orange-500",
+  cqo: "bg-fuchsia-500",
+  ops: "bg-amber-500",
+};
+
+const CXX_TEXT: Record<CxxRole, string> = {
+  ceo: "text-cyan-200",
+  coo: "text-emerald-300",
+  cdo: "text-violet-300",
+  cto: "text-orange-300",
+  cqo: "text-fuchsia-300",
+  ops: "text-amber-300",
+};
+
 export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const { snapshot, connectionState } = useHarnessStream(initial);
-  const [drawerTab, setDrawerTab] = useState<DrawerTab>("mission-flow");
-  const [selectedAgent, setSelectedAgent] = useState<AgentState | null>(null);
-  const [selectedNode, setSelectedNode] = useState<OrgNodeDef | null>(null);
-  const [selectedMission, setSelectedMission] = useState<MissionDoc | null>(null);
+  const [selectedMissionId, setSelectedMissionId] = useState(snapshot.missions[0]?.missionId ?? null);
+  const selectedMission =
+    snapshot.missions.find((mission) => mission.missionId === selectedMissionId) ??
+    snapshot.missions[0] ??
+    null;
+  const goalGroups = useMemo(() => groupMissions(snapshot.missions), [snapshot.missions]);
+  const selectedGoal = useMemo(() => {
+    if (!selectedMission) return goalGroups[0]?.goal ?? null;
+    const parentId = selectedMission.missionId.split("/")[0];
+    return goalGroups.find((g) => g.goal.missionId === parentId)?.goal ?? selectedMission;
+  }, [goalGroups, selectedMission]);
+  const goalScopeMissions = useMemo(() => {
+    if (!selectedGoal) return snapshot.missions;
+    const parentId = selectedGoal.missionId.split("/")[0];
+    return snapshot.missions.filter(
+      (m) => m.missionId === parentId || m.missionId.startsWith(`${parentId}/`)
+    );
+  }, [snapshot.missions, selectedGoal]);
 
-  const handleAgentClick = (id: string) => {
-    const a = snapshot.agents.find((x) => x.id === id) ?? null;
-    setSelectedAgent(a);
-    setSelectedNode(null);
-    setDrawerTab("logs");
-  };
-
-  const handleNodeClick = (node: OrgNodeDef) => {
-    const currentMission = snapshot.missions?.[0] ?? null;
-    setSelectedNode(node);
-    setSelectedAgent(null);
-    if (currentMission) {
-      setSelectedMission(currentMission);
-    }
-    if (node.id === "owner") {
-      setDrawerTab("history");
-    } else if (node.id === "cdo") {
-      setDrawerTab("design-preview");
-    } else if (node.id.startsWith("worker-")) {
-      setDrawerTab("mission-doc");
-    } else {
-      setDrawerTab("mission-doc");
-    }
-  };
-
-  const handleMissionClick = (mission: MissionDoc) => {
-    setSelectedMission(mission);
-    setSelectedNode(null);
-    setSelectedAgent(null);
-    setDrawerTab("mission-flow");
-  };
-
-  const drawerTitle =
-    selectedMission && drawerTab === "mission-flow"
-      ? selectedMission.missionId
-      : selectedNode?.id === "owner"
-      ? "Owner · History"
-      : selectedNode
-      ? selectedNode.label
-      : "Mission Flow";
-  const drawerScrollResetKey = [
-    drawerTab,
-    selectedMission?.missionId ?? "",
-    selectedNode?.id ?? "",
-    selectedAgent?.id ?? "",
-  ].join(":");
-  const selectedWorkerName = selectedNode?.id.startsWith("worker-")
-    ? selectedNode.id.replace(/^worker-[^-]+-/, "")
-    : undefined;
-  const selectedDocumentRole = selectedWorkerName
-    ? "worker"
-    : selectedNode?.role === "owner"
-    ? "ceo"
-    : selectedNode?.role;
-
-  // Suppress unused lang warning — kept for future i18n
-  void lang;
-
-  return (
-    <div className="flex h-[100dvh] w-full flex-col overflow-hidden px-4 py-5">
-      {snapshot.escalations.length > 0 && (
-        <EscalationStrip escalations={snapshot.escalations} />
-      )}
-      <div className="mb-4 grid gap-3 xl:grid-cols-[1.25fr_1fr]">
-        <CommandDeck snapshot={snapshot} connectionState={connectionState} />
-        <ProcessPulse snapshot={snapshot} />
-      </div>
-      <div className="grid min-h-0 flex-1 min-w-0 gap-4 lg:grid-cols-[1.12fr_0.88fr]">
-        <div className="scrollbar-hidden min-h-0 min-w-0 overflow-y-auto pr-1">
-          <section className="min-w-0">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-[11px] font-mono uppercase tracking-[0.24em] text-cyan-300/80">
-                  Company Structure
-                </p>
-                <h1 className="mt-1 text-2xl font-semibold text-gray-100">
-                  {snapshot.projectName || "walwal-harness"} · Organization
-                </h1>
-              </div>
-              <ActivityIndicator snapshot={snapshot} connectionState={connectionState} />
-            </div>
-            <div
-              data-testid="brick-office-stage"
-              className="glass-panel w-full overflow-x-auto rounded-lg"
-            >
-              <div className="pointer-events-none flex items-center justify-between gap-3 border-b border-white/10 bg-white/5 px-4 py-2 font-mono text-[10px] text-gray-300 backdrop-blur">
-                <span>Owner → CEO → CXX → Workers</span>
-                <span className="truncate">
-                  {snapshot.missions?.[0]?.missionId ?? "no active mission"}
-                  {snapshot.missions?.[0]?.cxxPresent.length
-                    ? ` · ${snapshot.missions[0].cxxPresent.join(" / ")}`
-                    : ""}
-                </span>
-              </div>
-              <OrgTree
-                snapshot={snapshot}
-                activeNodeId={selectedNode?.id ?? null}
-                onNodeClick={handleNodeClick}
-              />
-            </div>
-          </section>
-
-          <section className="mt-4">
-            <div className="mb-2">
-              <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/60">Mission History</p>
-              <p className="text-[11px] text-gray-500 mt-0.5">goal · submission · hot-fix 명령별 파생 작업 흐름</p>
-            </div>
-            <MissionTimeline
-              missions={snapshot.missions ?? []}
-              activeMissionId={selectedMission?.missionId ?? null}
-              onMissionClick={handleMissionClick}
-            />
-          </section>
-        </div>
-
-        <div className="min-h-0 min-w-0">
-          <Drawer
-            mode="inline"
-            open={true}
-            tab={drawerTab}
-            title={drawerTitle}
-            onClose={() => undefined}
-            onTabChange={setDrawerTab}
-            scrollResetKey={drawerScrollResetKey}
-          >
-            {drawerTab === "mission-flow" && (
-              <MissionFlowTab
-                mission={selectedMission ?? snapshot.missions?.[0] ?? null}
-                ownerHistory={snapshot.ownerHistory ?? []}
-                runtime={snapshot.runtime}
-              />
-            )}
-            {drawerTab === "history" && (
-              <OwnerHistoryTab
-                ownerHistory={snapshot.ownerHistory ?? []}
-                mission={selectedMission ?? snapshot.missions?.[0] ?? null}
-              />
-            )}
-            {drawerTab === "gotchas" && (
-              <GotchasTab gotchas={snapshot.gotchas ?? []} />
-            )}
-            {drawerTab === "design-preview" && (
-              <DesignPreviewTab mission={selectedMission ?? snapshot.missions?.[0] ?? null} />
-            )}
-            {drawerTab === "mission-doc" && selectedNode && (
-              <MissionDocTab
-                missions={snapshot.missions ?? []}
-                role={selectedDocumentRole as "ceo" | "cto" | "cqo" | "coo" | "cdo" | "ops" | "worker"}
-                workerName={selectedWorkerName}
-                fromLabel={
-                  selectedWorkerName
-                    ? selectedNode.role.toUpperCase()
-                    : selectedNode.role === "ceo"
-                    ? "Owner"
-                    : "CEO"
-                }
-                toLabel={
-                  selectedWorkerName
-                    ? "Evidence"
-                    : selectedNode.role === "cto"
-                    ? "Workers"
-                    : selectedNode.role === "cqo"
-                    ? "Owner Report"
-                    : "—"
-                }
-              />
-            )}
-            {drawerTab === "logs" && selectedNode && (
-              <AgentLogTab agentId={selectedNode.agentIds[0] ?? selectedNode.id} />
-            )}
-            {drawerTab === "logs" && selectedAgent && !selectedNode && (
-              <AgentLogTab agentId={selectedAgent.id} />
-            )}
-            {drawerTab === "logs" && !selectedNode && !selectedAgent && (
-              <div className="text-gray-500 text-xs">Select a node to view logs.</div>
-            )}
-            {drawerTab === "mission-flow" && !selectedMission && !snapshot.missions?.length && (
-              <div className="text-gray-500 text-xs">No missions found in .harness/documents/</div>
-            )}
-          </Drawer>
-        </div>
-      </div>
-
-      {/* Hidden DOM index for E2E + a11y */}
-      <ul className="sr-only" data-testid="scene-index">
-        {snapshot.rooms.map((r) => (
-          <li
-            key={r.id}
-            data-testid={`room-${r.id}`}
-            data-room-id={r.id}
-          >
-            {r.label_ko}
-          </li>
-        ))}
-        {snapshot.agents.map((a) => (
-          <li
-            key={a.id}
-            data-testid={`minifig-${a.id}`}
-            data-agent-id={a.id}
-            data-minifig-state={a.minifigState}
-            data-room={a.room}
-          >
-            {a.name}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function CommandDeck({
-  snapshot,
-  connectionState,
-}: {
-  snapshot: HarnessSnapshot;
-  connectionState: ConnectionState;
-}) {
-  const activeMission = snapshot.missions?.[0];
-  const cxxCount = activeMission?.cxxPresent.length ?? 0;
-  const activeWorkers = activeMission?.workers.filter((w) => w.active).length ?? 0;
-  const activeTodos = snapshot.todos.filter((t) => t.status === "active").length;
-  const blockedSignals =
-    snapshot.escalations.length +
-    snapshot.incidents.length +
-    snapshot.dashboard.features.filter((f) => f.status === "blocked" || f.status === "failed").length;
-  const stateLabel = blockedSignals > 0 ? "Needs Attention" : activeWorkers > 0 ? "In Motion" : "Observing";
-
-  return (
-    <section className="glass-panel relative overflow-hidden rounded-lg px-5 py-4">
-      <div className="aurora-line absolute inset-x-0 top-0 h-1" />
-      <div className="relative flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-cyan-200/80">
-            Company Harness Observatory
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-            {snapshot.projectName || "walwal-harness"}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-            {activeMission?.missionId ?? snapshot.goal?.title ?? "No active mission detected"}
-          </p>
-        </div>
-        <div className="brutal-tile min-w-[170px] rounded-md px-3 py-2">
-          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">state</div>
-          <div className="mt-1 text-lg font-semibold text-white">{stateLabel}</div>
-          <div className="mt-1 font-mono text-[10px] text-slate-400">
-            {connectionState} · {snapshot.runtime.currentAgent ?? snapshot.runtime.nextAgent ?? "idle"}
-          </div>
-        </div>
-      </div>
-      <div className="relative mt-4 grid gap-2 sm:grid-cols-4">
-        <MetricTile label="CXX Present" value={String(cxxCount)} tone="cyan" />
-        <MetricTile label="Active Todos" value={String(activeTodos)} tone="green" />
-        <MetricTile label="Open Incidents" value={String(snapshot.incidents.length)} tone="rose" />
-        <MetricTile label="Missions" value={String(snapshot.missions.length)} tone="violet" />
-      </div>
-    </section>
-  );
-}
-
-function MetricTile({ label, value, tone }: { label: string; value: string; tone: "cyan" | "green" | "rose" | "violet" }) {
-  const toneClass = {
-    cyan: "text-cyan-200 border-cyan-300/35",
-    green: "text-emerald-200 border-emerald-300/35",
-    rose: "text-rose-200 border-rose-300/35",
-    violet: "text-violet-200 border-violet-300/35",
-  }[tone];
-  return (
-    <div className={`brutal-tile rounded-md px-3 py-2 ${toneClass}`}>
-      <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-    </div>
-  );
-}
-
-function ProcessPulse({ snapshot }: { snapshot: HarnessSnapshot }) {
-  const roles = ["ceo", "coo", "cdo", "cto", "cqo", "ops"] as const;
-  const activeMission = snapshot.missions?.[0];
-  const activeRoles = new Set(activeMission?.cxxPresent ?? []);
-  const roleStatus = roles.map((role) => {
-    const todos = snapshot.todos.filter((t) => t.owner === role);
-    const activeTodos = todos.filter((t) => t.status === "active").length;
-    const blockedTodos = todos.filter((t) => t.status === "blocked").length;
-    const workerCount = activeMission?.workers.filter((w) => w.owner === role).length ?? 0;
-    const activeCount = activeMission?.workers.filter((w) => w.owner === role && w.active).length ?? 0;
-    return { role, workerCount, activeCount, activeTodos, blockedTodos, present: activeRoles.has(role) || todos.length > 0 };
-  });
-  return (
-    <section className="glass-panel rounded-lg px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-fuchsia-200/75">
-            Process Monitor
-          </p>
-          <h2 className="mt-1 text-base font-semibold text-white">CXX queue readiness</h2>
-        </div>
-        <div className="rounded-full border border-white/15 bg-white/8 px-3 py-1 font-mono text-[10px] text-slate-300">
-          {snapshot.runtime.agentStatus}
-        </div>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {roleStatus.map((item) => (
-          <div key={item.role} className="brutal-tile rounded-md px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{item.role}</span>
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  item.blockedTodos > 0
-                    ? "bg-rose-400"
-                    : item.activeTodos > 0 || item.activeCount > 0
-                    ? "bg-cyan-300 animate-pulse"
-                    : item.present
-                    ? "bg-emerald-300"
-                    : "bg-slate-600"
-                }`}
-              />
-            </div>
-            <div className="mt-2 text-xs text-slate-300">
-              {item.blockedTodos > 0
-                ? `${item.blockedTodos} blocked`
-                : item.activeTodos > 0
-                ? `${item.activeTodos} todo`
-                : item.activeCount > 0
-                ? `${item.activeCount} active`
-                : item.workerCount > 0
-                ? `${item.workerCount} workers`
-                : item.present
-                ? "documented"
-                : "waiting"}
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ActivityIndicator({
-  snapshot,
-  connectionState,
-}: {
-  snapshot: HarnessSnapshot;
-  connectionState: ConnectionState;
-}) {
-  const [now, setNow] = useState(Date.now());
+  const lanes = useMemo(() => buildLanes(snapshot, selectedMission), [selectedMission, snapshot]);
+  const sessionStartedAtRef = useRef(Date.now());
+  const [heatSamples, setHeatSamples] = useState<HeatSample[]>([]);
+  const sampleSourceRef = useRef({ lanes, snapshot, selectedMission });
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 5000);
+    sampleSourceRef.current = { lanes, snapshot, selectedMission };
+  });
+  useEffect(() => {
+    const tick = () => {
+      const { lanes, snapshot, selectedMission } = sampleSourceRef.current;
+      setHeatSamples((prev) => {
+        const now = Date.now();
+        const activeMission = selectedMission ?? snapshot.missions[0] ?? null;
+        const next: HeatSample[] = [];
+        for (const lane of lanes) {
+          const activity =
+            lane.kind === "worker"
+              ? lane.worker?.active
+                ? 2
+                : lane.worker?.status === "IN_PROGRESS"
+                ? 1
+                : 0
+              : lane.todos +
+                lane.workers.filter((w) => w.active).length +
+                (lane.mission ? 1 : 0);
+          if (activity <= 0) continue;
+          next.push({
+            ts: now,
+            laneId: lane.id,
+            count: activity,
+            hotfix: activeMission?.type === "hotfix" || lane.status === "error",
+            missionId: activeMission?.missionId ?? null,
+          });
+        }
+        if (next.length === 0) return prev;
+        return [...prev, ...next]
+          .filter((sample) => now - sample.ts < 30 * 60 * 1000)
+          .slice(-1500);
+      });
+    };
+    tick();
+    const id = setInterval(tick, 2000);
     return () => clearInterval(id);
   }, []);
-  const ts = Date.parse(snapshot.ts);
-  const ageSec = Number.isFinite(ts) ? Math.max(0, Math.floor((now - ts) / 1000)) : null;
-  const isStale = ageSec !== null && ageSec > 30;
-  return (
-    <div className="flex items-center gap-2 text-[10px] font-mono">
-      <span
-        data-testid="connection-state"
-        data-state={connectionState}
-        className={`inline-block rounded px-2 py-0.5 ${
-          connectionState === "open"
-            ? "bg-aura-typing/20 text-aura-typing"
-            : connectionState === "stale"
-            ? "bg-aura-talking/20 text-aura-talking"
-            : connectionState === "failed"
-            ? "bg-aura-alert/20 text-aura-alert"
-            : "bg-gray-500/20 text-gray-400"
-        }`}
-      >
-        SSE: {connectionState}
-      </span>
-      <span
-        data-testid="activity-age"
-        data-stale={isStale}
-        className={`inline-block rounded px-2 py-0.5 ${
-          isStale
-            ? "bg-aura-alert/20 text-aura-alert"
-            : "bg-aura-typing/20 text-aura-typing"
-        }`}
-      >
-        {ageSec === null
-          ? "—"
-          : isStale
-          ? `stale ${ageSec}s — 회사가 멈춰 보입니다`
-          : `live ${ageSec}s ago`}
-      </span>
-      {snapshot.errorBanner && (
-        <span className="inline-block rounded bg-aura-alert/20 px-2 py-0.5 text-aura-alert">
-          banner: {snapshot.errorBanner.level}
-        </span>
-      )}
-    </div>
+  const { cells: heatmap, totalBuckets } = useMemo(
+    () => buildHeatmap(snapshot, lanes, heatSamples, sessionStartedAtRef.current),
+    [heatSamples, lanes, snapshot]
   );
-}
+  const [selectedLaneId, setSelectedLaneId] = useState(lanes[0]?.id ?? "ceo");
+  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [dragEnd, setDragEnd] = useState<{ x: number; y: number } | null>(null);
+  const [tooltip, setTooltip] = useState<{ mission: MissionDoc; x: number; y: number } | null>(null);
+  const [commandLogOpen, setCommandLogOpen] = useState(false);
+  const [docExpanded, setDocExpanded] = useState(false);
 
-function Panel({
-  title,
-  eyebrow,
-  children,
-}: {
-  title: string;
-  eyebrow?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-md border border-gray-700/80 bg-[#171a20]/95 p-3 shadow-xl">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          {eyebrow && (
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
-              {eyebrow}
-            </p>
-          )}
-          <h2 className="text-sm font-semibold text-gray-100">{title}</h2>
-        </div>
-      </div>
-      {children}
-    </section>
-  );
-}
+  void lang;
 
-function Metric({ label, value, tone }: { label: string; value: React.ReactNode; tone: "neutral" | "cyan" | "green" }) {
-  const color = tone === "cyan" ? "text-cyan-300" : tone === "green" ? "text-emerald-300" : "text-gray-200";
-  return (
-    <div className="rounded border border-gray-700/70 bg-black/20 px-2 py-2">
-      <div className="font-mono text-[10px] uppercase text-gray-500">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${color}`}>{value}</div>
-    </div>
-  );
-}
+  const selectedLane = lanes.find((lane) => lane.id === selectedLaneId) ?? lanes[0] ?? null;
+  const selectedCells = getSelectedCells(heatmap, dragStart, dragEnd);
+  const activeWorkers =
+    snapshot.missions[0]?.workers.filter((w) => w.active).length ?? 0;
+  const hotfixCount = snapshot.missions.filter((m) => m.type === "hotfix").length;
 
-function StatusLine({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2 rounded bg-black/20 px-2 py-1 font-mono">
-      <span className="text-gray-500">{label}</span>
-      <span className="truncate text-gray-200">{value}</span>
-    </div>
-  );
-}
-
-function EmptyLine({ text }: { text: string }) {
-  return <div className="rounded border border-dashed border-gray-700 px-3 py-6 text-center text-xs text-gray-500">{text}</div>;
-}
-
-function statusTone(status: WorkerSnapshot["status"]): string {
-  if (status === "spawned" || status === "running") return "bg-cyan-400/15 text-cyan-300";
-  if (status === "recorded") return "bg-amber-400/15 text-amber-300";
-  if (status === "blocked") return "bg-rose-500/15 text-rose-300";
-  return "bg-gray-500/15 text-gray-300";
-}
-
-function featureTone(status: string): string {
-  if (status === "passed") return "text-emerald-300";
-  if (status === "failed" || status === "blocked") return "text-rose-300";
-  if (status === "in_progress" || status === "ready") return "text-cyan-300";
-  return "text-gray-500";
-}
-
-function serviceTone(status: OpsServiceHealth["status"]): string {
-  if (status === "ok") return "bg-emerald-400/15 text-emerald-300";
-  if (status === "degraded") return "bg-amber-400/15 text-amber-300";
-  if (status === "down") return "bg-rose-500/15 text-rose-300";
-  return "bg-gray-500/15 text-gray-300";
-}
-
-function EscalationStrip({ escalations }: { escalations: EscalationEntry[] }) {
-  return (
-    <div
-      data-testid="escalation-strip"
-      role="alert"
-      className="mb-3 flex flex-wrap items-center gap-2 rounded border border-aura-alert/60 bg-aura-alert/10 px-3 py-2 text-xs font-mono text-aura-alert"
-    >
-      <span className="font-semibold uppercase tracking-widest">
-        ↑ {escalations.length} escalation{escalations.length === 1 ? "" : "s"}
-      </span>
-      {escalations.slice(0, 3).map((e) => (
-        <span
-          key={e.id}
-          data-testid={`escalation-${e.id}`}
-          className="rounded bg-aura-alert/20 px-2 py-0.5 text-[10px]"
-        >
-          {e.id} · {e.reason}
-        </span>
-      ))}
-      {escalations.length > 3 && (
-        <span className="text-[10px] opacity-70">+{escalations.length - 3} more</span>
-      )}
-    </div>
-  );
-}
-
-// Keep unused helper functions to avoid breaking other panels if needed later
-void Panel;
-void Metric;
-void StatusLine;
-void EmptyLine;
-void statusTone;
-void featureTone;
-void serviceTone;
-
-function OpsPanel({ services }: { services: OpsServiceHealth[] }) {
-  return (
-    <section className="rounded-md border border-gray-700/80 bg-[#171a20]/95 p-3 shadow-xl">
-      <div className="mb-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">production monitor</p>
-        <h2 className="text-sm font-semibold text-gray-100">Service-Ops</h2>
-      </div>
-      {services.length === 0 ? (
-        <div className="rounded border border-dashed border-gray-700 px-3 py-6 text-center text-xs text-gray-500">No production services configured.</div>
-      ) : (
-        <div className="space-y-1.5">
-          {services.map((s) => (
-            <div key={`${s.name}-${s.port}`} className="flex items-center justify-between gap-2 rounded border border-gray-700/60 bg-black/20 px-2 py-1.5">
-              <div className="min-w-0">
-                <div className="truncate text-xs font-medium text-gray-100">{s.name}</div>
-                <div className="font-mono text-[10px] text-gray-500">
-                  {s.host}:{s.port}{s.health_path ? ` · ${s.health_path}` : ""}
-                </div>
-              </div>
-              <div className="text-right">
-                <span className={`rounded px-2 py-0.5 font-mono text-[10px] ${serviceTone(s.status)}`}>
-                  {s.status}
-                </span>
-                <div className="mt-1 font-mono text-[10px] text-gray-500">
-                  {s.health_status ?? s.port_state ?? "—"}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function EnvPanel({ envFiles }: { envFiles: EnvFileSummary[] }) {
-  const first = envFiles[0];
-  const firstKey = first?.keys[0]?.key ?? "";
-  const [file, setFile] = useState(first?.path ?? ".env");
-  const [key, setKey] = useState(firstKey);
-  const [value, setValue] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-
-  const submitEnv = async () => {
-    setStatus("saving");
-    try {
-      const res = await fetch("/api/env", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file, key, value }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok || !body.ok) {
-        setStatus(body.error ?? "failed");
-        return;
-      }
-      setValue("");
-      setStatus(body.replaced ? "updated" : "added");
-    } catch {
-      setStatus("failed");
-    }
+  const handleSelectWorker = (mission: MissionDoc, worker: WorkerDocEntry) => {
+    setSelectedMissionId(mission.missionId);
+    setSelectedLaneId(`${worker.owner}:${worker.name}`);
   };
 
   return (
-    <section className="rounded-md border border-gray-700/80 bg-[#171a20]/95 p-3 shadow-xl">
-      <div className="mb-3">
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">masked .env overview</p>
-        <h2 className="text-sm font-semibold text-gray-100">Environment Control</h2>
-      </div>
-      {envFiles.length === 0 ? (
-        <div className="rounded border border-dashed border-gray-700 px-3 py-6 text-center text-xs text-gray-500">No .env files found at project root.</div>
-      ) : (
-        <div className="space-y-2">
-          <div className="rounded border border-cyan-400/30 bg-cyan-400/5 p-2">
-            <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
-              <label className="grid gap-1 font-mono text-[10px] text-gray-400">
-                file
-                <select
-                  value={file}
-                  onChange={(e) => {
-                    setFile(e.target.value);
-                    const nextFile = envFiles.find((item) => item.path === e.target.value);
-                    setKey(nextFile?.keys[0]?.key ?? "");
-                  }}
-                  className="rounded border border-gray-700 bg-[#11151a] px-2 py-1 text-xs text-gray-100"
-                >
-                  {envFiles.map((item) => (
-                    <option key={item.path} value={item.path}>
-                      {item.path}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 font-mono text-[10px] text-gray-400">
-                key
-                <select
-                  value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  className="rounded border border-gray-700 bg-[#11151a] px-2 py-1 text-xs text-gray-100"
-                >
-                  {(envFiles.find((item) => item.path === file)?.keys ?? []).map((item) => (
-                    <option key={item.key} value={item.key}>
-                      {item.key}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="mt-2 flex gap-2">
-              <input
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder="new value, never stored in browser"
-                className="min-w-0 flex-1 rounded border border-gray-700 bg-[#11151a] px-2 py-1 text-xs text-gray-100 placeholder:text-gray-600"
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-[#070d1d] text-slate-200">
+      <TopHeader
+        projectName={snapshot.projectName}
+        missionId={selectedMission?.missionId ?? null}
+        connectionState={connectionState}
+        activeWorkers={activeWorkers}
+        hotfixCount={hotfixCount}
+      />
+
+      <div className="flex min-h-0 flex-1">
+        <HistoryNavigator
+          missions={snapshot.missions}
+          ownerHistory={snapshot.ownerHistory}
+          activeMissionId={selectedMission?.missionId ?? null}
+          onSelect={setSelectedMissionId}
+          commandLogOpen={commandLogOpen}
+          onToggleCommandLog={() => setCommandLogOpen((v) => !v)}
+          onCloseCommandLog={() => setCommandLogOpen(false)}
+        />
+
+        <main className="flex min-w-0 flex-1 flex-col gap-2 p-2">
+          {/* Top row: Knowledge | Layer Activity | Recent Report */}
+          <section className="grid shrink-0 grid-cols-3 gap-2" style={{ height: 280 }}>
+            <KnowledgeBasePanel
+              gotchas={snapshot.gotchas}
+              conventions={snapshot.conventions}
+              baselineTs={selectedGoal?.ts ?? null}
+            />
+            <LayerActivityPanel
+              goalScope={goalScopeMissions}
+              todos={snapshot.todos}
+              label={selectedGoal?.missionId ?? "no goal"}
+            />
+            <RecentReportPanel
+              missions={snapshot.missions}
+              onSelectWorker={handleSelectWorker}
+            />
+          </section>
+
+          {/* Heatmap section with cadence strip + main grid + click tooltip */}
+          <section className="panel-shell relative flex min-h-0 flex-1 flex-col gap-2 p-2">
+            <CadenceStrip ownerHistory={snapshot.ownerHistory} />
+            <WorkflowHeatmap
+              lanes={lanes}
+              cells={heatmap}
+              totalBuckets={totalBuckets}
+              selectedCells={selectedCells}
+              dragStart={dragStart}
+              dragEnd={dragEnd}
+              onDragStart={setDragStart}
+              onDragMove={setDragEnd}
+              onDragEnd={(missionId) => {
+                if (missionId) setSelectedMissionId(missionId);
+              }}
+              onSelectLane={setSelectedLaneId}
+              onCellClick={(cell, event) => {
+                if (!cell.mission) {
+                  setTooltip(null);
+                  return;
+                }
+                const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+                setTooltip({
+                  mission: cell.mission,
+                  x: rect.left + rect.width / 2,
+                  y: rect.top,
+                });
+                setSelectedMissionId(cell.mission.missionId);
+              }}
+            />
+            {tooltip && (
+              <ApprovalTooltip
+                mission={tooltip.mission}
+                x={tooltip.x}
+                y={tooltip.y}
+                onClose={() => setTooltip(null)}
               />
+            )}
+          </section>
+        </main>
+
+        <aside
+          id="doc-aside"
+          className={`doc-aside flex shrink-0 flex-col gap-2 overflow-hidden border-l border-slate-800 bg-[#081124] p-2 ${
+            docExpanded ? "expanded" : ""
+          }`}
+        >
+          <DocumentViewer
+            mission={selectedMission}
+            lane={selectedLane}
+            expanded={docExpanded}
+            onToggle={() => setDocExpanded((v) => !v)}
+          />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+// ===== Top header =====
+
+function TopHeader({
+  projectName,
+  missionId,
+  connectionState,
+  activeWorkers,
+  hotfixCount,
+}: {
+  projectName: string;
+  missionId: string | null;
+  connectionState: string;
+  activeWorkers: number;
+  hotfixCount: number;
+}) {
+  return (
+    <header className="flex shrink-0 items-center gap-4 border-b border-slate-700/60 bg-[#0b1328]/90 px-4 py-2 backdrop-blur">
+      <Wordmark className="text-base" />
+      <span
+        className="rounded bg-slate-800/60 px-2 py-0.5 font-mono text-[10px] font-semibold text-amber-300"
+        title={projectName}
+      >
+        {projectName}
+      </span>
+      <span className="hidden text-[11px] text-slate-400 sm:inline">
+        walwal-harness 라이브 운영 대시보드
+      </span>
+      <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-cyan-200/80">
+        {missionId ?? "no active transaction"}
+      </span>
+      <div className="flex shrink-0 items-center gap-2">
+        <HeaderBadge
+          label="SSE"
+          value={connectionState}
+          tone={connectionState === "open" ? "green" : "orange"}
+        />
+        <HeaderBadge label="Workers" value={String(activeWorkers)} tone="cyan" />
+        <HeaderBadge label="Hot-fix" value={String(hotfixCount)} tone="red" />
+        <PresenceLegend />
+      </div>
+    </header>
+  );
+}
+
+function HeaderBadge({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "green" | "orange" | "red" | "cyan";
+}) {
+  const color = {
+    green: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
+    orange: "border-orange-400/30 bg-orange-400/10 text-orange-200",
+    red: "border-rose-400/30 bg-rose-400/10 text-rose-200",
+    cyan: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
+  }[tone];
+  return (
+    <div className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${color}`}>
+      <span className="text-slate-500">{label}</span>
+      <span className="ml-1.5">{value}</span>
+    </div>
+  );
+}
+
+function PresenceLegend() {
+  return (
+    <div className="ml-2 hidden items-center gap-2 border-l border-slate-700/50 pl-3 font-mono text-[10px] text-gray-400 lg:flex">
+      <span className="inline-flex items-center gap-1">
+        <span className="size-1.5 rounded-full bg-aura-idle" /> idle
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="size-1.5 rounded-full bg-aura-typing" /> typing
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="size-1.5 rounded-full bg-aura-talking" /> talking
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="size-1.5 rounded-full bg-aura-alert" /> alert
+      </span>
+    </div>
+  );
+}
+
+// ===== History Navigator =====
+
+function groupMissions(missions: MissionDoc[]): GoalGroup[] {
+  const parentSegment = (id: string) => id.split("/")[0] ?? id;
+  const groups: GoalGroup[] = [];
+  const groupById = new Map<string, GoalGroup>();
+
+  const ensureGroupFor = (mission: MissionDoc): GoalGroup => {
+    const key = parentSegment(mission.missionId);
+    const existing = groupById.get(key);
+    if (existing) return existing;
+    const group: GoalGroup = { goal: mission, children: [] };
+    groups.push(group);
+    groupById.set(key, group);
+    return group;
+  };
+
+  for (const mission of missions) {
+    if (mission.missionId.includes("/")) continue;
+    if (mission.type === "goal" || mission.type === "feature") ensureGroupFor(mission);
+  }
+  for (const mission of missions) {
+    if (mission.missionId.includes("/")) continue;
+    if (mission.type === "goal" || mission.type === "feature") continue;
+    ensureGroupFor(mission);
+  }
+  for (const mission of missions) {
+    if (!mission.missionId.includes("/")) continue;
+    const key = parentSegment(mission.missionId);
+    const group = groupById.get(key);
+    if (group) group.children.push(mission);
+    else ensureGroupFor(mission);
+  }
+
+  for (const g of groups) {
+    g.children.sort((a, b) => (a.ts ?? "").localeCompare(b.ts ?? ""));
+  }
+  groups.sort((a, b) => (b.goal.ts ?? "").localeCompare(a.goal.ts ?? ""));
+  return groups;
+}
+
+function HistoryNavigator({
+  missions,
+  ownerHistory,
+  activeMissionId,
+  onSelect,
+  commandLogOpen,
+  onToggleCommandLog,
+  onCloseCommandLog,
+}: {
+  missions: MissionDoc[];
+  ownerHistory: OwnerPromptEntry[];
+  activeMissionId: string | null;
+  onSelect: (missionId: string) => void;
+  commandLogOpen: boolean;
+  onToggleCommandLog: () => void;
+  onCloseCommandLog: () => void;
+}) {
+  const groups = useMemo(() => groupMissions(missions), [missions]);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!commandLogOpen) return;
+    const onDocClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (popoverRef.current?.contains(target) || buttonRef.current?.contains(target)) return;
+      onCloseCommandLog();
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [commandLogOpen, onCloseCommandLog]);
+
+  return (
+    <aside className="flex w-[230px] shrink-0 flex-col border-r border-slate-800 bg-[#081124] px-3 py-3">
+      <div className="relative mb-3 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="grid h-7 w-7 shrink-0 place-items-center rounded bg-slate-700/70 text-xs">
+            AI
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-slate-100">Administrator</div>
+            <div className="font-mono text-[9px] text-slate-500">workflow history</div>
+          </div>
+        </div>
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={onToggleCommandLog}
+          className="relative grid h-7 w-7 shrink-0 place-items-center rounded text-slate-400 hover:bg-white/10 hover:text-cyan-200"
+          title={`Command Log (${ownerHistory.length})`}
+          aria-label="Open command log"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          >
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+          </svg>
+          {ownerHistory.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 grid h-3.5 min-w-[14px] place-items-center rounded-full bg-cyan-500 px-1 font-mono text-[8px] font-bold text-slate-900 animate-pulse">
+              {ownerHistory.length}
+            </span>
+          )}
+        </button>
+
+        {commandLogOpen && (
+          <CommandLogPopover
+            ref={popoverRef}
+            entries={ownerHistory}
+            onClose={onCloseCommandLog}
+          />
+        )}
+      </div>
+
+      <nav className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 text-xs">
+        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+          /goal
+        </div>
+        {groups.length ? (
+          groups.map(({ goal, children }) => (
+            <div
+              key={goal.missionId}
+              className="rounded border border-slate-800/80 bg-slate-950/35"
+            >
               <button
                 type="button"
-                onClick={submitEnv}
-                disabled={!file || !key}
-                className="rounded border border-cyan-400/50 px-3 py-1 font-mono text-[10px] uppercase text-cyan-200 hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-40"
+                onClick={() => onSelect(goal.missionId)}
+                className={`w-full truncate px-2 py-2 text-left ${
+                  activeMissionId === goal.missionId
+                    ? "bg-cyan-400/[0.12] text-cyan-100"
+                    : "text-slate-300 hover:bg-white/[0.04]"
+                }`}
+                title={goal.label || goal.missionId}
               >
-                Apply
+                {goal.label || goal.missionId}
               </button>
+              {children.length > 0 && (
+                <div className="border-t border-slate-800/70 py-1 pl-3">
+                  {children.map((child) => (
+                    <button
+                      key={child.missionId}
+                      type="button"
+                      onClick={() => onSelect(child.missionId)}
+                      className={`block w-full truncate rounded px-2 py-1.5 text-left ${
+                        activeMissionId === child.missionId
+                          ? "bg-cyan-400/[0.12] text-cyan-100"
+                          : child.type === "hotfix"
+                          ? "text-rose-300 hover:bg-rose-400/10"
+                          : "text-slate-400 hover:bg-white/[0.04]"
+                      }`}
+                      title={child.label || child.missionId}
+                    >
+                      <span className="font-mono text-[9px] text-slate-500">
+                        {child.type === "hotfix" ? "/hot-fix" : "/submission"}
+                      </span>{" "}
+                      {child.label || child.missionId}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            {status && <div className="mt-1 font-mono text-[10px] text-amber-300">{status}</div>}
+          ))
+        ) : (
+          <div className="rounded border border-slate-800 px-2 py-2 text-slate-500">
+            No goal history
           </div>
-          {envFiles.map((file) => (
-            <div key={file.path} className="rounded border border-gray-700/70 bg-black/20 p-2">
-              <div className="flex items-center justify-between gap-2">
-                <div className="font-mono text-xs text-gray-100">{file.path}</div>
-                <div className="font-mono text-[10px] text-gray-500">{file.key_count} keys</div>
+        )}
+      </nav>
+    </aside>
+  );
+}
+
+const CommandLogPopover = (() => {
+  const Inner = (
+    {
+      entries,
+      onClose,
+    }: { entries: OwnerPromptEntry[]; onClose: () => void },
+    ref: React.Ref<HTMLDivElement>
+  ) => {
+    const colorFor = (type: string) =>
+      type === "hot-fix"
+        ? "border-rose-500/40 bg-rose-950/30"
+        : type === "submission"
+        ? "border-emerald-500/30 bg-emerald-950/30"
+        : "bg-slate-950/60";
+    const labelFor = (type: string) =>
+      type === "hot-fix"
+        ? "text-rose-300"
+        : type === "submission"
+        ? "text-emerald-300"
+        : "text-cyan-300";
+    return (
+      <div
+        ref={ref}
+        className="pop-in absolute left-full top-0 z-40 ml-3 rounded border border-cyan-400/60 bg-[#0b1328] px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.6)]"
+        style={{ width: 340 }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">
+            Command Log
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm leading-none text-slate-400 hover:text-slate-100"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-1.5 max-h-[320px] space-y-1 overflow-auto pr-1">
+          {entries.length === 0 ? (
+            <div className="rounded bg-slate-950/50 px-2 py-2 text-[10px] text-slate-500">
+              No owner prompts yet.
+            </div>
+          ) : (
+            entries.map((entry, idx) => (
+              <div
+                key={`${entry.ts}-${idx}`}
+                className={`rounded border border-transparent px-2 py-1.5 ${colorFor(entry.type)}`}
+              >
+                <div className="flex items-center justify-between text-[9px]">
+                  <span className={`font-mono ${labelFor(entry.type)}`}>/{entry.type}</span>
+                  <span className="text-slate-500">{formatTime(entry.ts)}</span>
+                </div>
+                <div className="mt-0.5 line-clamp-2 text-[10px] text-slate-300">
+                  {entry.content}
+                </div>
               </div>
-              <div className="mt-2 grid gap-1">
-                {file.keys.slice(0, 5).map((k) => (
-                  <div key={k.key} className="flex items-center justify-between gap-2 font-mono text-[10px]">
-                    <span className="truncate text-gray-400">{k.key}</span>
-                    <span className={k.category === "secret" ? "text-rose-300" : "text-cyan-300/80"}>
-                      {k.masked}
-                    </span>
-                  </div>
-                ))}
+            ))
+          )}
+        </div>
+        <div className="absolute -left-[6px] top-3 size-3 rotate-45 border-b border-l border-cyan-400/60 bg-[#0b1328]" />
+      </div>
+    );
+  };
+  return Object.assign(
+    // eslint-disable-next-line react/display-name
+    (
+      props: { entries: OwnerPromptEntry[]; onClose: () => void } & {
+        ref?: React.Ref<HTMLDivElement>;
+      }
+    ) => Inner(props, props.ref ?? null),
+    {}
+  );
+})() as React.ForwardRefExoticComponent<
+  { entries: OwnerPromptEntry[]; onClose: () => void } & React.RefAttributes<HTMLDivElement>
+>;
+
+function formatTime(iso: string | null | undefined) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    // Always render in the browser's local timezone — never UTC.
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  } catch {
+    return "";
+  }
+}
+
+// ===== Knowledge base panel =====
+
+function KnowledgeBasePanel({
+  gotchas,
+  conventions,
+  baselineTs,
+}: {
+  gotchas: GotchaEntry[];
+  conventions: ConventionEntry[];
+  baselineTs: string | null;
+}) {
+  const baseline = baselineTs ? new Date(baselineTs).getTime() : 0;
+  const isNew = (updatedAt?: string | null) => {
+    if (!updatedAt || !baseline) return false;
+    const t = new Date(updatedAt).getTime();
+    return Number.isFinite(t) && t >= baseline;
+  };
+  const newGotchas = gotchas.filter((g) => isNew(g.updatedAt)).length;
+  const newConventions = conventions.filter((c) => isNew(c.updatedAt)).length;
+
+  return (
+    <div className="panel-shell fade-in flex min-h-0 flex-col p-2">
+      <SectionLabel>Info · Knowledge Base</SectionLabel>
+      <div className="mt-2 grid min-h-0 flex-1 grid-cols-2 gap-2">
+        <KnowledgeList
+          title="Gotchas"
+          total={gotchas.length}
+          added={newGotchas}
+          entries={gotchas}
+          isNew={isNew}
+          dirRel=".harness/gotchas"
+        />
+        <KnowledgeList
+          title="Conventions"
+          total={conventions.length}
+          added={newConventions}
+          entries={conventions}
+          isNew={isNew}
+          dirRel=".harness/conventions"
+        />
+      </div>
+    </div>
+  );
+}
+
+function KnowledgeList({
+  title,
+  total,
+  added,
+  entries,
+  isNew,
+  dirRel,
+}: {
+  title: string;
+  total: number;
+  added: number;
+  entries: Array<GotchaEntry | ConventionEntry>;
+  isNew: (ts?: string | null) => boolean;
+  dirRel: string;
+}) {
+  return (
+    <div className="inset-shell flex min-h-0 flex-col p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] text-cyan-200">{title}</span>
+        <span className="text-[10px] text-slate-400">
+          {total}
+          {added > 0 && (
+            <>
+              {" "}
+              <span className="font-semibold text-emerald-300">+{added}</span>
+            </>
+          )}
+        </span>
+      </div>
+      <div className="mt-1.5 min-h-0 flex-1 space-y-0.5 overflow-auto pr-1 text-[10px]">
+        {entries.length === 0 ? (
+          <div className="text-slate-500">(empty)</div>
+        ) : (
+          entries.map((entry) => (
+            <a
+              key={entry.id}
+              className="block cursor-pointer truncate text-slate-300 hover:text-cyan-200"
+              title={`${dirRel}/${entry.id}.md`}
+            >
+              → {entry.id}.md
+              {isNew(entry.updatedAt) && <span className="text-emerald-300"> ●</span>}
+            </a>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===== Layer activity panel =====
+
+function LayerActivityPanel({
+  goalScope,
+  todos,
+  label,
+}: {
+  goalScope: MissionDoc[];
+  todos: CxxTodo[];
+  label: string;
+}) {
+  // Sum workers across every mission in the selected goal sub-tree so the
+  // participation bar reflects the whole goal, not a single sub-mission.
+  const allWorkers = useMemo(
+    () => goalScope.flatMap((m) => m.workers),
+    [goalScope]
+  );
+  const workerByCxx = useMemo(() => {
+    const map = new Map<WorkerOwnerRole, number>();
+    for (const role of WORKER_OWNERS) map.set(role, 0);
+    for (const w of allWorkers) {
+      const r = w.owner;
+      if ((WORKER_OWNERS as readonly string[]).includes(r)) {
+        const role = r as WorkerOwnerRole;
+        map.set(role, (map.get(role) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [allWorkers]);
+
+  const layer = useMemo(
+    () => computeGoalScopeLayers(goalScope, todos),
+    [goalScope, todos]
+  );
+
+  const activeCxxCount = Array.from(workerByCxx.values()).filter((v) => v > 0).length;
+
+  return (
+    <div className="panel-shell fade-in flex min-h-0 flex-col p-2">
+      <SectionLabel>Layer · {label}</SectionLabel>
+
+      <div className="inset-shell mt-2 p-2">
+        <div className="flex items-center justify-between font-mono text-[9px] text-slate-500">
+          <span>실무자 비중 (worker by CXX, CEO 제외)</span>
+          <span>
+            {allWorkers.length}w · {activeCxxCount} CXX
+          </span>
+        </div>
+        <div className="mt-1.5 flex h-3 overflow-hidden rounded">
+          {WORKER_OWNERS.map((role) => {
+            const count = workerByCxx.get(role) ?? 0;
+            return (
+              <div
+                key={role}
+                className={`stack-seg transition-[flex] duration-500 ease-out ${
+                  count > 0 ? CXX_COLOR[role] : `${CXX_COLOR[role]}/30`
+                }`}
+                style={{ flex: Math.max(0.1, count) }}
+                title={`${role.toUpperCase()} · ${count}`}
+              />
+            );
+          })}
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1 font-mono text-[9px] text-slate-400">
+          {WORKER_OWNERS.map((role) => (
+            <span key={role} className="inline-flex items-center gap-1">
+              <span
+                className={`inline-block size-2 rounded-sm ${
+                  (workerByCxx.get(role) ?? 0) > 0 ? CXX_COLOR[role] : `${CXX_COLOR[role]}/30`
+                }`}
+              />
+              {role.toUpperCase()} {workerByCxx.get(role) ?? 0}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="inset-shell mt-2 min-h-0 flex-1 overflow-auto">
+        <table className="w-full text-[10px]">
+          <thead className="sticky top-0 bg-slate-900/60 font-mono text-[9px] uppercase tracking-wider">
+            <tr>
+              <th className="px-2 py-1 text-left text-slate-500">Layer</th>
+              <th className="px-2 py-1 text-right text-slate-500">TODO</th>
+              <th className="px-2 py-1 text-right text-emerald-400/80">DONE</th>
+              <th className="px-2 py-1 text-right text-orange-300/80">Remain</th>
+            </tr>
+          </thead>
+          <tbody>
+            <LayerRow label="CEO" stats={layer.ceo} />
+            <LayerRow label="CXX" stats={layer.cxx} />
+            <LayerRow label="Worker" stats={layer.worker} />
+            <tr className="border-t border-slate-800 bg-slate-900/40">
+              <td className="px-2 py-1 font-semibold text-slate-300">∑</td>
+              <td className="px-2 py-1 text-right font-semibold text-slate-100">
+                {layer.ceo.total + layer.cxx.total + layer.worker.total}
+              </td>
+              <td className="px-2 py-1 text-right font-semibold text-emerald-300">
+                {layer.ceo.done + layer.cxx.done + layer.worker.done}
+              </td>
+              <td className="px-2 py-1 text-right font-semibold text-orange-300">
+                {layer.ceo.remain + layer.cxx.remain + layer.worker.remain}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LayerRow({ label, stats }: { label: string; stats: LayerStats }) {
+  return (
+    <tr className="border-t border-slate-800">
+      <td className="px-2 py-1 text-cyan-200">{label}</td>
+      <td className="px-2 py-1 text-right text-slate-200">{stats.total}</td>
+      <td className="px-2 py-1 text-right text-emerald-300">{stats.done}</td>
+      <td
+        className={`px-2 py-1 text-right ${stats.remain > 0 ? "text-orange-300" : "text-slate-500"}`}
+      >
+        {stats.remain}
+      </td>
+    </tr>
+  );
+}
+
+type LayerStats = { total: number; done: number; remain: number };
+
+function normalizeKind(s: string) {
+  return s.replace(/[_-]/g, "").toLowerCase();
+}
+
+function computeGoalScopeLayers(
+  goalScope: MissionDoc[],
+  todos: CxxTodo[]
+): { ceo: LayerStats; cxx: LayerStats; worker: LayerStats } {
+  // === CEO layer: ceo todos (status.json) ↔ mission directories of matching kind ===
+  // Runtime rarely flips status to "done", so infer completion from how many
+  // mission directories of each kind already exist under the goal scope.
+  const ceoTodos = todos.filter((t) => t.owner.toLowerCase() === "ceo");
+  const todoByKind = new Map<string, number>();
+  for (const t of ceoTodos) {
+    const k = normalizeKind(t.kind || "unknown");
+    todoByKind.set(k, (todoByKind.get(k) ?? 0) + 1);
+  }
+  const missionByKind = new Map<string, number>();
+  for (const m of goalScope) {
+    const k = normalizeKind(m.type);
+    missionByKind.set(k, (missionByKind.get(k) ?? 0) + 1);
+  }
+  const ceo: LayerStats = { total: ceoTodos.length, done: 0, remain: 0 };
+  for (const [kind, count] of todoByKind) {
+    const matched = missionByKind.get(kind) ?? 0;
+    ceo.done += Math.min(count, matched);
+  }
+  ceo.remain = ceo.total - ceo.done;
+
+  // === CXX layer: a CXX is "done" on a mission once its <role>.md exists ===
+  // cxxPresent already encodes that signal. CEO is excluded — CEO is its own layer.
+  let cxxTotal = 0;
+  let cxxDone = 0;
+  for (const m of goalScope) {
+    const presentNonCeo = m.cxxPresent.filter(
+      (r) => (WORKER_OWNERS as readonly string[]).includes(r)
+    );
+    cxxTotal += presentNonCeo.length;
+    cxxDone += presentNonCeo.length;
+  }
+  const cxx: LayerStats = { total: cxxTotal, done: cxxDone, remain: cxxTotal - cxxDone };
+
+  // === Worker layer: every worker doc that submitted output (status COMPLETE) ===
+  let wTotal = 0;
+  let wDone = 0;
+  for (const m of goalScope) {
+    wTotal += m.workers.length;
+    wDone += m.workers.filter((w) => w.status === "COMPLETE").length;
+  }
+  const worker: LayerStats = { total: wTotal, done: wDone, remain: wTotal - wDone };
+
+  return { ceo, cxx, worker };
+}
+
+// ===== Recent report panel =====
+
+function RecentReportPanel({
+  missions,
+  onSelectWorker,
+}: {
+  missions: MissionDoc[];
+  onSelectWorker: (mission: MissionDoc, worker: WorkerDocEntry) => void;
+}) {
+  const reports = useMemo(() => {
+    const list: Array<{ mission: MissionDoc; worker: WorkerDocEntry; ts: number }> = [];
+    for (const mission of missions) {
+      for (const worker of mission.workers) {
+        if (!worker.updatedAt) continue;
+        const ts = new Date(worker.updatedAt).getTime();
+        if (!Number.isFinite(ts)) continue;
+        list.push({ mission, worker, ts });
+      }
+    }
+    list.sort((a, b) => b.ts - a.ts);
+    return list;
+  }, [missions]);
+
+  return (
+    <div className="panel-shell fade-in flex min-h-0 flex-col p-2">
+      <div className="flex items-center justify-between">
+        <SectionLabel>Recent Report (from CXX)</SectionLabel>
+        <span className="font-mono text-[9px] text-slate-500">latest on top</span>
+      </div>
+      <div className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-auto pr-1 text-[10px]">
+        {reports.length === 0 ? (
+          <div className="text-slate-500">No worker reports yet.</div>
+        ) : (
+          reports.map(({ mission, worker, ts }) => {
+            const role = worker.owner;
+            const colorClass =
+              role in CXX_TEXT ? CXX_TEXT[role as CxxRole] : "text-slate-300";
+            // Strip leading YAML frontmatter (docmeta block) before scanning
+            // for the first content line, otherwise we'd show "docmeta:" etc.
+            const stripped = (worker.content || "").replace(/^---[\s\S]*?---\n+/, "");
+            const firstLine = stripped
+              .split("\n")
+              .map((line) => line.trim())
+              .find((line) => line && !line.startsWith("#"));
+            return (
+              <button
+                key={`${mission.missionId}:${worker.name}`}
+                type="button"
+                onClick={() => onSelectWorker(mission, worker)}
+                className="inset-shell slide-in block w-full cursor-pointer px-2 py-1.5 text-left transition-transform hover:-translate-y-0.5 hover:border-cyan-400/40"
+              >
+                <div className="flex items-center justify-between text-[9px]">
+                  <span className={colorClass}>
+                    {role.toUpperCase()} / {worker.displayName}
+                  </span>
+                  <span className="text-slate-500">{formatTime(new Date(ts).toISOString())}</span>
+                </div>
+                <div className="mt-0.5 truncate text-[10px] text-slate-200">
+                  {firstLine || `${mission.missionId} — report`}
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===== Cadence strip =====
+
+function CadenceStrip({ ownerHistory }: { ownerHistory: OwnerPromptEntry[] }) {
+  const bucketEntries = useMemo(() => {
+    const now = Date.now();
+    const arr: OwnerPromptEntry[][] = Array.from({ length: 24 }, () => []);
+    for (const entry of ownerHistory) {
+      if (!entry.ts) continue;
+      const t = new Date(entry.ts).getTime();
+      if (!Number.isFinite(t)) continue;
+      const hoursAgo = Math.floor((now - t) / (60 * 60 * 1000));
+      if (hoursAgo < 0 || hoursAgo >= 24) continue;
+      arr[hoursAgo].push(entry);
+    }
+    // newest-first within each bucket
+    for (const list of arr) {
+      list.sort((a, b) => (b.ts ?? "").localeCompare(a.ts ?? ""));
+    }
+    return arr;
+  }, [ownerHistory]);
+  const buckets = useMemo(() => bucketEntries.map((b) => b.length), [bucketEntries]);
+
+  const max = Math.max(1, ...buckets);
+  const cellColor = (n: number) => {
+    if (n === 0) return "bg-slate-900";
+    const ratio = n / max;
+    if (ratio > 0.75) return "bg-rose-500/80 ring-1 ring-rose-400";
+    if (ratio > 0.5) return "bg-orange-500/70";
+    if (ratio > 0.25) return "bg-emerald-500/60";
+    return "bg-emerald-500/30";
+  };
+
+  const [tooltip, setTooltip] = useState<{
+    idx: number;
+    entries: OwnerPromptEntry[];
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tooltip) return;
+    const handler = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (tooltipRef.current?.contains(target)) return;
+      const el = target as HTMLElement;
+      if (el.closest?.("[data-cadence-cell]")) return;
+      setTooltip(null);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [tooltip]);
+
+  const handleCellClick = (idx: number, event: React.MouseEvent<HTMLButtonElement>) => {
+    const entries = bucketEntries[idx];
+    if (entries.length === 0) {
+      setTooltip(null);
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTooltip({
+      idx,
+      entries,
+      x: rect.left + rect.width / 2,
+      y: rect.bottom,
+    });
+  };
+
+  return (
+    <div className="inset-shell relative shrink-0 px-2 pb-1.5 pt-1.5">
+      <div className="flex items-center justify-between font-mono text-[9px] text-slate-500">
+        <span>Cadence · last 24h (owner prompts/h) · click cell for detail</span>
+        <span className="text-emerald-300">max {max}</span>
+      </div>
+      <div
+        className="mt-1 grid gap-px"
+        style={{ gridTemplateColumns: "repeat(24, minmax(0, 1fr))" }}
+      >
+        {buckets.map((count, idx) => {
+          const interactive = count > 0;
+          const isPeak = count > 0 && count === max;
+          return (
+            <button
+              key={idx}
+              data-cadence-cell
+              type="button"
+              disabled={!interactive}
+              onClick={(event) => handleCellClick(idx, event)}
+              className={`h-4 transition-all duration-300 ${cellColor(count)} ${
+                isPeak ? "cad-peak" : ""
+              } ${
+                interactive
+                  ? "cursor-pointer hover:scale-y-150 hover:brightness-125"
+                  : "cursor-default"
+              } ${tooltip?.idx === idx ? "ring-2 ring-cyan-300" : ""}`}
+              title={interactive ? `-${idx}h · ${count} prompts` : ""}
+            />
+          );
+        })}
+      </div>
+      <div className="mt-0.5 flex justify-between font-mono text-[8px] text-slate-600">
+        <span>now</span>
+        <span>-12h</span>
+        <span>-24h</span>
+      </div>
+      {tooltip && (
+        <CadencePromptTooltip
+          ref={tooltipRef}
+          entries={tooltip.entries}
+          hourIdx={tooltip.idx}
+          x={tooltip.x}
+          y={tooltip.y}
+          onClose={() => setTooltip(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+const CadencePromptTooltip = (() => {
+  const Inner = (
+    {
+      entries,
+      hourIdx,
+      x,
+      y,
+      onClose,
+    }: {
+      entries: OwnerPromptEntry[];
+      hourIdx: number;
+      x: number;
+      y: number;
+      onClose: () => void;
+    },
+    ref: React.Ref<HTMLDivElement>
+  ) => {
+    const colorFor = (type: string) =>
+      type === "hot-fix"
+        ? "border-rose-500/40 bg-rose-950/30"
+        : type === "submission"
+        ? "border-emerald-500/30 bg-emerald-950/30"
+        : "bg-slate-950/60";
+    const labelFor = (type: string) =>
+      type === "hot-fix"
+        ? "text-rose-300"
+        : type === "submission"
+        ? "text-emerald-300"
+        : "text-cyan-300";
+    return (
+      <div
+        ref={ref}
+        className="pop-in pointer-events-auto fixed z-40 rounded border border-cyan-400/60 bg-[#0b1328] px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.6)]"
+        style={{
+          left: Math.max(8, x - 200),
+          top: Math.min(window.innerHeight - 320, y + 8),
+          width: 400,
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500">
+            Owner Prompts · {hourIdx === 0 ? "this hour" : `-${hourIdx}h`} ({entries.length})
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-sm leading-none text-slate-400 hover:text-slate-100"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-1.5 max-h-[280px] space-y-1 overflow-auto pr-1">
+          {entries.map((entry, idx) => (
+            <div
+              key={`${entry.ts}-${idx}`}
+              className={`rounded border border-transparent px-2 py-1.5 ${colorFor(entry.type)}`}
+            >
+              <div className="flex items-center justify-between text-[9px]">
+                <span className={`font-mono ${labelFor(entry.type)}`}>/{entry.type}</span>
+                <span className="text-slate-500">{formatTime(entry.ts)}</span>
               </div>
-              <p className="mt-2 text-[10px] leading-relaxed text-gray-500">
-                Server-side editor target. Values stay masked until an explicit edit flow is opened.
-              </p>
+              <div className="mt-0.5 line-clamp-3 text-[10px] text-slate-300">
+                {entry.content}
+              </div>
             </div>
           ))}
         </div>
+      </div>
+    );
+  };
+  return Object.assign(
+    (
+      props: {
+        entries: OwnerPromptEntry[];
+        hourIdx: number;
+        x: number;
+        y: number;
+        onClose: () => void;
+      } & { ref?: React.Ref<HTMLDivElement> }
+    ) => Inner(props, props.ref ?? null),
+    {}
+  );
+})() as React.ForwardRefExoticComponent<
+  {
+    entries: OwnerPromptEntry[];
+    hourIdx: number;
+    x: number;
+    y: number;
+    onClose: () => void;
+  } & React.RefAttributes<HTMLDivElement>
+>;
+
+// ===== Heatmap =====
+
+function formatMinuteOffset(minutes: number) {
+  if (minutes === 0) return "now";
+  if (minutes < 60) return `-${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `-${h}h` : `-${h}h${m}m`;
+}
+
+function WorkflowHeatmap({
+  lanes,
+  cells,
+  totalBuckets,
+  selectedCells,
+  dragStart,
+  dragEnd,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onSelectLane,
+  onCellClick,
+}: {
+  lanes: AgentLane[];
+  cells: HeatCell[];
+  totalBuckets: number;
+  selectedCells: HeatCell[];
+  dragStart: { x: number; y: number } | null;
+  dragEnd: { x: number; y: number } | null;
+  onDragStart: (point: { x: number; y: number }) => void;
+  onDragMove: (point: { x: number; y: number }) => void;
+  onDragEnd: (missionId: string | null) => void;
+  onSelectLane: (id: string) => void;
+  onCellClick: (cell: HeatCell, event: React.PointerEvent) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const prevBucketCountRef = useRef(totalBuckets);
+
+  useEffect(() => {
+    const el = measureRef.current;
+    if (!el) return;
+    setContainerWidth(el.clientWidth);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const availableWidth = Math.max(360, containerWidth - LANE_LABEL_WIDTH);
+  const bucketPx = Math.max(MIN_BUCKET_PX, availableWidth / VISIBLE_BUCKETS);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) {
+      prevBucketCountRef.current = totalBuckets;
+      return;
+    }
+    const diff = totalBuckets - prevBucketCountRef.current;
+    if (diff > 0 && el.scrollLeft > 0) {
+      el.scrollLeft += diff * bucketPx;
+    }
+    prevBucketCountRef.current = totalBuckets;
+  }, [totalBuckets, bucketPx]);
+
+  const selectedSet = useMemo(
+    () => new Set(selectedCells.map((cell) => `${cell.x}:${cell.y}`)),
+    [selectedCells]
+  );
+  const cellByXY = useMemo(() => {
+    const map = new Map<string, HeatCell>();
+    for (const cell of cells) map.set(`${cell.x}:${cell.y}`, cell);
+    return map;
+  }, [cells]);
+
+  const handlePointerUp = () => {
+    if (!dragStart || !dragEnd) {
+      onDragEnd(null);
+      return;
+    }
+    const cell = cellByXY.get(`${dragEnd.x}:${dragEnd.y}`);
+    onDragEnd(cell?.mission?.missionId ?? null);
+  };
+
+  const totalWidth = LANE_LABEL_WIDTH + totalBuckets * bucketPx;
+
+  return (
+    <div ref={measureRef} className="inset-shell relative min-h-0 flex-1 p-2">
+      <div ref={scrollRef} className="h-full overflow-auto">
+        <div
+          className="grid select-none gap-px"
+          style={{
+            gridTemplateColumns: `${LANE_LABEL_WIDTH}px repeat(${totalBuckets}, ${bucketPx}px)`,
+            gridTemplateRows: `${TIME_LABEL_HEIGHT}px repeat(${lanes.length}, ${LANE_ROW_HEIGHT}px)`,
+            width: `${totalWidth}px`,
+          }}
+          onPointerLeave={handlePointerUp}
+          onPointerUp={handlePointerUp}
+        >
+          <div
+            className="sticky left-0 z-20 bg-[#071022]"
+            style={{ gridColumn: 1, gridRow: 1 }}
+          />
+          {Array.from({ length: totalBuckets }).map((_, idx) => {
+            const showLabel = idx === 0 || idx % 10 === 0;
+            return (
+              <div
+                key={`t-${idx}`}
+                className="grid place-items-center font-mono text-[9px] leading-none text-slate-500"
+                style={{ gridColumn: idx + 2, gridRow: 1 }}
+              >
+                {showLabel ? formatMinuteOffset(idx) : ""}
+              </div>
+            );
+          })}
+          {lanes.map((lane, idx) => (
+            <button
+              key={`lane-${lane.id}`}
+              type="button"
+              onClick={() => onSelectLane(lane.id)}
+              className={`sticky left-0 z-10 truncate rounded bg-[#071022] px-2 text-left font-mono text-[10px] leading-[18px] ${
+                lane.kind === "worker" ? "text-slate-500" : "text-slate-300"
+              } hover:text-cyan-200`}
+              style={{ gridColumn: 1, gridRow: idx + 2 }}
+              title={`${lane.label} · ${lane.group}`}
+            >
+              {lane.label}
+            </button>
+          ))}
+          {cells.map((cell) => {
+            const selected = selectedSet.has(`${cell.x}:${cell.y}`);
+            const interactive = cell.mission !== null;
+            return (
+              <button
+                key={`${cell.x}-${cell.y}-${cell.laneId}`}
+                type="button"
+                disabled={!interactive}
+                onPointerDown={(event) => {
+                  if (!interactive) return;
+                  event.preventDefault();
+                  onDragStart({ x: cell.x, y: cell.y });
+                  onDragMove({ x: cell.x, y: cell.y });
+                }}
+                onPointerEnter={(event) => {
+                  if (!interactive) return;
+                  if (event.buttons === 1) {
+                    onDragMove({ x: cell.x, y: cell.y });
+                  }
+                }}
+                onClick={(event) => {
+                  if (!interactive) return;
+                  onCellClick(cell, event as unknown as React.PointerEvent);
+                }}
+                className={`heat-cell min-h-0 rounded-sm border transition-transform ${
+                  interactive ? "cursor-pointer hover:scale-[1.4] hover:z-10 hover:relative" : "cursor-default"
+                } ${
+                  cell.hotfix
+                    ? "border-rose-500"
+                    : selected
+                    ? "border-cyan-300"
+                    : "border-transparent"
+                } ${heatColor(cell.count)}`}
+                style={{ gridColumn: cell.x + 2, gridRow: cell.y + 2 }}
+                title={
+                  interactive
+                    ? `${cell.bucketLabel} · ${cell.laneLabel} · ${cell.mission?.missionId}`
+                    : ""
+                }
+              />
+            );
+          })}
+        </div>
+      </div>
+      {dragStart && dragEnd && (
+        <div className="pointer-events-none absolute bottom-2 right-3 rounded bg-cyan-950/90 px-2 py-1 font-mono text-[10px] text-cyan-100">
+          selected {selectedCells.length} cells
+        </div>
       )}
+    </div>
+  );
+}
+
+function ApprovalTooltip({
+  mission,
+  x,
+  y,
+  onClose,
+}: {
+  mission: MissionDoc;
+  x: number;
+  y: number;
+  onClose: () => void;
+}) {
+  const tone =
+    mission.type === "hotfix"
+      ? "border-rose-500/50"
+      : mission.type === "submission"
+      ? "border-emerald-500/40"
+      : "border-cyan-400/60";
+  return (
+    <div
+      className={`pop-in pointer-events-auto fixed z-40 rounded border bg-[#0b1328] px-3 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.6)] ${tone}`}
+      style={{
+        left: Math.max(8, x - 180),
+        top: Math.max(8, y - 110),
+        minWidth: 360,
+        maxWidth: 460,
+      }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="truncate font-mono text-[10px] text-cyan-300">
+          {mission.type.toUpperCase()} · {mission.missionId}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm leading-none text-slate-400 hover:text-slate-100"
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px]">
+        <FlowChip label="Owner" />
+        <Arrow />
+        <FlowChip label="CEO" />
+        {mission.cxxPresent.map((role) => (
+          <span key={role} className="inline-flex items-center gap-1">
+            <Arrow />
+            <FlowChip label={role.toUpperCase()} />
+            {mission.workers
+              .filter((worker) => worker.owner === role)
+              .slice(0, 3)
+              .map((worker) => (
+                <span key={worker.name} className="inline-flex items-center gap-1">
+                  <Arrow />
+                  <FlowChip label={worker.displayName} muted />
+                </span>
+              ))}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ===== Document Viewer (expandable) =====
+
+const MARKDOWN_COMPONENTS: Components = {
+  h1: ({ children }) => (
+    <h1 className="mb-2 mt-3 text-base font-semibold text-slate-100">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mb-2 mt-3 text-sm font-semibold text-cyan-200">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-1 mt-2 font-mono text-[11px] uppercase tracking-wider text-cyan-300">
+      {children}
+    </h3>
+  ),
+  h4: ({ children }) => (
+    <h4 className="mb-1 mt-2 text-[11px] font-semibold text-slate-200">{children}</h4>
+  ),
+  p: ({ children }) => (
+    <p className="my-1.5 text-[11px] leading-5 text-slate-300">{children}</p>
+  ),
+  ul: ({ children }) => (
+    <ul className="my-1.5 ml-4 list-disc space-y-0.5 text-[11px] text-slate-300">
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="my-1.5 ml-5 list-decimal space-y-0.5 text-[11px] text-slate-300">
+      {children}
+    </ol>
+  ),
+  li: ({ children }) => <li className="leading-5">{children}</li>,
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="text-cyan-300 underline decoration-cyan-300/40 hover:text-cyan-200"
+    >
+      {children}
+    </a>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="my-2 border-l-2 border-cyan-500/40 pl-3 text-[11px] italic text-slate-400">
+      {children}
+    </blockquote>
+  ),
+  hr: () => <hr className="my-3 border-slate-800" />,
+  strong: ({ children }) => (
+    <strong className="font-semibold text-slate-100">{children}</strong>
+  ),
+  em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+  table: ({ children }) => (
+    <div className="my-2 overflow-x-auto">
+      <table className="w-full border-collapse text-[10px]">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-slate-900/70">{children}</thead>,
+  th: ({ children }) => (
+    <th className="border border-slate-800 px-2 py-1 text-left font-mono text-[10px] text-cyan-300">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-slate-800 px-2 py-1 text-slate-300">{children}</td>
+  ),
+  pre: ({ children }) => (
+    <pre className="my-2 overflow-auto rounded border border-slate-800 bg-[#040a18] p-2 font-mono text-[10px] leading-4 text-slate-200">
+      {children}
+    </pre>
+  ),
+  code: ({ className, children, ...props }) => {
+    const isBlock = typeof className === "string" && className.startsWith("language-");
+    if (isBlock) {
+      return (
+        <code className={`${className} text-slate-200`} {...props}>
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code className="rounded bg-slate-800/80 px-1 py-0.5 font-mono text-[10px] text-cyan-200">
+        {children}
+      </code>
+    );
+  },
+};
+
+function DocumentViewer({
+  mission,
+  lane,
+  expanded,
+  onToggle,
+}: {
+  mission: MissionDoc | null;
+  lane: AgentLane | null;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const role = lane?.role as
+    | keyof Pick<MissionDoc, "ceo" | "coo" | "cdo" | "cto" | "cqo" | "ops">
+    | undefined;
+  const roleDoc = role ? mission?.[role] : null;
+  const workerDoc = lane?.worker?.content ?? null;
+  const rawContent = workerDoc ?? roleDoc ?? mission?.ceo ?? "_No document selected._";
+  // Hide the leading YAML frontmatter (docmeta block) — keep only the body.
+  const content = rawContent.replace(/^---[\s\S]*?---\n+/, "");
+  const source = workerDoc
+    ? `${lane?.worker?.displayName ?? "worker"}`
+    : role
+    ? role.toUpperCase()
+    : "CEO";
+  return (
+    <section className="panel-shell flex min-h-0 flex-1 flex-col p-2">
+      <div className="flex items-center justify-between gap-2">
+        <SectionLabel>
+          Document Viewer · {mission?.missionId ?? "select /goal or /submission"} · {source}
+        </SectionLabel>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="grid h-6 w-6 shrink-0 place-items-center rounded text-[11px] text-slate-400 hover:bg-white/10 hover:text-cyan-200"
+          title={expanded ? "Minimize viewer" : "Expand to 50%"}
+          aria-label={expanded ? "Minimize viewer" : "Expand viewer"}
+        >
+          <span className={`doc-toggle-icon ${expanded ? "rotate-180" : ""}`}>↗</span>
+        </button>
+      </div>
+      <div className="inset-shell mt-2 min-h-0 flex-1 overflow-auto p-3">
+        <article className="markdown-doc text-[11px] leading-5 text-slate-300">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+            {content}
+          </ReactMarkdown>
+        </article>
+      </div>
     </section>
   );
 }
 
-// Keep OpsPanel and EnvPanel available for future reuse
-void OpsPanel;
-void EnvPanel;
+// ===== Shared bits =====
 
-function ArchiveList({ snapshot }: { snapshot: HarnessSnapshot }) {
-  const list = snapshot.archive.all ?? snapshot.archive.recent ?? [];
-  if (list.length === 0) {
-    return <div className="text-gray-500">No archived sprints yet.</div>;
-  }
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <ul className="space-y-1">
-      {list.map((entry) => (
-        <li
-          key={entry.dir}
-          className="flex justify-between rounded border border-brick-wall bg-brick-wall/30 px-2 py-1"
-        >
-          <span>{entry.label}</span>
-          <span
-            className={
-              entry.result === "PASS"
-                ? "text-aura-typing"
-                : entry.result === "FAIL"
-                ? "text-aura-alert"
-                : "text-gray-500"
-            }
-          >
-            {entry.result}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-slate-500 truncate">
+      {children}
+    </div>
   );
 }
 
-// Keep ArchiveList available for future reuse
-void ArchiveList;
+function FlowChip({ label, muted = false }: { label: string; muted?: boolean }) {
+  return (
+    <span
+      className={`rounded border px-1.5 py-0.5 font-mono ${
+        muted ? "border-slate-700 text-slate-400" : "border-cyan-400/30 text-cyan-200"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function Arrow() {
+  return <span className="text-slate-600">→</span>;
+}
+
+function heatColor(count: number) {
+  if (count > 6) return "bg-rose-500/90";
+  if (count > 4) return "bg-orange-500/80";
+  if (count > 2) return "bg-emerald-500/75";
+  if (count > 0) return "bg-emerald-500/35";
+  return "bg-slate-900";
+}
+
+// ===== Lane / Heatmap builders =====
+
+function buildLanes(snapshot: HarnessSnapshot, selectedMission: MissionDoc | null): AgentLane[] {
+  const activeMission = selectedMission ?? snapshot.missions[0] ?? null;
+  // CXX → its workers, then next CXX → its workers (proper hierarchy).
+  // No cap: heatmap container scrolls vertically so OPS at the bottom is always
+  // reachable even when upstream CXX bring many workers.
+  const lanes: AgentLane[] = [];
+  for (const role of CXX_ROLES) {
+    const workers = activeMission?.workers.filter((w) => w.owner === role) ?? [];
+    const todos = snapshot.todos.filter((t) => t.owner === role);
+    const hasError =
+      (role === "ops" && snapshot.incidents.length > 0) ||
+      todos.some((t) => t.status === "blocked");
+    const waiting =
+      todos.some((t) => t.status === "pending" || t.status === "paused") ||
+      workers.some((w) => !w.active && w.status !== "COMPLETE");
+    lanes.push({
+      id: role,
+      label: role.toUpperCase(),
+      role,
+      group: `${role.toUpperCase()} group · ${workers.length} workers`,
+      kind: "cxx",
+      status: hasError ? "error" : waiting ? "waiting" : "normal",
+      todos: todos.length,
+      workers,
+      mission: activeMission,
+    });
+    for (const worker of workers) {
+      lanes.push({
+        id: `${role}:${worker.name}`,
+        label: `└ ${worker.displayName.slice(0, 16)}`,
+        role,
+        group: `${role.toUpperCase()} worker`,
+        kind: "worker",
+        status: worker.active ? "normal" : worker.status === "COMPLETE" ? "normal" : "waiting",
+        todos: 0,
+        workers: [],
+        worker,
+        mission: activeMission,
+      });
+    }
+  }
+  return lanes;
+}
+
+function buildHeatmap(
+  snapshot: HarnessSnapshot,
+  lanes: AgentLane[],
+  samples: HeatSample[],
+  startedAt: number
+): { cells: HeatCell[]; totalBuckets: number } {
+  const cells: HeatCell[] = [];
+  const now = Date.now();
+  const nowMinute = Math.floor(now / BUCKET_MS);
+  const startMinute = Math.floor(startedAt / BUCKET_MS);
+  const elapsedMinutes = Math.max(0, nowMinute - startMinute);
+  const totalBuckets = Math.max(VISIBLE_BUCKETS, elapsedMinutes + 1);
+  const missionById = new Map(snapshot.missions.map((m) => [m.missionId, m]));
+
+  type Agg = { count: number; hotfix: boolean; missionId: string | null };
+  const aggregated = new Map<string, Agg>();
+  for (const sample of samples) {
+    const sampleMinute = Math.floor(sample.ts / BUCKET_MS);
+    const x = nowMinute - sampleMinute;
+    if (x < 0 || x >= totalBuckets) continue;
+    const key = `${x}:${sample.laneId}`;
+    const prev = aggregated.get(key);
+    if (prev) {
+      prev.count += sample.count;
+      prev.hotfix = prev.hotfix || sample.hotfix;
+      if (sample.missionId) prev.missionId = sample.missionId;
+    } else {
+      aggregated.set(key, {
+        count: sample.count,
+        hotfix: sample.hotfix,
+        missionId: sample.missionId ?? null,
+      });
+    }
+  }
+
+  for (let y = 0; y < lanes.length; y++) {
+    const lane = lanes[y];
+    for (let x = 0; x < totalBuckets; x++) {
+      const agg = aggregated.get(`${x}:${lane.id}`);
+      // Only assign mission when the cell actually carries activity.
+      // Empty cells (count=0, no sample) must stay missionless so clicks no-op.
+      const hasData = !!agg && agg.count > 0;
+      const missionId = hasData ? agg!.missionId : null;
+      cells.push({
+        x,
+        y,
+        laneId: lane.id,
+        laneLabel: lane.label,
+        bucketLabel: formatMinuteOffset(x),
+        count: agg?.count ?? 0,
+        hotfix: agg?.hotfix ?? false,
+        mission: missionId ? missionById.get(missionId) ?? null : null,
+      });
+    }
+  }
+  return { cells, totalBuckets };
+}
+
+function getSelectedCells(
+  cells: HeatCell[],
+  start: { x: number; y: number } | null,
+  end: { x: number; y: number } | null
+) {
+  if (!start || !end) return [];
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+  return cells.filter(
+    (cell) => cell.x >= minX && cell.x <= maxX && cell.y >= minY && cell.y <= maxY
+  );
+}

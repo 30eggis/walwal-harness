@@ -292,6 +292,7 @@ export interface HarnessSnapshot {
   missions: MissionDoc[];
   ownerHistory: OwnerPromptEntry[];
   gotchas: GotchaEntry[];
+  conventions: ConventionEntry[];
   todos: CxxTodo[];
   events: HarnessEvent[];
 }
@@ -362,6 +363,17 @@ export interface GotchaEntry {
   title: string;
   content: string;
   tags: string[];
+  sourcePath?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface ConventionEntry {
+  id: string;
+  title: string;
+  content: string;
+  tags: string[];
+  sourcePath?: string | null;
+  updatedAt?: string | null;
 }
 
 export type OrgRole = "owner" | "ceo" | "coo" | "cdo" | "cto" | "cqo" | "ops";

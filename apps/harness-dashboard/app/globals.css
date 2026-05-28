@@ -26,6 +26,113 @@ body {
   display: none;
 }
 
+/* hide scrollbars globally — scroll still works via wheel/drag/touch */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* document viewer aside expand/minimize */
+.doc-aside {
+  width: 380px;
+  transition: width 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.doc-aside.expanded {
+  width: 50vw;
+}
+.doc-toggle-icon {
+  transition: transform 280ms ease;
+  display: inline-block;
+}
+
+/* panel / inset shells (translated from mockup) */
+.panel-shell {
+  border-radius: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: #0b1328;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+}
+.panel-shell:hover {
+  border-color: rgba(34, 211, 238, 0.25);
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(34, 211, 238, 0.1);
+}
+.inset-shell {
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  background: #071022;
+  transition: border-color 200ms ease, transform 160ms ease;
+}
+
+/* ==== Dynamic / animated bits ==== */
+
+/* Panel mount fade-in (used on initial render) */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fade-in-up 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* List item slide-in (Recent Report cards) */
+@keyframes slide-in-fade {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.slide-in {
+  animation: slide-in-fade 280ms ease-out both;
+}
+
+/* Heatmap cell baseline transition */
+.heat-cell {
+  transition: transform 140ms ease, filter 140ms ease, border-color 140ms ease;
+}
+
+/* Cadence cell soft pulse when count is at peak */
+@keyframes cad-pulse {
+  0%, 100% { filter: brightness(1); }
+  50%      { filter: brightness(1.4); }
+}
+.cad-peak {
+  animation: cad-pulse 1800ms ease-in-out infinite;
+}
+
+/* Tooltip / popover enter */
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+.pop-in {
+  animation: pop-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
+/* Stacked bar segment width tween */
+.stack-seg {
+  will-change: flex-grow;
+}
+
+/* Worker bar inner shimmer for active CXX (very subtle) */
+@keyframes shimmer-sweep {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background-image: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 3.2s linear infinite;
+}
+
 .glass-panel {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background:
@@ -47,12 +154,35 @@ body {
 
 .isometric-stage {
   background:
-    linear-gradient(30deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
-    linear-gradient(150deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
-    linear-gradient(30deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
-    linear-gradient(150deg, rgba(255, 255, 255, 0.035) 12%, transparent 12.5%, transparent 87%, rgba(255, 255, 255, 0.035) 87.5%, rgba(255, 255, 255, 0.035)),
-    linear-gradient(60deg, rgba(103, 232, 249, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(103, 232, 249, 0.08) 75%, rgba(103, 232, 249, 0.08)),
-    linear-gradient(60deg, rgba(103, 232, 249, 0.08) 25%, transparent 25.5%, transparent 75%, rgba(103, 232, 249, 0.08) 75%, rgba(103, 232, 249, 0.08));
-  background-position: 0 0, 0 0, 20px 35px, 20px 35px, 0 0, 20px 35px;
-  background-size: 40px 70px;
+    radial-gradient(circle at 48% 42%, rgba(34, 211, 238, 0.18), transparent 20rem),
+    radial-gradient(circle at 78% 24%, rgba(99, 102, 241, 0.14), transparent 18rem),
+    radial-gradient(circle at 20% 84%, rgba(16, 185, 129, 0.12), transparent 22rem),
+    linear-gradient(135deg, rgba(2, 6, 23, 0.94), rgba(8, 13, 26, 0.98));
+}
+
+@keyframes apm-request-fall {
+  0% {
+    opacity: 0;
+    top: -12px;
+    transform: translateX(-50%) scale(0.75);
+  }
+  12% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    top: 184px;
+    transform: translateX(-50%) scale(1.15);
+  }
+}
+
+.apm-falling-dot {
+  top: -12px;
+  animation-name: apm-request-fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  box-shadow: 0 0 14px currentColor;
 }

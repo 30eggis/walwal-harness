@@ -25,6 +25,7 @@ import type {
   MeetingRecord,
   MeetingsState,
   GotchaEntry,
+  ConventionEntry,
   MissionDoc,
   OperationsDashboard,
   OpsServiceHealth,
@@ -226,6 +227,7 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     missions: [],
     ownerHistory: [],
     gotchas: [],
+    conventions: [],
     todos: [],
     events: [],
   };
@@ -1165,7 +1167,15 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
             const reportAbs = path.join(missionPath, relDir, f);
             const content = readMd(`${relDir}/${f}`) ?? "";
             const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
-            const status = (statusMatch?.[1] as WorkerDocEntry["status"]) ?? "unknown";
+            // Worker docs sometimes omit the "## Status" block but always carry a
+            // docmeta frontmatter when the worker submitted its output. Treat the
+            // presence of a docmeta block (or a non-empty body) as COMPLETE.
+            const hasDocmeta = /^---[\s\S]*?docmeta:[\s\S]*?---/.test(content);
+            const status: WorkerDocEntry["status"] = statusMatch
+              ? (statusMatch[1] as WorkerDocEntry["status"])
+              : hasDocmeta
+              ? "COMPLETE"
+              : "unknown";
             const name = normalizeWorkerName(f);
             const hired = hiredForMission(hiredWorkers, name, owner, rel);
             let updatedAt: string | null = null;
@@ -1293,30 +1303,49 @@ function readOwnerHistory(rootDir: string, limit = 30): OwnerPromptEntry[] {
   return entries.reverse().slice(0, limit);
 }
 
-function readGotchas(rootDir: string): GotchaEntry[] {
-  const gotchasDir = path.join(rootDir, ".harness", "gotchas");
-  if (!existsSync(gotchasDir)) return [];
+function readKnowledgeDir<T extends GotchaEntry | ConventionEntry>(
+  rootDir: string,
+  relDir: string
+): T[] {
+  const dir = path.join(rootDir, ".harness", relDir);
+  if (!existsSync(dir)) return [];
   let entries: Dirent[];
-  try { entries = readdirSync(gotchasDir, { withFileTypes: true }); } catch { return []; }
-  const results: GotchaEntry[] = [];
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  const results: T[] = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
     if (entry.name === "README.md") continue;
     const id = entry.name.replace(/\.md$/, "");
+    const abs = path.join(dir, entry.name);
     let content: string;
-    try { content = readFileSync(path.join(gotchasDir, entry.name), "utf8"); } catch { continue; }
-    // Extract title from first H1 after optional frontmatter
+    try { content = readFileSync(abs, "utf8"); } catch { continue; }
     const body = content.replace(/^---[\s\S]*?---\n+/, "");
     const h1 = body.match(/^#\s+(.+)/m);
     const title = h1 ? h1[1].trim() : id;
-    // Extract tags from docmeta frontmatter
     const tagsMatch = content.match(/^\s*tags:\s*\[([^\]]*)\]/m);
     const tags = tagsMatch
       ? tagsMatch[1].split(",").map((t) => t.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean)
       : [];
-    results.push({ id, title, content, tags });
+    let updatedAt: string | null = null;
+    try { updatedAt = statSync(abs).mtime.toISOString(); } catch { /* ignore */ }
+    results.push({
+      id,
+      title,
+      content,
+      tags,
+      sourcePath: path.relative(rootDir, abs),
+      updatedAt,
+    } as T);
   }
   return results.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function readGotchas(rootDir: string): GotchaEntry[] {
+  return readKnowledgeDir<GotchaEntry>(rootDir, "gotchas");
+}
+
+function readConventions(rootDir: string): ConventionEntry[] {
+  return readKnowledgeDir<ConventionEntry>(rootDir, "conventions");
 }
 
 function normalizeTodoStatus(raw: unknown): CxxTodo["status"] {
@@ -1431,6 +1460,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     snapshot.missions = readMissions(rootDir, null);
     snapshot.ownerHistory = readOwnerHistory(rootDir);
     snapshot.gotchas = readGotchas(rootDir);
+    snapshot.conventions = readConventions(rootDir);
     snapshot.todos = readTodos(rootDir);
     snapshot.events = readEvents(rootDir);
     return snapshot;
@@ -1485,6 +1515,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     missions: readMissions(rootDir, progress),
     ownerHistory: readOwnerHistory(rootDir),
     gotchas: readGotchas(rootDir),
+    conventions: readConventions(rootDir),
     todos: readTodos(rootDir),
     events: readEvents(rootDir),
   };

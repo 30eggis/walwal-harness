@@ -1,7 +1,6 @@
 import path from "node:path";
 import type { Metadata } from "next";
 import "./globals.css";
-import { Header } from "@/components/Header";
 import { resolveHarnessRoot } from "@/lib/harness-root";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,10 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>
-        <Header />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

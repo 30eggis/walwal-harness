@@ -259,6 +259,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.28 | Dashboard APM rewrite: top header consolidation, Knowledge Base panel (gotchas/conventions), Layer Activity (CEO/CXX/Worker TODO·DONE·Remain via goal-scope inference), Recent Report list (worker mtime desc), Cadence strip with click-to-prompt tooltip in local timezone, heatmap click-tooltip with empty-cell guard, Document Viewer expand-to-50vw with docmeta hidden, Command Log bubble popover |
 | 7.1.19 | `migrate` now carries OPS verification rules into existing installs: runtime.verification merge, HARNESS refresh, and AGENTS migration block |
 | 7.1.18 | OPS watches CQO runnable verification and production incidents; Implementation Notes stay in the same role/worker report |
 | 7.1.17 | Dashboard: fix /submission and /hot-fix missions displaying as /goal; runtime strip shows live owner command in mission flow tab |
