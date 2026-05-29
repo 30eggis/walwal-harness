@@ -159,20 +159,16 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         const activeMission = selectedMission ?? snapshot.missions[0] ?? null;
         const next: HeatSample[] = [];
         for (const lane of lanes) {
-          // 3-state activity:
-          //   0 = none        (not on this mission)
-          //   1 = standby     (participated / has output, no live work)
-          //   2 = in-progress (actively running right now)
+          // Live overlay records active work only. Historical participation is
+          // backfilled from persisted activity logs; completed reports must not
+          // keep repainting the current minute forever.
           let activity = 0;
           if (lane.kind === "worker") {
             const w = lane.worker;
             if (w) {
               if (w.active || w.status === "IN_PROGRESS") activity = 2;
-              else if (w.content || w.status === "COMPLETE") activity = 1;
             }
           } else {
-            const presentInMission =
-              lane.mission?.cxxPresent.includes(lane.role) ?? false;
             const liveTodos = snapshot.todos.filter(
               (t) =>
                 t.owner === lane.role &&
@@ -183,7 +179,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
               (w) => w.active || w.status === "IN_PROGRESS"
             ).length;
             if (liveTodos > 0 && runningWorkers === 0) activity = 2;
-            else if (presentInMission || lane.workers.length > 0 || runningWorkers > 0) activity = 1;
+            else if (runningWorkers > 0) activity = 2;
           }
           if (activity <= 0) continue;
           next.push({

@@ -141,11 +141,11 @@ function currentSamples(root, now = Date.now()) {
     const liveTodos = todos.filter((t) => t.owner === role && !["done", "completed"].includes(String(t.status)));
     let count = 0;
     if (!idle && liveTodos.length > 0 && runningWorkers.length === 0) count = 2;
-    else if (active.cxxPresent.includes(role) || workers.length > 0 || runningWorkers.length > 0) count = 1;
+    else if (runningWorkers.length > 0) count = 2;
     if (count > 0) samples.push({ ts: new Date(now).toISOString(), laneId: role, count, hotfix: active.missionId.includes("hotfix"), missionId: active.missionId });
   }
   for (const worker of active.workers) {
-    const count = !idle && !worker.complete && now - worker.updatedAt < RECENT_MS ? 2 : worker.complete || worker.content ? 1 : 0;
+    const count = !idle && !worker.complete && now - worker.updatedAt < RECENT_MS ? 2 : 0;
     if (count > 0) samples.push({ ts: new Date(now).toISOString(), laneId: worker.laneId, count, hotfix: active.missionId.includes("hotfix"), missionId: active.missionId });
   }
   return samples;
