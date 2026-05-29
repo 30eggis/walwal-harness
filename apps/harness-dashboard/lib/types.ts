@@ -340,6 +340,9 @@ export interface MissionDoc {
   missionId: string;
   ts: string;
   type: "goal" | "submission" | "hotfix" | "feature" | "unknown";
+  lifecycle: "active" | "closed" | "cancelled" | "superseded" | "complete" | "blocked" | "unknown";
+  active: boolean;
+  protocolViolations: string[];
   label: string;
   ceo: string | null;
   cto: string | null;

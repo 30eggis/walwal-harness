@@ -14,14 +14,16 @@ Codex adapter:
 
 Required flow:
 1. Create or update a goal under `.harness/documents/goal-{goal_index}-{goal_name}/`.
-2. Record CEO decisions in `.harness/documents/goal-{goal_index}-{goal_name}/ceo.md`.
-3. CEO decides whether brainstorming is needed or whether CXX questions can be issued immediately.
-4. CEO asks COO, CDO, CTO, and CQO only the questions needed for this goal.
-5. CXX roles must start in a fresh session context. Do not let the default model impersonate a missing worker.
-6. CXX roles must not directly execute specialist deliverables. They must use hired workers for research, planning, design, implementation, QA, ops checks, and documentation.
-7. If a required CXX or worker skill is missing, CEO must invoke the installed `harness-hiring` skill before assigning the work.
-8. CEO must require worker report paths under `.harness/documents/goal-{goal_index}-{goal_name}/{owning-cxx}/workers/` before accepting CXX completion.
-9. Do not invoke internal roles through slash commands; commands are Owner entrypoints only.
+2. Write `.harness/documents/goal-{goal_index}-{goal_name}/mission-state.json` with `{"lifecycle":"active","active":true}` before routing CXX.
+3. Record CEO decisions in `.harness/documents/goal-{goal_index}-{goal_name}/ceo.md`.
+4. CEO decides whether brainstorming is needed or whether CXX questions can be issued immediately.
+5. CEO asks COO, CDO, CTO, and CQO only the questions needed for this goal.
+6. CXX roles must start in a fresh session context. Do not let the default model impersonate a missing worker.
+7. CXX roles must not directly execute specialist deliverables. They must use hired workers for research, planning, design, implementation, QA, ops checks, and documentation.
+8. If a required CXX or worker skill is missing, CEO must invoke the installed `harness-hiring` skill before assigning the work.
+9. CEO must require a Worker Evidence Manifest and worker report paths under `.harness/documents/goal-{goal_index}-{goal_name}/{owning-cxx}/workers/` before accepting CXX completion.
+10. When the goal is accepted, cancelled, superseded, blocked, or closed, update `mission-state.json` to `complete`, `cancelled`, `superseded`, `blocked`, or `closed` and set `active:false`.
+11. Do not invoke internal roles through slash commands; commands are Owner entrypoints only.
 
 Note: A goal is the company's objective. Submissions and hot-fixes that happen while pursuing it should be recorded under that goal directory.
 

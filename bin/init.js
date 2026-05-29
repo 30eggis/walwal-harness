@@ -112,6 +112,22 @@ function chmodShellScripts(dir) {
   }
 }
 
+function readJsonFileSafe(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function readTextFileSafe(filePath) {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
 function fileExists(p) {
   return fs.existsSync(p);
 }
@@ -451,6 +467,99 @@ function migrateExistingDocs() {
   log(`Migration report: ${reportPath}`);
 }
 
+function missionTypeFromDirName(name) {
+  if (/^goal[-_]/i.test(name)) return 'goal';
+  if (/^submission[-_]/i.test(name)) return 'submission';
+  if (/^hot[-_]?fix[-_]/i.test(name) || /^hotfix[-_]/i.test(name)) return 'hotfix';
+  return 'unknown';
+}
+
+function isTerminalMissionLifecycle(value) {
+  return ['closed', 'cancelled', 'superseded', 'complete', 'blocked'].includes(String(value || '').toLowerCase());
+}
+
+function collectMissionDirs(docsDir) {
+  const cxxDocs = new Set(['ceo.md', 'coo.md', 'cdo.md', 'cto.md', 'cqo.md', 'ops.md']);
+  const result = [];
+  const walk = (dir, rel = '') => {
+    if (!fs.existsSync(dir)) return;
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    const hasMissionDoc = entries.some((entry) => entry.isFile() && cxxDocs.has(entry.name));
+    if (rel && hasMissionDoc) {
+      let mtime = 0;
+      try { mtime = fs.statSync(dir).mtimeMs; } catch {}
+      const name = path.basename(rel);
+      result.push({ abs: dir, rel, name, type: missionTypeFromDirName(name), mtime });
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      if (['workers', 'coo', 'cdo', 'cto', 'cqo', 'ops'].includes(entry.name)) continue;
+      walk(path.join(dir, entry.name), rel ? `${rel}/${entry.name}` : entry.name);
+    }
+  };
+  walk(docsDir);
+  return result;
+}
+
+function ensureMissionLifecycleStates(opts = {}) {
+  const dryRun = opts.dryRun || false;
+  const backupDir = opts.backupDir || null;
+  const docsDir = path.join(HARNESS_DIR, 'documents');
+  if (!fs.existsSync(docsDir)) return { missing: 0, written: 0 };
+
+  const missions = collectMissionDirs(docsDir);
+  if (!missions.length) return { missing: 0, written: 0 };
+
+  const byGoal = new Map();
+  for (const mission of missions) {
+    const goalKey = mission.rel.split('/')[0];
+    if (!byGoal.has(goalKey)) byGoal.set(goalKey, []);
+    byGoal.get(goalKey).push(mission);
+  }
+
+  const writes = [];
+  for (const group of byGoal.values()) {
+    const children = group.filter((m) => m.rel.includes('/') && (m.type === 'submission' || m.type === 'hotfix'));
+    children.sort((a, b) => b.mtime - a.mtime);
+    const existingActiveChild = children.find((m) => {
+      const state = readJsonFileSafe(path.join(m.abs, 'mission-state.json'));
+      return state?.active === true && !isTerminalMissionLifecycle(state.lifecycle || state.status);
+    });
+    const activeChild = existingActiveChild || children[0] || null;
+
+    for (const mission of group) {
+      const statePath = path.join(mission.abs, 'mission-state.json');
+      if (fs.existsSync(statePath)) continue;
+      const isChild = mission.rel.includes('/');
+      const isActive = isChild
+        ? activeChild?.rel === mission.rel
+        : true;
+      writes.push({
+        path: statePath,
+        state: {
+          lifecycle: isActive ? 'active' : 'closed',
+          active: isActive,
+        },
+      });
+    }
+  }
+
+  if (dryRun) return { missing: writes.length, written: 0 };
+
+  for (const item of writes) {
+    if (backupDir) {
+      const rel = path.relative(HARNESS_DIR, item.path).replace(/[\\/]/g, '__');
+      if (fs.existsSync(item.path)) fs.writeFileSync(path.join(backupDir, rel), fs.readFileSync(item.path, 'utf8'));
+    }
+    fs.writeFileSync(item.path, JSON.stringify(item.state, null, 2) + '\n');
+  }
+  if (writes.length) {
+    log(`mission-state.json: ${writes.length}개 기존 mission에 lifecycle 보강`);
+  }
+  return { missing: writes.length, written: writes.length };
+}
+
 // ─────────────────────────────────────────
 // 1. .harness/ scaffolding
 // ─────────────────────────────────────────
@@ -585,6 +694,7 @@ function scaffoldHarness() {
     if (!fileExists(p) || isForce) fs.writeFileSync(p, '');
   }
   ensureStructuredRuntimeFiles();
+  ensureMissionLifecycleStates();
 
   // Migrate progress.json v1 → v2 (add mode + team_state fields)
   const progressPath = path.join(HARNESS_DIR, 'progress.json');
@@ -1094,53 +1204,127 @@ function installAgentTeamsEnv() {
   }
 }
 
-function setupAgentsMd() {
+const HARNESS_HEADER_MARKER = '<!-- walwal-harness:managed-header -->';
+const HARNESS_SECTION_START = '<!-- walwal-harness:agents:start -->';
+const HARNESS_SECTION_END = '<!-- walwal-harness:agents:end -->';
+const PRESERVED_CLAUDE_START = '<!-- walwal-harness:preserved-claude:start -->';
+const PRESERVED_CLAUDE_END = '<!-- walwal-harness:preserved-claude:end -->';
+
+function backupDocPath(filePath, backupDir, label) {
+  if (!filePath || !fs.existsSync(filePath)) return;
+  ensureDir(backupDir);
+  const safe = label.replace(/[^A-Za-z0-9_.-]/g, '_');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  try {
+    fs.copyFileSync(filePath, path.join(backupDir, `${safe}.${ts}.bak`));
+  } catch {}
+}
+
+function renderHarnessAgentsSection() {
+  const templateSrc = path.join(PKG_ROOT, 'assets', 'templates', 'AGENTS.md.template');
+  let content = fs.existsSync(templateSrc)
+    ? fs.readFileSync(templateSrc, 'utf8')
+    : '# walwal-harness\n\nUse `/goal`, `/submission`, and `/hot-fix` for CEO/CXX/worker flow.\n';
+  content = content.replace(/\{\{DATE\}\}/g, new Date().toISOString().split('T')[0]);
+  content = content.replace(/\{\{DATE_ISO\}\}/g, new Date().toISOString());
+  return [
+    HARNESS_SECTION_START,
+    '',
+    content.trim(),
+    '',
+    HARNESS_SECTION_END,
+    ''
+  ].join('\n');
+}
+
+function ensureTopHarnessHeader(body) {
+  if (body.includes(HARNESS_HEADER_MARKER)) return body;
+  const header = [
+    HARNESS_HEADER_MARKER,
+    '> This project is walwal-harness enabled. Harness operating rules live in the marked walwal-harness section below.',
+    ''
+  ].join('\n');
+  return header + body.replace(/^\s+/, '');
+}
+
+function upsertMarkedBlock(body, start, end, block) {
+  const startIdx = body.indexOf(start);
+  const endIdx = body.indexOf(end);
+  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    const afterEnd = endIdx + end.length;
+    return body.slice(0, startIdx).replace(/\s*$/, '\n\n') + block.trim() + '\n' + body.slice(afterEnd).replace(/^\s*/, '\n');
+  }
+  const sep = body.trim() ? '\n\n' : '';
+  return body.replace(/\s*$/, '') + sep + block.trim() + '\n';
+}
+
+function normalizeDocBody(body) {
+  return String(body || '').replace(/\r\n/g, '\n').trim();
+}
+
+function ensureProjectAgentDocs(opts = {}) {
+  const dryRun = opts.dryRun || false;
+  const backupDir = opts.backupDir || path.join(HARNESS_DIR, 'archive', 'pre-harness-backup');
   const agentsMd = path.join(PROJECT_ROOT, 'AGENTS.md');
   const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md');
 
-  // Run scan if no AGENTS.md
-  if (!fileExists(agentsMd) || isForce) {
-    log('Running project scan...');
-    try {
-      execSync(`bash "${path.join(PKG_ROOT, 'scripts', 'scan-project.sh')}" "${PROJECT_ROOT}"`, {
-        stdio: 'inherit'
-      });
-      execSync(`bash "${path.join(PKG_ROOT, 'scripts', 'init-agents-md.sh')}" "${PROJECT_ROOT}"`, {
-        stdio: 'inherit'
-      });
-    } catch (e) {
-      log('WARNING: Auto-scan failed. Run manually: bash scripts/scan-project.sh .');
-      // Create minimal AGENTS.md
-      const templateSrc = path.join(PKG_ROOT, 'assets', 'templates', 'AGENTS.md.template');
-      if (fs.existsSync(templateSrc)) {
-        let content = fs.readFileSync(templateSrc, 'utf8');
-        content = content.replace(/\{\{DATE\}\}/g, new Date().toISOString().split('T')[0]);
-        fs.writeFileSync(agentsMd, content);
-      }
-    }
+  const agentsTarget = fs.existsSync(agentsMd) ? fs.realpathSync(agentsMd) : agentsMd;
+  const existingAgents = readTextFileSafe(agentsMd) || '';
+  const claudeExists = fs.existsSync(claudeMd) || fs.existsSync(claudeMd);
+  const claudeIsSymlink = fs.existsSync(claudeMd) && fs.lstatSync(claudeMd).isSymbolicLink();
+  const claudeTarget = claudeExists ? fs.realpathSync(claudeMd) : null;
+  const claudeBody = claudeExists ? (readTextFileSafe(claudeMd) || '') : '';
+
+  let nextAgents = existingAgents;
+  nextAgents = ensureTopHarnessHeader(nextAgents);
+  nextAgents = upsertMarkedBlock(nextAgents, HARNESS_SECTION_START, HARNESS_SECTION_END, renderHarnessAgentsSection());
+
+  const normalizedClaude = normalizeDocBody(claudeBody);
+  const claudePointsAtAgents = claudeIsSymlink && claudeTarget === agentsTarget;
+  if (normalizedClaude && !claudePointsAtAgents) {
+    const preservedBlock = [
+      PRESERVED_CLAUDE_START,
+      '',
+      '## Preserved CLAUDE.md',
+      '',
+      normalizedClaude,
+      '',
+      PRESERVED_CLAUDE_END,
+      ''
+    ].join('\n');
+    nextAgents = upsertMarkedBlock(nextAgents, PRESERVED_CLAUDE_START, PRESERVED_CLAUDE_END, preservedBlock);
   }
 
-  // Ensure CLAUDE.md symlink
-  if (fileExists(agentsMd)) {
-    try {
-      const stat = fs.lstatSync(claudeMd);
-      if (!stat.isSymbolicLink()) {
-        // Backup existing CLAUDE.md
-        const backupDir = path.join(HARNESS_DIR, 'archive', 'pre-harness-backup');
-        ensureDir(backupDir);
-        fs.copyFileSync(claudeMd, path.join(backupDir, `CLAUDE.md.${Date.now()}.bak`));
-        fs.unlinkSync(claudeMd);
-        fs.symlinkSync('AGENTS.md', claudeMd);
-        log('CLAUDE.md backed up and replaced with symlink → AGENTS.md');
-      }
-    } catch (e) {
-      // CLAUDE.md doesn't exist
-      try {
-        fs.symlinkSync('AGENTS.md', claudeMd);
-        log('Created symlink: CLAUDE.md → AGENTS.md');
-      } catch (e2) {}
-    }
+  if (dryRun) {
+    log('  (dry-run) AGENTS.md: walwal-harness marked section merge 예정');
+    if (!claudePointsAtAgents) log('  (dry-run) CLAUDE.md: content preserved then symlink → AGENTS.md 예정');
+    return;
   }
+
+  if (fs.existsSync(agentsTarget)) backupDocPath(agentsTarget, backupDir, 'AGENTS.md');
+  if (claudeExists && claudeTarget && claudeTarget !== agentsTarget) {
+    backupDocPath(claudeTarget, backupDir, 'CLAUDE.md');
+  }
+
+  ensureDir(path.dirname(agentsMd));
+  fs.writeFileSync(agentsMd, nextAgents.replace(/\s*$/, '\n'));
+  log(fs.existsSync(agentsTarget) ? 'AGENTS.md merged with walwal-harness marked section' : 'AGENTS.md created from walwal-harness template');
+
+  try {
+    if (fs.existsSync(claudeMd) || fs.lstatSync(claudeMd)) fs.unlinkSync(claudeMd);
+  } catch {}
+  try {
+    fs.symlinkSync('AGENTS.md', claudeMd);
+    log('CLAUDE.md replaced with symlink → AGENTS.md');
+  } catch (e) {
+    log(`WARNING: Could not create CLAUDE.md symlink (${e.message})`);
+  }
+}
+
+function setupAgentsMd() {
+  const agentsMd = path.join(PROJECT_ROOT, 'AGENTS.md');
+  const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md');
+  ensureProjectAgentDocs({ backupDir: path.join(HARNESS_DIR, 'archive', 'pre-harness-backup') });
 }
 
 // ─────────────────────────────────────────
@@ -1300,6 +1484,8 @@ function detectMigrationNeeded() {
     harnessMdStale: false,
     agentsMissingOpsVerificationRules: false,
     agentsMissingCodexAdapterRules: false,
+    agentsMissingMissionLifecycleRules: false,
+    missionLifecycleMissing: false,
     rosterCodexPathsMissing: false,
     resourceIndexCodexWordingMissing: false,
     memoryMissingSystemEntries: [],
@@ -1427,7 +1613,18 @@ function detectMigrationNeeded() {
       ) {
         flags.agentsMissingCodexAdapterRules = true;
       }
+      if (
+        !agentsBody.includes('Mission Lifecycle Rules') &&
+        !agentsBody.includes('mission-state.json')
+      ) {
+        flags.agentsMissingMissionLifecycleRules = true;
+      }
     } catch {}
+  }
+  const docsDir = path.join(HARNESS_DIR, 'documents');
+  if (fs.existsSync(docsDir)) {
+    flags.missionLifecycleMissing = collectMissionDirs(docsDir)
+      .some((mission) => !fs.existsSync(path.join(mission.abs, 'mission-state.json')));
   }
   if (fs.existsSync(rosterPath)) {
     try {
@@ -1764,6 +1961,8 @@ function runMigrate(opts = {}) {
     !flags.agentsMissingOpsVerificationRules &&
     !flags.rosterCodexPathsMissing &&
     !flags.resourceIndexCodexWordingMissing &&
+    !flags.agentsMissingMissionLifecycleRules &&
+    !flags.missionLifecycleMissing &&
     (!flags.memoryMissingSystemEntries || flags.memoryMissingSystemEntries.length === 0) &&
     gotchaMissingTotal === 0 &&
     conventionMissingTotal === 0 &&
@@ -1785,6 +1984,14 @@ function runMigrate(opts = {}) {
   const backupDir = path.join(HARNESS_DIR, 'archive', `migration-${ts}`);
   if (!dryRun) ensureDir(backupDir);
   ensureStructuredRuntimeFiles({ dryRun });
+  ensureProjectAgentDocs({ dryRun, backupDir });
+  flags.agentsMissingOpsVerificationRules = false;
+  flags.agentsMissingCodexAdapterRules = false;
+  flags.agentsMissingMissionLifecycleRules = false;
+  const missionStateResult = ensureMissionLifecycleStates({ dryRun, backupDir });
+  if (dryRun && missionStateResult.missing > 0) {
+    log(`  (dry-run) mission-state.json: ${missionStateResult.missing}개 기존 mission에 lifecycle 보강 예정`);
+  }
 
   // Runtime scripts are package-owned. Migrate must refresh them so existing
   // projects receive wake/meeting/OPS fixes without requiring a full init.
@@ -2093,6 +2300,31 @@ function runMigrate(opts = {}) {
       log('  AGENTS.md: Codex runtime adapter rules append');
       if (!dryRun) {
         fs.writeFileSync(path.join(backupDir, 'AGENTS.codex-adapter.md'), original);
+        const sep = original.endsWith('\n') ? '' : '\n';
+        fs.writeFileSync(agentsPath, original + sep + block);
+      }
+    }
+  }
+
+  if (flags.agentsMissingMissionLifecycleRules) {
+    const agentsPath = path.join(PROJECT_ROOT, 'AGENTS.md');
+    if (fs.existsSync(agentsPath)) {
+      const original = fs.readFileSync(agentsPath, 'utf8');
+      const block = [
+        '',
+        '---',
+        '',
+        '## walwal-harness Mission Lifecycle Rules — v7.1.28',
+        '',
+        '- Every goal, submission, and hot-fix directory must contain `mission-state.json` with `lifecycle` and `active`.',
+        '- Only one child mission under a goal may be active. Starting a newer submission/hot-fix closes, cancels, or supersedes the previous active child unless CEO records a deliberate TODO/resume plan.',
+        '- CXX completion requires a Worker Evidence Manifest plus worker report paths under `{owning-cxx}/workers/`. A CXX report without hired worker evidence is a protocol violation.',
+        '- Worker execution should be shown as worker activity; CXX activity is coordination only.',
+        ''
+      ].join('\n');
+      log('  AGENTS.md: mission lifecycle / CXX hire-only rules append');
+      if (!dryRun) {
+        fs.writeFileSync(path.join(backupDir, 'AGENTS.mission-lifecycle.md'), original);
         const sep = original.endsWith('\n') ? '' : '\n';
         fs.writeFileSync(agentsPath, original + sep + block);
       }

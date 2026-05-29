@@ -793,6 +793,44 @@ interface HiredWorkerEntry {
   capability: string | null;
 }
 
+type MissionLifecycle = MissionDoc["lifecycle"];
+
+function normalizeMissionLifecycle(raw: unknown): MissionLifecycle {
+  const value = String(raw ?? "").toLowerCase().replace(/[_\s-]+/g, "-");
+  if (
+    value === "active" ||
+    value === "closed" ||
+    value === "cancelled" ||
+    value === "superseded" ||
+    value === "complete" ||
+    value === "blocked"
+  ) {
+    return value;
+  }
+  if (value === "done" || value === "completed") return "complete";
+  if (value === "canceled") return "cancelled";
+  return "unknown";
+}
+
+function readMissionState(missionPath: string): {
+  lifecycle: MissionLifecycle;
+  active: boolean | null;
+} {
+  const statePath = path.join(missionPath, "mission-state.json");
+  const state = readJsonSafe<{
+    lifecycle?: unknown;
+    status?: unknown;
+    active?: boolean;
+  }>(statePath);
+  if (!state.ok) return { lifecycle: "unknown", active: null };
+
+  const lifecycle = normalizeMissionLifecycle(state.value.lifecycle ?? state.value.status);
+  return {
+    lifecycle,
+    active: typeof state.value.active === "boolean" ? state.value.active : null,
+  };
+}
+
 function deriveWorkerProgress(worker: RawWorker): number | null {
   const status = (worker?.status ?? worker?.spawn_status ?? "").toLowerCase();
   if (status === "blocked" || status === "failed") return 0.35;
@@ -940,8 +978,20 @@ function workerDisplayName(content: string, hired: HiredWorkerEntry | undefined,
   return fallback;
 }
 
+function isHarnessRuntimeIdle(progress: RawProgress | null): boolean {
+  const status = (progress?.agent_status ?? "").toLowerCase();
+  const current = progress?.current_agent ?? null;
+  const next = progress?.next_agent ?? null;
+  return (
+    status === "completed" ||
+    status === "complete" ||
+    (status === "idle" && current === null && (next === null || String(next) === "none"))
+  );
+}
+
 function activeWorkerNames(progress: RawProgress | null): Set<string> {
   const active = new Set<string>();
+  if (isHarnessRuntimeIdle(progress)) return active;
   const workers = [
     ...(progress?.company_state?.workers ?? []),
     ...(progress?.company_state?.last_dispatch ?? []),
@@ -1111,6 +1161,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
   if (!existsSync(docsDir)) return [];
   const hiredWorkers = readHiredWorkers(rootDir);
   const activeWorkers = activeWorkerNames(progress);
+  const runtimeIdle = isHarnessRuntimeIdle(progress);
 
   const missionDirs: Array<{ rel: string; abs: string }> = [];
   const cxxDocNames = new Set(["ceo.md", "cto.md", "cqo.md", "coo.md", "cdo.md", "ops.md"]);
@@ -1145,7 +1196,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
     return "unknown";
   };
 
-  const missions = missionDirs
+  let missions = missionDirs
     .map(({ rel, abs: missionPath }) => {
       let mtime: Date;
       try { mtime = statSync(missionPath).mtime; } catch { mtime = new Date(0); }
@@ -1192,7 +1243,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
               status,
               owner: hired?.owner ?? owner,
               hired: !!hired,
-              active: activeWorkers.has(name) || (recentlyTouched && status !== "COMPLETE"),
+              active: !runtimeIdle && (activeWorkers.has(name) || (recentlyTouched && status !== "COMPLETE")),
               sourcePath: hired?.sourcePath ?? null,
               reportPath: path.relative(rootDir, reportAbs),
               updatedAt,
@@ -1216,10 +1267,10 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
           name: hired.name,
           displayName: workerDisplayName("", hired, hired.name),
           content: "",
-          status: activeWorkers.has(hired.name) ? "IN_PROGRESS" : "unknown",
+          status: !runtimeIdle && activeWorkers.has(hired.name) ? "IN_PROGRESS" : "unknown",
           owner: hired.owner,
           hired: true,
-          active: activeWorkers.has(hired.name),
+          active: !runtimeIdle && activeWorkers.has(hired.name),
           sourcePath: hired.sourcePath,
           reportPath: null,
           updatedAt: null,
@@ -1230,6 +1281,23 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
 
       const cxxRoles = ["ceo", "cto", "cqo", "coo", "cdo", "ops"] as const;
       const cxxPresent = cxxRoles.filter(role => existsSync(path.join(missionPath, `${role}.md`)));
+      const state = readMissionState(missionPath);
+      const protocolViolations: string[] = [];
+      for (const role of cxxPresent) {
+        if (role === "ceo") continue;
+        const roleWorkers = workers.filter((w) => w.owner === role);
+        const roleDoc = readMd(`${role}.md`) ?? "";
+        const hasManifest = /Worker Evidence Manifest/i.test(roleDoc);
+        const mentionsWorkerReport = new RegExp(`${role}/workers/`, "i").test(roleDoc);
+        if (roleWorkers.length === 0 || !hasManifest || !mentionsWorkerReport) {
+          protocolViolations.push(`${role}:missing-worker-evidence`);
+        }
+      }
+      for (const w of workers) {
+        if (w.owner === "unknown" || !w.hired) {
+          protocolViolations.push(`${w.owner}:${w.name}:not-hired-or-unowned`);
+        }
+      }
 
       const id = rel;
       const label = rel.split("/").pop() ?? rel;
@@ -1237,6 +1305,9 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
         missionId: id,
         ts: mtime.toISOString(),
         type: typeFromId(id),
+        lifecycle: state.lifecycle,
+        active: state.active ?? false,
+        protocolViolations,
         label,
         ceo: readMd("ceo.md"),
         cto: readMd("cto.md"),
@@ -1249,8 +1320,22 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
         cxxPresent: [...cxxPresent],
       } satisfies MissionDoc;
     })
-    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
-    .slice(0, limit);
+    .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+
+  const explicitActive = missions.some((m) => m.active);
+  if (!explicitActive) {
+    const latestOpen = missions.find(
+      (m) => m.lifecycle === "active" || m.lifecycle === "unknown"
+    );
+    if (latestOpen) {
+      missions = missions.map((m) => ({
+        ...m,
+        active: m.missionId === latestOpen.missionId,
+      }));
+    }
+  }
+
+  missions = missions.slice(0, limit);
 
   // When the CEO updates a goal directory in-place for a submission or hot-fix
   // (instead of creating a submission-* or hotfix-* subdirectory), the most

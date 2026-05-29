@@ -55,7 +55,21 @@ What `init` installs:
 | `.harness/events.jsonl` | Structured append-only runtime event stream |
 | `.harness/todos/state.json` | Machine-readable CXX todo queues |
 | `.harness/todos/events.jsonl` | Structured todo transition history |
-| `AGENTS.md` ← `CLAUDE.md` symlink | Project harness config |
+| `AGENTS.md` + `CLAUDE.md` symlink | Project AI operating rules |
+
+---
+
+## Project Docs Merge
+
+`AGENTS.md` is the source of truth for project AI operating rules. `CLAUDE.md` is normalized to a symlink that points at `AGENTS.md`.
+
+Install and migrate preserve existing project instructions:
+
+- Existing `AGENTS.md` is not replaced. The harness adds or updates a marked section between `<!-- walwal-harness:agents:start -->` and `<!-- walwal-harness:agents:end -->`.
+- The top of `AGENTS.md` gets a small walwal-harness enabled marker so agents know the harness section applies.
+- Existing `CLAUDE.md` file content is appended into `AGENTS.md` under a `preserved-claude` marked section, then `CLAUDE.md` is replaced with a symlink to `AGENTS.md`.
+- Re-running `init`, `init --force`, or `migrate` is idempotent: marked sections are replaced, not duplicated.
+- Existing docs and symlink targets are backed up under `.harness/archive/pre-harness-backup/` or the migration backup directory before modification.
 
 ---
 
@@ -70,6 +84,7 @@ Owner /goal → CEO → [COO] → [CDO] → CTO → [dev workers] → CQO → [e
 1. CEO reads Owner request, writes `ceo.md`, routes to relevant CXX.
 2. Each CXX writes its own `{cxx}.md`, hires workers, collects evidence.
 3. CEO aggregates CXX outputs and reports to Owner.
+4. Every goal/submission/hot-fix mission has `mission-state.json` with `lifecycle` and `active`.
 
 ### Hot Fix
 
@@ -181,6 +196,12 @@ bash scripts/harness-company-complete.sh . mission-complete
 
 This sets `company_state.state = "idle"`, `conductor.state = "completed"`, `next_agent = "none"`, and `owner_prompt.status = "completed"` so dashboards, runners, and hooks agree that auto-mode can stop.
 
+It also closes structured work state:
+
+- active/pending/paused todos in `.harness/todos/state.json` become `done`
+- active `mission-state.json` files become `{"lifecycle":"complete","active":false}`
+- the dashboard stops treating recent worker report mtimes as live activity after runtime completion
+
 Existing users should update and migrate from the target project:
 
 ```bash
@@ -204,6 +225,8 @@ npx walwal-harness init --force --project-root /path/to/project
 Features:
 
 - **Company Harness Observatory** — glass/aurora process monitor showing active CXX todos, workers, incidents, missions, and current loop state
+- **Layer Activity by CXX/Worker** — Layer Activity rows match the heatmap hierarchy, grouping each CXX with its workers and sorting groups by remaining work first, completed groups next, empty CXX groups last
+- **Explicit Mission Lifecycle** — goal/submission/hot-fix directories use `mission-state.json`; `init`, `init --force`, and `migrate` backfill missing lifecycle files for existing projects
 - **Structured Runtime State** — `/goal`, `/submission`, and `/hot-fix` append to `.harness/events.jsonl` and update `.harness/todos/state.json`; `migrate` backfills these files for existing projects
 - **Split Workspace** — full-viewport left/right panes keep Org Tree + Mission Timeline beside the selected mission detail; both panes scroll independently with hidden scrollbars, and the detail pane resets to top on selection changes
 - **Org Tree** — live status of Owner → CEO → CXX → Workers hierarchy, with worker cards created only from hired `hr-roster.json` entries backed by `.harness/shared/HR-Resource/{worker}/SKILL.md`; running hired workers are highlighted under their owning CXX
@@ -259,6 +282,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.29 | Idempotent AGENTS/CLAUDE doc merge with marked harness sections, mission lifecycle backfill for init/migrate, completion closes todos and mission-state, and Layer Activity now lists CXX/worker rows sorted by remaining work |
 | 7.1.28 | Dashboard APM rewrite: top header consolidation, Knowledge Base panel (gotchas/conventions), Layer Activity (CEO/CXX/Worker TODO·DONE·Remain via goal-scope inference), Recent Report list (worker mtime desc), Cadence strip with click-to-prompt tooltip in local timezone, heatmap click-tooltip with empty-cell guard, Document Viewer expand-to-50vw with docmeta hidden, Command Log bubble popover |
 | 7.1.19 | `migrate` now carries OPS verification rules into existing installs: runtime.verification merge, HARNESS refresh, and AGENTS migration block |
 | 7.1.18 | OPS watches CQO runnable verification and production incidents; Implementation Notes stay in the same role/worker report |

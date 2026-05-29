@@ -86,11 +86,22 @@ const CXX_TEXT: Record<CxxRole, string> = {
 
 export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const { snapshot, connectionState } = useHarnessStream(initial);
-  const [selectedMissionId, setSelectedMissionId] = useState(snapshot.missions[0]?.missionId ?? null);
+  const initialActiveMission = snapshot.missions.find((mission) => mission.active) ?? snapshot.missions[0] ?? null;
+  const [selectedMissionId, setSelectedMissionId] = useState(initialActiveMission?.missionId ?? null);
   const selectedMission =
     snapshot.missions.find((mission) => mission.missionId === selectedMissionId) ??
+    snapshot.missions.find((mission) => mission.active) ??
     snapshot.missions[0] ??
     null;
+  // Owner-direct prompts only — strip auto-generated <task-notification> pings
+  // (used by the autonomous wake-up loop, not by the owner).
+  const ownerPrompts = useMemo(
+    () =>
+      snapshot.ownerHistory.filter(
+        (entry) => !(entry.content ?? "").trimStart().startsWith("<task-notification")
+      ),
+    [snapshot.ownerHistory]
+  );
   const goalGroups = useMemo(() => groupMissions(snapshot.missions), [snapshot.missions]);
   const selectedGoal = useMemo(() => {
     if (!selectedMission) return goalGroups[0]?.goal ?? null;
@@ -115,21 +126,54 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   useEffect(() => {
     const tick = () => {
       const { lanes, snapshot, selectedMission } = sampleSourceRef.current;
+      // Gate live samples on the harness runtime — once the session reports
+      // completion (or there's no current/next agent), every "active" signal
+      // is stale (todos stay status="active", worker mtimes stay recent), so
+      // we stop emitting in-progress samples until something resumes.
+      const rt = snapshot.runtime;
+      const harnessIdle =
+        rt?.agentStatus === "completed" ||
+        rt?.agentStatus === "complete" ||
+        ((rt?.currentAgent ?? null) === null &&
+          (rt?.nextAgent === null || rt?.nextAgent === "none"));
+      if (harnessIdle) {
+        const nowMinute = Math.floor(Date.now() / BUCKET_MS);
+        setHeatSamples((prev) =>
+          prev.filter((sample) => Math.floor(sample.ts / BUCKET_MS) < nowMinute)
+        );
+        return;
+      }
       setHeatSamples((prev) => {
         const now = Date.now();
         const activeMission = selectedMission ?? snapshot.missions[0] ?? null;
         const next: HeatSample[] = [];
         for (const lane of lanes) {
-          const activity =
-            lane.kind === "worker"
-              ? lane.worker?.active
-                ? 2
-                : lane.worker?.status === "IN_PROGRESS"
-                ? 1
-                : 0
-              : lane.todos +
-                lane.workers.filter((w) => w.active).length +
-                (lane.mission ? 1 : 0);
+          // 3-state activity:
+          //   0 = none        (not on this mission)
+          //   1 = standby     (participated / has output, no live work)
+          //   2 = in-progress (actively running right now)
+          let activity = 0;
+          if (lane.kind === "worker") {
+            const w = lane.worker;
+            if (w) {
+              if (w.active || w.status === "IN_PROGRESS") activity = 2;
+              else if (w.content || w.status === "COMPLETE") activity = 1;
+            }
+          } else {
+            const presentInMission =
+              lane.mission?.cxxPresent.includes(lane.role) ?? false;
+            const liveTodos = snapshot.todos.filter(
+              (t) =>
+                t.owner === lane.role &&
+                t.status !== "done" &&
+                t.status !== "completed"
+            ).length;
+            const runningWorkers = lane.workers.filter(
+              (w) => w.active || w.status === "IN_PROGRESS"
+            ).length;
+            if (liveTodos > 0 && runningWorkers === 0) activity = 2;
+            else if (presentInMission || lane.workers.length > 0 || runningWorkers > 0) activity = 1;
+          }
           if (activity <= 0) continue;
           next.push({
             ts: now,
@@ -146,7 +190,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       });
     };
     tick();
-    const id = setInterval(tick, 2000);
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
   const { cells: heatmap, totalBuckets } = useMemo(
@@ -159,13 +203,23 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const [tooltip, setTooltip] = useState<{ mission: MissionDoc; x: number; y: number } | null>(null);
   const [commandLogOpen, setCommandLogOpen] = useState(false);
   const [docExpanded, setDocExpanded] = useState(false);
+  const [customDoc, setCustomDoc] = useState<{
+    source: string;
+    title: string;
+    content: string;
+  } | null>(null);
+
+  // Selecting a mission or lane returns the viewer to mission-context mode.
+  useEffect(() => {
+    setCustomDoc(null);
+  }, [selectedMissionId, selectedLaneId]);
 
   void lang;
 
   const selectedLane = lanes.find((lane) => lane.id === selectedLaneId) ?? lanes[0] ?? null;
   const selectedCells = getSelectedCells(heatmap, dragStart, dragEnd);
   const activeWorkers =
-    snapshot.missions[0]?.workers.filter((w) => w.active).length ?? 0;
+    (snapshot.missions.find((mission) => mission.active) ?? snapshot.missions[0])?.workers.filter((w) => w.active).length ?? 0;
   const hotfixCount = snapshot.missions.filter((m) => m.type === "hotfix").length;
 
   const handleSelectWorker = (mission: MissionDoc, worker: WorkerDocEntry) => {
@@ -186,7 +240,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       <div className="flex min-h-0 flex-1">
         <HistoryNavigator
           missions={snapshot.missions}
-          ownerHistory={snapshot.ownerHistory}
+          ownerHistory={ownerPrompts}
           activeMissionId={selectedMission?.missionId ?? null}
           onSelect={setSelectedMissionId}
           commandLogOpen={commandLogOpen}
@@ -201,6 +255,13 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
               gotchas={snapshot.gotchas}
               conventions={snapshot.conventions}
               baselineTs={selectedGoal?.ts ?? null}
+              onSelect={(entry, kind) =>
+                setCustomDoc({
+                  source: kind,
+                  title: `${entry.id}.md`,
+                  content: entry.content,
+                })
+              }
             />
             <LayerActivityPanel
               goalScope={goalScopeMissions}
@@ -215,7 +276,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
 
           {/* Heatmap section with cadence strip + main grid + click tooltip */}
           <section className="panel-shell relative flex min-h-0 flex-1 flex-col gap-2 p-2">
-            <CadenceStrip ownerHistory={snapshot.ownerHistory} />
+            <CadenceStrip ownerHistory={ownerPrompts} />
             <WorkflowHeatmap
               lanes={lanes}
               cells={heatmap}
@@ -263,6 +324,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
           <DocumentViewer
             mission={selectedMission}
             lane={selectedLane}
+            customDoc={customDoc}
             expanded={docExpanded}
             onToggle={() => setDocExpanded((v) => !v)}
           />
@@ -629,14 +691,18 @@ function formatTime(iso: string | null | undefined) {
 
 // ===== Knowledge base panel =====
 
+type KnowledgeKind = "Gotcha" | "Convention";
+
 function KnowledgeBasePanel({
   gotchas,
   conventions,
   baselineTs,
+  onSelect,
 }: {
   gotchas: GotchaEntry[];
   conventions: ConventionEntry[];
   baselineTs: string | null;
+  onSelect: (entry: GotchaEntry | ConventionEntry, kind: KnowledgeKind) => void;
 }) {
   const baseline = baselineTs ? new Date(baselineTs).getTime() : 0;
   const isNew = (updatedAt?: string | null) => {
@@ -653,19 +719,23 @@ function KnowledgeBasePanel({
       <div className="mt-2 grid min-h-0 flex-1 grid-cols-2 gap-2">
         <KnowledgeList
           title="Gotchas"
+          kind="Gotcha"
           total={gotchas.length}
           added={newGotchas}
           entries={gotchas}
           isNew={isNew}
           dirRel=".harness/gotchas"
+          onSelect={onSelect}
         />
         <KnowledgeList
           title="Conventions"
+          kind="Convention"
           total={conventions.length}
           added={newConventions}
           entries={conventions}
           isNew={isNew}
           dirRel=".harness/conventions"
+          onSelect={onSelect}
         />
       </div>
     </div>
@@ -674,18 +744,22 @@ function KnowledgeBasePanel({
 
 function KnowledgeList({
   title,
+  kind,
   total,
   added,
   entries,
   isNew,
   dirRel,
+  onSelect,
 }: {
   title: string;
+  kind: KnowledgeKind;
   total: number;
   added: number;
   entries: Array<GotchaEntry | ConventionEntry>;
   isNew: (ts?: string | null) => boolean;
   dirRel: string;
+  onSelect: (entry: GotchaEntry | ConventionEntry, kind: KnowledgeKind) => void;
 }) {
   return (
     <div className="inset-shell flex min-h-0 flex-col p-2">
@@ -706,14 +780,16 @@ function KnowledgeList({
           <div className="text-slate-500">(empty)</div>
         ) : (
           entries.map((entry) => (
-            <a
+            <button
               key={entry.id}
-              className="block cursor-pointer truncate text-slate-300 hover:text-cyan-200"
+              type="button"
+              onClick={() => onSelect(entry, kind)}
+              className="block w-full cursor-pointer truncate rounded px-1 py-0.5 text-left text-slate-300 transition-colors hover:bg-cyan-400/5 hover:text-cyan-200"
               title={`${dirRel}/${entry.id}.md`}
             >
               → {entry.id}.md
               {isNew(entry.updatedAt) && <span className="text-emerald-300"> ●</span>}
-            </a>
+            </button>
           ))
         )}
       </div>
@@ -759,10 +835,10 @@ function LayerActivityPanel({
   const activeCxxCount = Array.from(workerByCxx.values()).filter((v) => v > 0).length;
 
   return (
-    <div className="panel-shell fade-in flex min-h-0 flex-col p-2">
+    <div className="panel-shell fade-in flex h-full min-h-0 flex-col overflow-hidden p-2">
       <SectionLabel>Layer · {label}</SectionLabel>
 
-      <div className="inset-shell mt-2 p-2">
+      <div className="inset-shell mt-2 shrink-0 p-2">
         <div className="flex items-center justify-between font-mono text-[9px] text-slate-500">
           <span>실무자 비중 (worker by CXX, CEO 제외)</span>
           <span>
@@ -798,7 +874,7 @@ function LayerActivityPanel({
         </div>
       </div>
 
-      <div className="inset-shell mt-2 min-h-0 flex-1 overflow-auto">
+      <div className="inset-shell mt-2 h-0 min-h-[96px] flex-1 overflow-y-auto overflow-x-hidden">
         <table className="w-full text-[10px]">
           <thead className="sticky top-0 bg-slate-900/60 font-mono text-[9px] uppercase tracking-wider">
             <tr>
@@ -812,6 +888,28 @@ function LayerActivityPanel({
             <LayerRow label="CEO" stats={layer.ceo} />
             <LayerRow label="CXX" stats={layer.cxx} />
             <LayerRow label="Worker" stats={layer.worker} />
+            {layer.agents.map((agent) => (
+              <tr key={agent.id} className="border-t border-slate-800/70 bg-slate-950/30">
+                <td
+                  className={`max-w-0 truncate px-2 py-1 ${
+                    agent.kind === "cxx" ? "font-semibold text-cyan-200" : "pl-5 text-slate-400"
+                  }`}
+                  title={agent.id}
+                >
+                  {agent.kind === "worker" ? "└ " : ""}
+                  {agent.label}
+                </td>
+                <td className="px-2 py-1 text-right text-slate-300">
+                  {agent.total}
+                </td>
+                <td className="px-2 py-1 text-right text-emerald-300">
+                  {agent.done}
+                </td>
+                <td className={`px-2 py-1 text-right ${agent.remain > 0 ? "text-orange-300" : "text-slate-600"}`}>
+                  {agent.remain}
+                </td>
+              </tr>
+            ))}
             <tr className="border-t border-slate-800 bg-slate-900/40">
               <td className="px-2 py-1 font-semibold text-slate-300">∑</td>
               <td className="px-2 py-1 text-right font-semibold text-slate-100">
@@ -852,10 +950,31 @@ function normalizeKind(s: string) {
   return s.replace(/[_-]/g, "").toLowerCase();
 }
 
+function isTerminalLifecycle(lifecycle: MissionDoc["lifecycle"]) {
+  return (
+    lifecycle === "closed" ||
+    lifecycle === "cancelled" ||
+    lifecycle === "superseded" ||
+    lifecycle === "complete"
+  );
+}
+
 function computeGoalScopeLayers(
   goalScope: MissionDoc[],
   todos: CxxTodo[]
-): { ceo: LayerStats; cxx: LayerStats; worker: LayerStats } {
+): {
+  ceo: LayerStats;
+  cxx: LayerStats;
+  worker: LayerStats;
+  agents: Array<{
+    id: string;
+    label: string;
+    kind: "cxx" | "worker";
+    total: number;
+    done: number;
+    remain: number;
+  }>;
+} {
   // === CEO layer: ceo todos (status.json) ↔ mission directories of matching kind ===
   // Runtime rarely flips status to "done", so infer completion from how many
   // mission directories of each kind already exist under the goal scope.
@@ -895,11 +1014,71 @@ function computeGoalScopeLayers(
   let wDone = 0;
   for (const m of goalScope) {
     wTotal += m.workers.length;
-    wDone += m.workers.filter((w) => w.status === "COMPLETE").length;
+    wDone += isTerminalLifecycle(m.lifecycle)
+      ? m.workers.length
+      : m.workers.filter((w) => w.status === "COMPLETE").length;
   }
   const worker: LayerStats = { total: wTotal, done: wDone, remain: wTotal - wDone };
 
-  return { ceo, cxx, worker };
+  const agentRows: Array<{
+    id: string;
+    label: string;
+    kind: "cxx" | "worker";
+    total: number;
+    done: number;
+    remain: number;
+  }> = [];
+  const groupedRows = WORKER_OWNERS.map((role, index) => {
+    const roleMissions = goalScope.filter(
+      (m) => m.cxxPresent.includes(role) || m.workers.some((w) => w.owner === role)
+    );
+    const roleTotal = roleMissions.length;
+    const roleIncomplete = roleMissions.filter(
+      (m) =>
+        !isTerminalLifecycle(m.lifecycle) &&
+        m.workers.some((w) => w.owner === role && w.status !== "COMPLETE")
+    ).length;
+    const rows: typeof agentRows = [];
+    rows.push({
+      id: role,
+      label: role.toUpperCase(),
+      kind: "cxx",
+      total: roleTotal,
+      done: Math.max(0, roleTotal - roleIncomplete),
+      remain: roleIncomplete,
+    });
+
+    const workersByName = new Map<string, { label: string; total: number; done: number }>();
+    for (const mission of goalScope) {
+      for (const worker of mission.workers.filter((w) => w.owner === role)) {
+        const entry =
+          workersByName.get(worker.name) ??
+          { label: worker.displayName || worker.name, total: 0, done: 0 };
+        entry.total += 1;
+        if (isTerminalLifecycle(mission.lifecycle) || worker.status === "COMPLETE") {
+          entry.done += 1;
+        }
+        workersByName.set(worker.name, entry);
+      }
+    }
+    for (const [name, entry] of workersByName) {
+      rows.push({
+        id: `${role}:${name}`,
+        label: entry.label,
+        kind: "worker",
+        total: entry.total,
+        done: entry.done,
+        remain: Math.max(0, entry.total - entry.done),
+      });
+    }
+    const priority = roleTotal === 0 ? 2 : roleIncomplete > 0 ? 0 : 1;
+    return { priority, index, rows };
+  });
+  groupedRows
+    .sort((a, b) => a.priority - b.priority || a.index - b.index)
+    .forEach((group) => agentRows.push(...group.rows));
+
+  return { ceo, cxx, worker, agents: agentRows };
 }
 
 // ===== Recent report panel =====
@@ -1522,11 +1701,13 @@ const MARKDOWN_COMPONENTS: Components = {
 function DocumentViewer({
   mission,
   lane,
+  customDoc,
   expanded,
   onToggle,
 }: {
   mission: MissionDoc | null;
   lane: AgentLane | null;
+  customDoc: { source: string; title: string; content: string } | null;
   expanded: boolean;
   onToggle: () => void;
 }) {
@@ -1535,20 +1716,24 @@ function DocumentViewer({
     | undefined;
   const roleDoc = role ? mission?.[role] : null;
   const workerDoc = lane?.worker?.content ?? null;
-  const rawContent = workerDoc ?? roleDoc ?? mission?.ceo ?? "_No document selected._";
+  const rawContent = customDoc
+    ? customDoc.content
+    : workerDoc ?? roleDoc ?? mission?.ceo ?? "_No document selected._";
   // Hide the leading YAML frontmatter (docmeta block) — keep only the body.
   const content = rawContent.replace(/^---[\s\S]*?---\n+/, "");
-  const source = workerDoc
-    ? `${lane?.worker?.displayName ?? "worker"}`
-    : role
-    ? role.toUpperCase()
-    : "CEO";
+  const subtitle = customDoc
+    ? `${customDoc.source} · ${customDoc.title}`
+    : `${mission?.missionId ?? "select /goal or /submission"} · ${
+        workerDoc
+          ? lane?.worker?.displayName ?? "worker"
+          : role
+          ? role.toUpperCase()
+          : "CEO"
+      }`;
   return (
     <section className="panel-shell flex min-h-0 flex-1 flex-col p-2">
       <div className="flex items-center justify-between gap-2">
-        <SectionLabel>
-          Document Viewer · {mission?.missionId ?? "select /goal or /submission"} · {source}
-        </SectionLabel>
+        <SectionLabel>Document Viewer · {subtitle}</SectionLabel>
         <button
           type="button"
           onClick={onToggle}
@@ -1597,10 +1782,9 @@ function Arrow() {
 }
 
 function heatColor(count: number) {
-  if (count > 6) return "bg-rose-500/90";
-  if (count > 4) return "bg-orange-500/80";
-  if (count > 2) return "bg-emerald-500/75";
-  if (count > 0) return "bg-emerald-500/35";
+  // 3-state activity from sample.count: 0 idle / 1 standby / 2 in-progress.
+  if (count >= 2) return "bg-emerald-500/80";
+  if (count >= 1) return "bg-emerald-500/30";
   return "bg-slate-900";
 }
 
@@ -1673,7 +1857,10 @@ function buildHeatmap(
     const key = `${x}:${sample.laneId}`;
     const prev = aggregated.get(key);
     if (prev) {
-      prev.count += sample.count;
+      // Keep the strongest observed state in this bucket (0 < 1 < 2),
+      // never sum — the cell should reflect "what was happening" not "how
+      // many polling ticks happened".
+      prev.count = Math.max(prev.count, sample.count);
       prev.hotfix = prev.hotfix || sample.hotfix;
       if (sample.missionId) prev.missionId = sample.missionId;
     } else {

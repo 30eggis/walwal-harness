@@ -248,6 +248,45 @@ describe("readHarnessState", () => {
     expect(missions.find((mission) => mission.missionId === "goal-1-auth-system")?.type).toBe("goal");
   });
 
+  it("reads explicit mission lifecycle state and marks the active child mission", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const goalDir = path.join(harnessDir, "documents", "goal-1-auth-system");
+    const submission1Dir = path.join(goalDir, "submission-1-add-sso");
+    const submission2Dir = path.join(goalDir, "submission-2-visualization");
+    mkdirSync(submission1Dir, { recursive: true });
+    mkdirSync(submission2Dir, { recursive: true });
+    writeFileSync(path.join(goalDir, "ceo.md"), "# Auth system\n");
+    writeFileSync(path.join(submission1Dir, "ceo.md"), "# Add SSO\n");
+    writeFileSync(path.join(submission2Dir, "ceo.md"), "# Visualization\n");
+    writeFileSync(
+      path.join(submission1Dir, "mission-state.json"),
+      JSON.stringify({ lifecycle: "closed", active: false })
+    );
+    writeFileSync(
+      path.join(submission2Dir, "mission-state.json"),
+      JSON.stringify({ lifecycle: "active", active: true })
+    );
+
+    const missions = readHarnessState(dir).missions;
+    const s1 = missions.find((mission) => mission.missionId.endsWith("submission-1-add-sso"))!;
+    const s2 = missions.find((mission) => mission.missionId.endsWith("submission-2-visualization"))!;
+    expect(s1.lifecycle).toBe("closed");
+    expect(s1.active).toBe(false);
+    expect(s2.lifecycle).toBe("active");
+    expect(s2.active).toBe(true);
+  });
+
+  it("flags CXX reports that lack hired worker evidence", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
+    mkdirSync(missionDir, { recursive: true });
+    writeFileSync(path.join(missionDir, "ceo.md"), "# Dashboard\n");
+    writeFileSync(path.join(missionDir, "cto.md"), "# CTO\n\nImplemented directly.\n");
+
+    const mission = readHarnessState(dir).missions[0];
+    expect(mission.protocolViolations).toContain("cto:missing-worker-evidence");
+  });
+
   it("positions only hired HR-Resource workers and marks active workers", () => {
     const harnessDir = path.join(dir, ".harness");
     const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
@@ -295,6 +334,51 @@ describe("readHarnessState", () => {
       hired: true,
       active: true,
       sourcePath: ".harness/shared/HR-Resource/react-ui-worker/SKILL.md",
+    });
+  });
+
+  it("does not revive recently touched workers after runtime completion", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
+    mkdirSync(path.join(missionDir, "cto", "workers"), { recursive: true });
+    mkdirSync(path.join(harnessDir, "shared", "HR-Resource", "react-ui-worker"), { recursive: true });
+    writeFileSync(path.join(missionDir, "ceo.md"), "# Dashboard\n");
+    writeFileSync(
+      path.join(missionDir, "cto", "workers", "react-ui-worker.md"),
+      "## Status\nIN_PROGRESS\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "shared", "HR-Resource", "react-ui-worker", "SKILL.md"),
+      "# React UI Worker\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "shared", "hr-roster.json"),
+      JSON.stringify({
+        hired: [
+          {
+            worker: "react-ui-worker",
+            owner: "cto",
+            skillPath: ".harness/shared/HR-Resource/react-ui-worker/SKILL.md",
+          },
+        ],
+      })
+    );
+    writeFileSync(
+      path.join(harnessDir, "progress.json"),
+      JSON.stringify({
+        current_agent: null,
+        next_agent: "none",
+        agent_status: "completed",
+        company_state: {
+          workers: [{ agent: "react-ui-worker", status: "running", feature: "F1" }],
+        },
+      })
+    );
+
+    const workers = readHarnessState(dir).missions[0].workers;
+    expect(workers[0]).toMatchObject({
+      name: "react-ui-worker",
+      active: false,
     });
   });
 });
