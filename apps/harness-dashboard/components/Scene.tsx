@@ -60,7 +60,7 @@ type CxxRole = typeof CXX_ROLES[number];
 const WORKER_OWNERS = ["coo", "cdo", "cto", "cqo", "ops"] as const;
 type WorkerOwnerRole = typeof WORKER_OWNERS[number];
 const BUCKET_MS = 60_000;
-const VISIBLE_BUCKETS = 60;
+const VISIBLE_BUCKETS = 24 * 60;
 const LANE_LABEL_WIDTH = 110;
 const TIME_LABEL_HEIGHT = 18;
 const LANE_ROW_HEIGHT = 18;
@@ -117,7 +117,18 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   }, [snapshot.missions, selectedGoal]);
 
   const lanes = useMemo(() => buildLanes(snapshot, selectedMission), [selectedMission, snapshot]);
-  const sessionStartedAtRef = useRef(Date.now());
+  const heatmapStartedAt = useMemo(() => Date.now() - VISIBLE_BUCKETS * BUCKET_MS, [snapshot.ts]);
+  const persistedHeatSamples = useMemo<HeatSample[]>(
+    () =>
+      snapshot.activitySamples.map((sample) => ({
+        ts: Date.parse(sample.ts),
+        laneId: sample.laneId,
+        count: sample.count,
+        hotfix: sample.hotfix,
+        missionId: sample.missionId,
+      })).filter((sample) => Number.isFinite(sample.ts)),
+    [snapshot.activitySamples]
+  );
   const [heatSamples, setHeatSamples] = useState<HeatSample[]>([]);
   const sampleSourceRef = useRef({ lanes, snapshot, selectedMission });
   useEffect(() => {
@@ -194,8 +205,8 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     return () => clearInterval(id);
   }, []);
   const { cells: heatmap, totalBuckets } = useMemo(
-    () => buildHeatmap(snapshot, lanes, heatSamples, sessionStartedAtRef.current),
-    [heatSamples, lanes, snapshot]
+    () => buildHeatmap(snapshot, lanes, [...persistedHeatSamples, ...heatSamples], heatmapStartedAt),
+    [heatSamples, heatmapStartedAt, lanes, persistedHeatSamples, snapshot]
   );
   const [selectedLaneId, setSelectedLaneId] = useState(lanes[0]?.id ?? "ceo");
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);

@@ -941,6 +941,20 @@ function refreshScriptsForMigrate({ dryRun = false, backupDir = null } = {}) {
   chmodShellScripts(scriptsDest);
 }
 
+function migrateActivityHistory({ dryRun = false } = {}) {
+  const recorder = path.join(PROJECT_ROOT, 'scripts', 'harness-activity-record.js');
+  if (!fs.existsSync(recorder)) return;
+  log('  activity/: legacy documents/progress.log → 7-day heatmap JSONL backfill');
+  if (dryRun) return;
+  try {
+    execSync(`node ${JSON.stringify(recorder)} ${JSON.stringify(PROJECT_ROOT)} --migrate`, {
+      stdio: 'ignore',
+    });
+  } catch {
+    log('  activity/: backfill skipped (node recorder failed)');
+  }
+}
+
 // ─────────────────────────────────────────
 // 3a. Commands → .claude/commands/
 // ─────────────────────────────────────────
@@ -1996,6 +2010,7 @@ function runMigrate(opts = {}) {
   // Runtime scripts are package-owned. Migrate must refresh them so existing
   // projects receive wake/meeting/OPS fixes without requiring a full init.
   refreshScriptsForMigrate({ dryRun, backupDir });
+  migrateActivityHistory({ dryRun });
   updateRuleRegistryLinks(flags.ruleRegistryLinks || [], { dryRun, backupDir });
 
   // 1. progress.json

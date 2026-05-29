@@ -295,6 +295,15 @@ export interface HarnessSnapshot {
   conventions: ConventionEntry[];
   todos: CxxTodo[];
   events: HarnessEvent[];
+  activitySamples: ActivitySample[];
+}
+
+export interface ActivitySample {
+  ts: string;
+  laneId: string;
+  count: number;
+  hotfix: boolean;
+  missionId: string | null;
 }
 
 export interface CxxTodo {

@@ -656,6 +656,10 @@ fi
 
 set_progress "$filter"
 
+if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/harness-activity-record.js" ]; then
+  node "$SCRIPT_DIR/harness-activity-record.js" "$PROJECT_ROOT" >/dev/null 2>&1 || true
+fi
+
 if [ "$meeting_prepare" = true ] && [ "$next" = "meeting-manager" ]; then
   bash "$SCRIPT_DIR/harness-meeting-doc.sh" "$PROJECT_ROOT" prepare >/dev/null 2>&1 || true
 fi

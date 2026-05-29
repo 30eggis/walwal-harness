@@ -70,4 +70,8 @@ if [ -d "$DOCS" ]; then
   done
 fi
 
+if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/harness-activity-record.js" ]; then
+  node "$SCRIPT_DIR/harness-activity-record.js" "$PROJECT_ROOT" >/dev/null 2>&1 || true
+fi
+
 echo "[company-complete] marked complete: $REASON"

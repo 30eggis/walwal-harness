@@ -40,11 +40,13 @@ import type {
   WorkerDocEntry,
   WorkerSnapshot,
   CxxTodo,
+  ActivitySample,
 } from "./types";
 
 const SNAPSHOT_VERSION = "1.2.0";
 const GOAL_DESC_TRUNCATE = 200;
 const RECENT_WORKER_ACTIVE_MS = 10 * 60 * 1000;
+const ACTIVITY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface RawProgress {
   goals?: {
@@ -230,6 +232,7 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     conventions: [],
     todos: [],
     events: [],
+    activitySamples: [],
   };
 }
 
@@ -1516,6 +1519,36 @@ function readEvents(rootDir: string, limit = 40): HarnessEvent[] {
   }));
 }
 
+function readActivitySamples(rootDir: string): ActivitySample[] {
+  const activityDir = path.join(rootDir, ".harness", "activity");
+  if (!existsSync(activityDir)) return [];
+  const cutoff = Date.now() - ACTIVITY_RETENTION_MS;
+  const files = readdirSync(activityDir)
+    .filter((name) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(name))
+    .sort()
+    .slice(-8);
+  const rows: ActivitySample[] = [];
+  for (const file of files) {
+    for (const raw of readJsonlTail<Record<string, unknown>>(path.join(activityDir, file), 100_000).reverse()) {
+      const ts = typeof raw.ts === "string" ? raw.ts : null;
+      const time = ts ? Date.parse(ts) : NaN;
+      if (!ts || !Number.isFinite(time) || time < cutoff) continue;
+      const laneId = typeof raw.laneId === "string" ? raw.laneId : null;
+      if (!laneId) continue;
+      const count = Math.max(0, Math.min(2, Number(raw.count ?? 0)));
+      if (count <= 0) continue;
+      rows.push({
+        ts,
+        laneId,
+        count,
+        hotfix: raw.hotfix === true,
+        missionId: typeof raw.missionId === "string" ? raw.missionId : null,
+      });
+    }
+  }
+  return rows.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+}
+
 export function readHarnessState(rootDir: string): HarnessSnapshot {
   const harnessDir = path.join(rootDir, ".harness");
   if (!existsSync(harnessDir)) {
@@ -1548,6 +1581,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     snapshot.conventions = readConventions(rootDir);
     snapshot.todos = readTodos(rootDir);
     snapshot.events = readEvents(rootDir);
+    snapshot.activitySamples = readActivitySamples(rootDir);
     return snapshot;
   }
 
@@ -1603,6 +1637,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     conventions: readConventions(rootDir),
     todos: readTodos(rootDir),
     events: readEvents(rootDir),
+    activitySamples: readActivitySamples(rootDir),
   };
 }
 
