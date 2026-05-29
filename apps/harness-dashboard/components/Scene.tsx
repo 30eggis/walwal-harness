@@ -831,6 +831,11 @@ function LayerActivityPanel({
     () => computeGoalScopeLayers(goalScope, todos),
     [goalScope, todos]
   );
+  const visibleTotals = useMemo(() => {
+    const total = layer.ceo.total + layer.agents.reduce((sum, agent) => sum + agent.total, 0);
+    const done = layer.ceo.done + layer.agents.reduce((sum, agent) => sum + agent.done, 0);
+    return { total, done, remain: total - done };
+  }, [layer]);
 
   const activeCxxCount = Array.from(workerByCxx.values()).filter((v) => v > 0).length;
 
@@ -886,8 +891,6 @@ function LayerActivityPanel({
           </thead>
           <tbody>
             <LayerRow label="CEO" stats={layer.ceo} />
-            <LayerRow label="CXX" stats={layer.cxx} />
-            <LayerRow label="Worker" stats={layer.worker} />
             {layer.agents.map((agent) => (
               <tr key={agent.id} className="border-t border-slate-800/70 bg-slate-950/30">
                 <td
@@ -913,13 +916,13 @@ function LayerActivityPanel({
             <tr className="border-t border-slate-800 bg-slate-900/40">
               <td className="px-2 py-1 font-semibold text-slate-300">∑</td>
               <td className="px-2 py-1 text-right font-semibold text-slate-100">
-                {layer.ceo.total + layer.cxx.total + layer.worker.total}
+                {visibleTotals.total}
               </td>
               <td className="px-2 py-1 text-right font-semibold text-emerald-300">
-                {layer.ceo.done + layer.cxx.done + layer.worker.done}
+                {visibleTotals.done}
               </td>
               <td className="px-2 py-1 text-right font-semibold text-orange-300">
-                {layer.ceo.remain + layer.cxx.remain + layer.worker.remain}
+                {visibleTotals.remain}
               </td>
             </tr>
           </tbody>
