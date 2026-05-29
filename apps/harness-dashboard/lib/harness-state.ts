@@ -157,6 +157,18 @@ interface RawProgress {
       spawn_status?: string;
       status?: string;
       pid?: number | null;
+    }> | Record<string, {
+      team?: number | string;
+      feature?: string;
+      agent?: string;
+      phase?: string;
+      prompt?: string | null;
+      log?: string | null;
+      spawn_status?: string;
+      status?: string;
+      pid?: number | null;
+      owner?: string;
+      report?: string | null;
     }>;
     last_dispatch?: Array<{
       team?: number | string;
@@ -784,7 +796,19 @@ function readFeatureTitles(rootDir: string): Map<string, string> {
   return map;
 }
 
-type RawWorker = NonNullable<NonNullable<RawProgress["company_state"]>["workers"]>[number];
+interface RawWorker {
+  team?: number | string;
+  feature?: string;
+  agent?: string;
+  phase?: string;
+  prompt?: string | null;
+  log?: string | null;
+  spawn_status?: string;
+  status?: string;
+  pid?: number | null;
+  owner?: string;
+  report?: string | null;
+}
 type WorkerOwner = WorkerDocEntry["owner"];
 
 interface HiredWorkerEntry {
@@ -839,13 +863,28 @@ function deriveWorkerProgress(worker: RawWorker): number | null {
   if (status === "blocked" || status === "failed") return 0.35;
   if (status === "recorded") return 0.15;
   if (status === "spawned" || status === "running") return 0.55;
-  if (status === "completed" || status === "done") return 1;
+  if (status === "complete" || status === "completed" || status === "done") return 1;
   return null;
+}
+
+function normalizeRawWorkers(value: RawWorker[] | Record<string, RawWorker> | null | undefined): RawWorker[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  return Object.entries(value).map(([name, worker], idx) => {
+    const w = worker && typeof worker === "object" ? worker : {};
+    return {
+      ...w,
+      team: (w as RawWorker).team ?? idx + 1,
+      agent: (w as RawWorker).agent ?? name,
+      feature: (w as RawWorker).feature ?? name,
+      log: (w as RawWorker).log ?? (w as RawWorker & { report?: string | null }).report ?? null,
+    };
+  });
 }
 
 function buildWorkers(rootDir: string, progress: RawProgress | null): WorkerSnapshot[] {
   const titles = readFeatureTitles(rootDir);
-  let workers = progress?.company_state?.workers ?? [];
+  let workers = normalizeRawWorkers(progress?.company_state?.workers);
   if (workers.length === 0) {
     const queue = readJsonSafe<{
       teams?: Record<string, {
@@ -996,12 +1035,12 @@ function activeWorkerNames(progress: RawProgress | null): Set<string> {
   const active = new Set<string>();
   if (isHarnessRuntimeIdle(progress)) return active;
   const workers = [
-    ...(progress?.company_state?.workers ?? []),
+    ...normalizeRawWorkers(progress?.company_state?.workers),
     ...(progress?.company_state?.last_dispatch ?? []),
   ];
   for (const worker of workers) {
     const rawStatus = (worker.status ?? worker.spawn_status ?? "").toLowerCase();
-    if (["completed", "done", "idle"].includes(rawStatus)) continue;
+    if (["complete", "completed", "done", "idle"].includes(rawStatus)) continue;
     for (const value of [worker.agent, worker.feature]) {
       const normalized = normalizeWorkerName(value);
       if (normalized) active.add(normalized);

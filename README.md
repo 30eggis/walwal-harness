@@ -283,6 +283,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.34 | Fix dashboard 500 when `company_state.workers` is recorded as a keyed worker map instead of an array |
 | 7.1.33 | Dashboard keeps recently written worker reports active even when docmeta is present, and CXX skills now record worker activity telemetry for live dashboard state |
 | 7.1.31 | Persist dashboard heatmap activity to 7-day JSONL logs, load persisted samples in the dashboard, and backfill activity during migrate from existing mission docs/progress logs |
 | 7.1.29 | Idempotent AGENTS/CLAUDE doc merge with marked harness sections, mission lifecycle backfill for init/migrate, completion closes todos and mission-state, and Layer Activity now lists CXX/worker rows sorted by remaining work |

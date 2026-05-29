@@ -407,4 +407,41 @@ describe("readHarnessState", () => {
       active: true,
     });
   });
+
+  it("accepts keyed company_state.workers maps from manual CXX telemetry", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
+    mkdirSync(path.join(missionDir, "cqo", "workers"), { recursive: true });
+    writeFileSync(path.join(missionDir, "ceo.md"), "# Dashboard\n");
+    writeFileSync(
+      path.join(missionDir, "cqo", "workers", "evaluator.md"),
+      "---\ndocmeta:\n  id: evaluator\n---\n\n# Worker Report\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "progress.json"),
+      JSON.stringify({
+        agent_status: "running",
+        company_state: {
+          active_workers: 1,
+          workers: {
+            "engineering-engineering-code-reviewer": {
+              owner: "cqo",
+              report: ".harness/documents/goal-1-dashboard/cqo/workers/evaluator.md",
+              status: "running",
+            },
+          },
+        },
+      })
+    );
+
+    const snap = readHarnessState(dir);
+    expect(snap.dashboard.workers[0]).toMatchObject({
+      agent: "engineering-engineering-code-reviewer",
+      status: "running",
+    });
+    expect(snap.missions[0].workers[0]).toMatchObject({
+      owner: "cqo",
+      active: true,
+    });
+  });
 });
