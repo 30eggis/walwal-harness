@@ -47,8 +47,12 @@ export async function GET(request: Request) {
       send();
 
       const handle = watchHarness(root, () => send());
+      // Local-only data source — push a fresh snapshot every second on top
+      // of file-watch events so the dashboard never goes more than 1s stale.
+      const tick = setInterval(() => send(), 1000);
 
       const cleanup = async () => {
+        clearInterval(tick);
         try {
           await handle.close();
         } catch {
