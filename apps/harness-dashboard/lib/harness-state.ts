@@ -1220,16 +1220,6 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
             if (!f.endsWith(".md")) continue;
             const reportAbs = path.join(missionPath, relDir, f);
             const content = readMd(`${relDir}/${f}`) ?? "";
-            const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
-            // Worker docs sometimes omit the "## Status" block but always carry a
-            // docmeta frontmatter when the worker submitted its output. Treat the
-            // presence of a docmeta block (or a non-empty body) as COMPLETE.
-            const hasDocmeta = /^---[\s\S]*?docmeta:[\s\S]*?---/.test(content);
-            const status: WorkerDocEntry["status"] = statusMatch
-              ? (statusMatch[1] as WorkerDocEntry["status"])
-              : hasDocmeta
-              ? "COMPLETE"
-              : "unknown";
             const name = normalizeWorkerName(f);
             const hired = hiredForMission(hiredWorkers, name, owner, rel);
             let updatedAt: string | null = null;
@@ -1239,6 +1229,18 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
               updatedAt = mtime.toISOString();
               recentlyTouched = Date.now() - mtime.getTime() < RECENT_WORKER_ACTIVE_MS;
             } catch { /* ignore */ }
+            const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
+            const hasDocmeta = /^---[\s\S]*?docmeta:[\s\S]*?---/.test(content);
+            // Worker docs often write docmeta before appending final evidence.
+            // Without an explicit COMPLETE marker, keep recent writes visible as
+            // active; after the activity window they become historical reports.
+            const status: WorkerDocEntry["status"] = statusMatch
+              ? (statusMatch[1] as WorkerDocEntry["status"])
+              : hasDocmeta && recentlyTouched && !runtimeIdle
+              ? "IN_PROGRESS"
+              : hasDocmeta
+              ? "COMPLETE"
+              : "unknown";
             const entry: WorkerDocEntry = {
               name,
               displayName: workerDisplayName(content, hired, name),
@@ -1246,7 +1248,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
               status,
               owner: hired?.owner ?? owner,
               hired: !!hired,
-              active: !runtimeIdle && (activeWorkers.has(name) || (recentlyTouched && status !== "COMPLETE")),
+              active: !runtimeIdle && (activeWorkers.has(name) || status === "IN_PROGRESS"),
               sourcePath: hired?.sourcePath ?? null,
               reportPath: path.relative(rootDir, reportAbs),
               updatedAt,

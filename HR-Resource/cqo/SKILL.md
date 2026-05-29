@@ -24,6 +24,10 @@ Before quality work, read `.harness/conventions/shared.md`, `.harness/convention
 7. Monitor repeated issues and promote verified lessons to `.harness/conventions`, `.harness/gotchas`, `.harness/memories`, or `.harness/shared`.
 8. Approve or reject archive based solely on worker-provided evidence and OPS runtime/watch evidence when the mission uses a runnable environment.
 
+## Worker Activity Telemetry
+
+Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
+
 ## Hard Rules
 
 CQO must not directly execute QA, visual review, security review, performance testing, or regression checks. CQO may only define gates, select evaluators, review evidence, decide archive eligibility, and document worker names and report paths.

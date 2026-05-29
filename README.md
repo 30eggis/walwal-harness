@@ -283,6 +283,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.33 | Dashboard keeps recently written worker reports active even when docmeta is present, and CXX skills now record worker activity telemetry for live dashboard state |
 | 7.1.31 | Persist dashboard heatmap activity to 7-day JSONL logs, load persisted samples in the dashboard, and backfill activity during migrate from existing mission docs/progress logs |
 | 7.1.29 | Idempotent AGENTS/CLAUDE doc merge with marked harness sections, mission lifecycle backfill for init/migrate, completion closes todos and mission-state, and Layer Activity now lists CXX/worker rows sorted by remaining work |
 | 7.1.28 | Dashboard APM rewrite: top header consolidation, Knowledge Base panel (gotchas/conventions), Layer Activity (CEO/CXX/Worker TODO·DONE·Remain via goal-scope inference), Recent Report list (worker mtime desc), Cadence strip with click-to-prompt tooltip in local timezone, heatmap click-tooltip with empty-cell guard, Document Viewer expand-to-50vw with docmeta hidden, Command Log bubble popover |

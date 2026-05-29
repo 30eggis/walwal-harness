@@ -381,4 +381,30 @@ describe("readHarnessState", () => {
       active: false,
     });
   });
+
+  it("keeps recently written docmeta worker reports active without an explicit COMPLETE marker", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
+    mkdirSync(path.join(missionDir, "cto", "workers"), { recursive: true });
+    writeFileSync(path.join(missionDir, "ceo.md"), "# Dashboard\n");
+    writeFileSync(
+      path.join(missionDir, "cto", "workers", "frontend-worker.md"),
+      "---\ndocmeta:\n  id: frontend-worker\n---\n\n# Worker Report\n\nEvidence is still being appended.\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "progress.json"),
+      JSON.stringify({
+        current_agent: "ceo",
+        agent_status: "running",
+        company_state: { active_workers: 0, workers: [] },
+      })
+    );
+
+    const workers = readHarnessState(dir).missions[0].workers;
+    expect(workers[0]).toMatchObject({
+      name: "frontend-worker",
+      status: "IN_PROGRESS",
+      active: true,
+    });
+  });
 });

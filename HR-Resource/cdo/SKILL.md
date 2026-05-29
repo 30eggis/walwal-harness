@@ -25,6 +25,10 @@ Before design work, read `.harness/conventions/shared.md`, `.harness/conventions
 8. Select the final direction and write a CDO preview artifact at `.harness/documents/{mission_name}/cdo/preview.html`.
 9. Report to CEO and CTO with a concise preview summary and mention that the visual sample is available in the dashboard by clicking harness-cdo.
 
+## Worker Activity Telemetry
+
+Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
+
 ## Rule
 
 Design output must be usable by implementation teams, not just descriptive.

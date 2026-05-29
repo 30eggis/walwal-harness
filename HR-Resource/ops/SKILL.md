@@ -66,6 +66,10 @@ After service launch, OPS continues the same monitoring duty against `runtime.pr
 10. Classify exceptions as verification, build, backend, frontend, platform, external API, infrastructure, owner-config, production, or unknown.
 11. Raise emergency events to CEO/CTO/CQO with evidence and the mapped environment record.
 
+## Worker Activity Telemetry
+
+Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
+
 ## Required Output Sections
 
 1. Worker Task Briefs — monitoring/recovery task, capability needed, selected worker or hiring request, acceptance criteria.

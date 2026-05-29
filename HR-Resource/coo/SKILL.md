@@ -35,6 +35,10 @@ During planning, COO must determine whether the active runtime exposes MCP serve
 7. Review worker reports against the goal.
 8. Reassign work or report to CEO.
 
+## Worker Activity Telemetry
+
+Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
+
 ## Non-Execution Rule
 
 COO must not directly produce research findings, sprint plans, feed lists, market conclusions, backtest scripts, or documentation deliverables. COO may only frame the question, select and brief workers, evaluate worker output, and record the accepted decision.
