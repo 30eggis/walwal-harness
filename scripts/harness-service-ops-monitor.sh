@@ -38,7 +38,7 @@ base_port="${env_base_port:-$config_base_port}"
 if [ -z "$base_port" ]; then
   echo "ERROR: HARNESS_BASE_PORT is not set." >&2
   echo "" >&2
-  echo "  CEO must agree on a {xx}000 base port with the Owner and add it to .env:" >&2
+  echo "  CEO/CXX must choose an available {xx}000 base port and add it to .env:" >&2
   echo "    HARNESS_BASE_PORT=3000" >&2
   echo "" >&2
   echo "  OPS cannot monitor ports without a declared base. Set the value and re-run." >&2
@@ -208,7 +208,7 @@ if [ "$live" != "true" ] || [ "${service_count:-0}" -eq 0 ]; then
       (if (.log.configured|not) then "not configured" elif (.log.exists|not) then "missing" else ((.log.recent_errors|tostring) + " recent errors") end) +
       " | \(.status) |"' <<<"$build_results_json"
     echo ""
-    echo "No production service endpoints are configured. Owner+CEO+CTO must define runtime.production.services[] before OPS can monitor live servers."
+    echo "No production service endpoints are configured. CEO+CTO+OPS must derive runtime.production.services[] from repo config, scripts, running processes, Docker, logs, or CXX reports before OPS can monitor live servers. Escalate to Owner only for external authority such as missing credentials or unavailable production access."
   } > "$report_path"
   echo "$report_rel"
   exit 0

@@ -283,6 +283,9 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.37 | Adds CEO autonomous decision charter, prevents routine Owner progress questions, and limits Owner waits to true external-authority blocks |
+| 7.1.36 | Stop hook only validates worker evidence while chaining the active loop, scopes validation to the newest active mission, and makes the 24h heatmap visible at 10-minute resolution |
+| 7.1.35 | Fix dashboard heatmap mission scoping, choose the newest active mission for activity recording, and normalize duplicate active child mission states during init/migrate |
 | 7.1.34 | Fix dashboard 500 when `company_state.workers` is recorded as a keyed worker map instead of an array |
 | 7.1.33 | Dashboard keeps recently written worker reports active even when docmeta is present, and CXX skills now record worker activity telemetry for live dashboard state |
 | 7.1.31 | Persist dashboard heatmap activity to 7-day JSONL logs, load persisted samples in the dashboard, and backfill activity during migrate from existing mission docs/progress logs |

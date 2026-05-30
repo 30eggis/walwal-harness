@@ -130,7 +130,12 @@ function runtimeIdle(root) {
 
 function currentSamples(root, now = Date.now()) {
   const missions = collectMissions(root);
-  const active = missions.find((m) => m.active) ?? missions.sort((a, b) => b.mtimeMs - a.mtimeMs)[0] ?? null;
+  const active =
+    missions
+      .filter((m) => m.active)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)[0] ??
+    missions.sort((a, b) => b.mtimeMs - a.mtimeMs)[0] ??
+    null;
   if (!active) return [];
   const todos = readTodos(root);
   const idle = runtimeIdle(root);

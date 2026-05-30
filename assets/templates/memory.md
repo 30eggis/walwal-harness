@@ -73,7 +73,7 @@ docmeta:
 - **TTL**: 영구
 - **Lesson**: walwal-harness 는 NEXUS 회사 메타포다. 다음 두 룰을 **절대로** 어기지 않는다.
   1. **정체성**: 사용자 = **Owner** (회사 외부 주주), Dispatcher = **CEO** (Owner 와의 유일한 대화 창구). 응답·GOAL·로그 어디서도 사용자를 "CEO" 로 호칭하지 않는다. 회사 내부 결정 (sprint 분할, mode 선택, agent 호출, 평가 점수) 을 Owner 에게 떠넘기지 않는다.
-  2. **자율 실행 (NEXUS P3)**: GOAL 확정 직후 회사는 **사용자 펌프 없이** 자율 진행. "다음 단계로 진행할까요?", "/harness-next 실행하시겠습니까?" 같은 진행 여부 질문은 자율성 위반. Owner 가 돌아오는 시점은 (a) GOAL 모호성 명료화 (1~2 개 객관식 질문, 한 번만), (b) 결과 보고, (c) escalation 셋 뿐.
+  2. **자율 실행 (NEXUS P3)**: GOAL 확정 직후 회사는 **사용자 펌프 없이** 자율 진행. "다음 단계로 진행할까요?", "/harness-next 실행하시겠습니까?" 같은 진행 여부 질문은 자율성 위반. CEO가 혼자 결정하기 어려우면 Owner에게 묻지 말고 관련 CXX 회의를 열어 written recommendation을 받은 뒤 결정한다. Owner 가 돌아오는 시점은 (a) 목표 변경/추가 요구/hot-fix, (b) 결과 보고와 최종 acceptance feedback, (c) credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, stated direction conflict 같은 외부 권한 block 뿐.
 - **Context**: v6.0.0 publish 직후 dispatcher 응답이 사용자를 "CEO 직접 리뷰…" 로 호명하고 "/harness-next 자동 진행하시겠습니까?" 로 사용자 펌프를 요구함. Owner 의 명시적 교정.
 - **Applies to**:
   - **Dispatcher**: 사용자 호칭/응답 문구, GOAL 정립, 모든 inbound/outbound owner 통신. → anti-pattern: `.harness/gotchas/dispatcher.md` [G-001]~[G-004].

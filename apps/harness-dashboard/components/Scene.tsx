@@ -59,8 +59,8 @@ type CxxRole = typeof CXX_ROLES[number];
 // Workers always sit under a non-CEO CXX (CEO delegates, never owns workers).
 const WORKER_OWNERS = ["coo", "cdo", "cto", "cqo", "ops"] as const;
 type WorkerOwnerRole = typeof WORKER_OWNERS[number];
-const BUCKET_MS = 60_000;
-const VISIBLE_BUCKETS = 24 * 60;
+const BUCKET_MS = 10 * 60_000;
+const VISIBLE_BUCKETS = 24 * 6;
 const LANE_LABEL_WIDTH = 110;
 const TIME_LABEL_HEIGHT = 18;
 const LANE_ROW_HEIGHT = 18;
@@ -201,8 +201,13 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     return () => clearInterval(id);
   }, []);
   const { cells: heatmap, totalBuckets } = useMemo(
-    () => buildHeatmap(snapshot, lanes, [...persistedHeatSamples, ...heatSamples], heatmapStartedAt),
-    [heatSamples, heatmapStartedAt, lanes, persistedHeatSamples, snapshot]
+    () => buildHeatmap(
+      snapshot,
+      lanes,
+      filterHeatSamplesForMission([...persistedHeatSamples, ...heatSamples], selectedMission),
+      heatmapStartedAt
+    ),
+    [heatSamples, heatmapStartedAt, lanes, persistedHeatSamples, selectedMission, snapshot]
   );
   const [selectedLaneId, setSelectedLaneId] = useState(lanes[0]?.id ?? "ceo");
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -1374,7 +1379,8 @@ const CadencePromptTooltip = (() => {
 
 // ===== Heatmap =====
 
-function formatMinuteOffset(minutes: number) {
+function formatBucketOffset(bucket: number) {
+  const minutes = bucket * (BUCKET_MS / 60_000);
   if (minutes === 0) return "now";
   if (minutes < 60) return `-${minutes}m`;
   const h = Math.floor(minutes / 60);
@@ -1486,7 +1492,7 @@ function WorkflowHeatmap({
                 className="grid place-items-center font-mono text-[9px] leading-none text-slate-500"
                 style={{ gridColumn: idx + 2, gridRow: 1 }}
               >
-                {showLabel ? formatMinuteOffset(idx) : ""}
+                {showLabel ? formatBucketOffset(idx) : ""}
               </div>
             );
           })}
@@ -1844,6 +1850,17 @@ function buildLanes(snapshot: HarnessSnapshot, selectedMission: MissionDoc | nul
   return lanes;
 }
 
+function filterHeatSamplesForMission(samples: HeatSample[], selectedMission: MissionDoc | null) {
+  if (!selectedMission) return samples;
+  return samples.filter((sample) => {
+    if (sample.missionId) return sample.missionId === selectedMission.missionId;
+    // Legacy CXX samples from progress.log did not carry a mission id. Keep
+    // role-level history, but do not project legacy worker rows onto unrelated
+    // mission-specific worker lanes.
+    return !sample.laneId.includes(":");
+  });
+}
+
 function buildHeatmap(
   snapshot: HarnessSnapshot,
   lanes: AgentLane[],
@@ -1895,7 +1912,7 @@ function buildHeatmap(
         y,
         laneId: lane.id,
         laneLabel: lane.label,
-        bucketLabel: formatMinuteOffset(x),
+        bucketLabel: formatBucketOffset(x),
         count: agg?.count ?? 0,
         hotfix: agg?.hotfix ?? false,
         mission: missionId ? missionById.get(missionId) ?? null : null,

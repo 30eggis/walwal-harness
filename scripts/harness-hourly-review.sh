@@ -397,7 +397,7 @@ meeting_json="$(jq -n \
   echo "### Dispatcher/CEO"
   case "$verdict" in
     owner_needed)
-      echo "- 판단: escalation 상태이므로 Owner에게 외부 결정이 필요한지 확인한다."
+      echo "- 판단: escalation 상태다. 먼저 CEO/CXX가 내부 권장안을 확정하고, 외부 권한(credentials/secrets, payment approval, legal/business acceptance, production access, destructive data action)이 필요할 때만 Owner-facing BLOCKED로 보고한다."
       ;;
     *)
       echo "- 판단: 최초 GOAL 이후 Owner 입력은 interrupt다. 회사는 Owner를 기다리지 않고 GOAL 달성 루프를 계속한다."

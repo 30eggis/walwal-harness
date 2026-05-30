@@ -110,6 +110,10 @@ CEO는 worker 기록 없이 완료된 산출물을 포함한 CXX 보고서를 �
 
 Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당자가 아니다.
 
+- Owner는 방향 제시, 추가 요구, hot-fix, 최종 acceptance feedback을 제공한다. 회사 루프를 계속 돌리기 위한 진행 신호가 아니다.
+- CEO는 Owner에게 계속 진행 여부, worker 고용 여부, 내부 옵션 선택, 다음 단계 시작 여부를 묻지 않는다.
+- CEO가 혼자 판단하기 어려우면 관련 CXX 회의를 열고 written recommendation을 받아 결정한 뒤 계속 진행한다.
+- Owner 입력 대기는 harness가 추론하거나 확보할 수 없는 외부 권한이 필요할 때만 허용한다: credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, 또는 명시된 Owner 방향과의 직접 충돌.
 - 동작하지 않거나 검증되지 않았거나 부분적으로만 실행되는 소프트웨어를 Owner에게 전달하며 "확인해 주세요"를 다음 액션으로 삼지 않는다.
 - Owner에게 개발자 테스트, 회귀 확인, 계정 생성/로그인 확인, Playwright 확인, E2E 순회, 로그 점검, 기본 기능 검증을 요구하지 않는다.
 - CEO와 CXX는 worker를 통해 자체 검증을 계획하고 실행한다: unit test, E2E test, Playwright/browser check, test account, seed data, build/run check, log evidence.

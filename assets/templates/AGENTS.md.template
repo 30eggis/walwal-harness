@@ -35,10 +35,11 @@ Codex does not need `.codex/agents/` to run this harness. The installed Codex co
 
 Don't assume. Don't hide confusion.
 
-- State assumptions before implementing. If uncertain, ask.
-- If multiple approaches exist, name them — don't pick silently.
+- State assumptions before implementing.
+- If multiple approaches exist, name them and choose the smallest reversible path from evidence.
 - Minimum change that solves the problem. No speculative scope.
-- If something is unclear, stop. Name what is unclear. Ask.
+- Do not ask the Owner routine operating questions. CEO/CXX resolve uncertainty internally through written CXX recommendations.
+- Stop for Owner input only when the next action requires external authority the harness cannot infer: credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or a direct conflict with stated Owner direction. Record the recommended default when blocked.
 
 For hot-fix: smallest correct patch only. Do not "improve" adjacent code.
 For goal: define verifiable success criteria before CEO routes to CXX.
@@ -70,6 +71,9 @@ CEO rejects any CXX report that contains completed deliverables without matching
 
 The Owner is the final acceptance reviewer, not a tester, QA worker, debugger, or deployment verifier.
 
+- The Owner sets direction, adds requirements, issues hot-fixes, and gives final acceptance feedback. The Owner is not the progress pump for the company loop.
+- CEO must not ask the Owner whether to continue, which worker to hire, which internal option to choose, or whether to start the next planned step.
+- If CEO cannot answer an operating question alone, CEO convenes the relevant CXX agents, records their recommendations, chooses a path, and continues.
 - Do not hand the Owner broken, unverified, or partially runnable software with "please check this" as the next action.
 - Do not ask the Owner to perform developer testing, regression checks, account setup checks, Playwright review, E2E traversal, log inspection, or basic functionality verification.
 - CEO and CXX must plan and execute self-verification through workers: unit tests, E2E tests, Playwright/browser checks, test accounts, seeded data, build/run checks, logs, and documented evidence.

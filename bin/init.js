@@ -530,7 +530,29 @@ function ensureMissionLifecycleStates(opts = {}) {
 
     for (const mission of group) {
       const statePath = path.join(mission.abs, 'mission-state.json');
-      if (fs.existsSync(statePath)) continue;
+      if (fs.existsSync(statePath)) {
+        const state = readJsonFileSafe(statePath) || {};
+        const lifecycle = state.lifecycle || state.status;
+        const active = state.active === true;
+        const shouldDeactivate =
+          active &&
+          (isTerminalMissionLifecycle(lifecycle) ||
+            (mission.rel.includes('/') &&
+              (mission.type === 'submission' || mission.type === 'hotfix') &&
+              activeChild &&
+              activeChild.rel !== mission.rel));
+        if (shouldDeactivate) {
+          writes.push({
+            path: statePath,
+            state: {
+              ...state,
+              lifecycle: isTerminalMissionLifecycle(lifecycle) ? lifecycle : 'superseded',
+              active: false,
+            },
+          });
+        }
+        continue;
+      }
       const isChild = mission.rel.includes('/');
       const isActive = isChild
         ? activeChild?.rel === mission.rel
@@ -555,7 +577,7 @@ function ensureMissionLifecycleStates(opts = {}) {
     fs.writeFileSync(item.path, JSON.stringify(item.state, null, 2) + '\n');
   }
   if (writes.length) {
-    log(`mission-state.json: ${writes.length}개 기존 mission에 lifecycle 보강`);
+    log(`mission-state.json: ${writes.length}개 기존 mission lifecycle/active 보강`);
   }
   return { missing: writes.length, written: writes.length };
 }
@@ -826,9 +848,9 @@ function ensureHarnessEnv() {
   if (re.test(content)) return;
 
   const prefix = content && !content.endsWith('\n') ? '\n' : '';
-  const block = `${prefix}${content ? '\n' : ''}# Walwal Harness — CEO must agree on a {xx}000 base port with the Owner.\n# Set HARNESS_BASE_PORT before CXX agents allocate any service ports.\n# HARNESS_BASE_PORT=\n`;
+  const block = `${prefix}${content ? '\n' : ''}# Walwal Harness — CEO chooses an available {xx}000 base port unless Owner already specified one.\n# Set HARNESS_BASE_PORT before CXX agents allocate any service ports.\n# HARNESS_BASE_PORT=\n`;
   fs.writeFileSync(envPath, content + block);
-  log('.env: HARNESS_BASE_PORT placeholder added — set value with Owner approval before starting services');
+  log('.env: HARNESS_BASE_PORT placeholder added — CEO/CXX must choose an available value before starting services');
 }
 
 function ensureStructuredRuntimeFiles({ dryRun = false } = {}) {

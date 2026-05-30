@@ -8,6 +8,7 @@ DOC_ROOT="$PROJECT_ROOT/.harness/documents"
 [ -d "$DOC_ROOT" ] || exit 0
 
 mode="${2:-text}"
+scope="${3:-all}"
 violations=()
 
 has_implementation_notes() {
@@ -36,6 +37,40 @@ has_legacy_flat_worker_report() {
 }
 
 mission_dirs=$(find "$DOC_ROOT" -type f \( -name 'ceo.md' -o -name 'coo.md' -o -name 'cdo.md' -o -name 'cto.md' -o -name 'cqo.md' -o -name 'ops.md' \) -exec dirname {} \; 2>/dev/null | sort -u)
+
+mission_mtime() {
+  stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0
+}
+
+is_terminal_lifecycle() {
+  case "$1" in
+    closed|cancelled|superseded|complete|completed|blocked) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+latest_active_mission=""
+if [ "$scope" = "latest-active" ]; then
+  latest_active_mtime=0
+  while IFS= read -r mission_dir; do
+    [ -n "$mission_dir" ] || continue
+    state_path="$mission_dir/mission-state.json"
+    [ -f "$state_path" ] || continue
+    active=$(jq -r '.active // false' "$state_path" 2>/dev/null || echo false)
+    lifecycle=$(jq -r '.lifecycle // .status // "unknown"' "$state_path" 2>/dev/null || echo unknown)
+    if [ "$active" != "true" ] || is_terminal_lifecycle "$lifecycle"; then
+      continue
+    fi
+    mtime=$(mission_mtime "$mission_dir")
+    if [ "${mtime:-0}" -ge "${latest_active_mtime:-0}" ]; then
+      latest_active_mtime="$mtime"
+      latest_active_mission="$mission_dir"
+    fi
+  done <<EOF
+$mission_dirs
+EOF
+  mission_dirs="$latest_active_mission"
+fi
 
 while IFS= read -r mission_dir; do
   [ -n "$mission_dir" ] || continue

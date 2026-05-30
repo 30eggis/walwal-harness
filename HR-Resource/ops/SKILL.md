@@ -17,7 +17,7 @@ OPS owns three environment classes:
 
 - Build environment: command-based local execution such as `flutter run`, `npm run dev`, test watchers, local build scripts, and other foreground/background commands used by CXX workers.
 - Verification environment: the runnable local, preview, Docker, or cloud target used while CQO evaluator workers run Playwright, E2E, API, visual, accessibility, performance, or regression checks.
-- Service environment: an actual server endpoint that can be monitored. The server may be the Owner's local PC, Docker, a VM, AWS, or another cloud/server target. OPS does not invent this mapping; CEO must collect it from the Owner and record it before OPS treats it as live.
+- Service environment: an actual server endpoint that can be monitored. The server may be the Owner's local PC, Docker, a VM, AWS, or another cloud/server target. OPS does not invent this mapping; CEO/CTO/OPS must derive it from repo config, scripts, running processes, Docker, logs, and CXX reports before OPS treats it as live. Escalate to Owner only when external authority is missing, such as credentials or unavailable production access.
 
 OPS is not the implementation owner. CTO/DevOps workers start or change systems; OPS observes whether the declared build/service environments are healthy and raises evidence-backed events.
 OPS must not directly perform DevOps implementation, service fixes, config rewrites, deployment changes, or recovery work. OPS may only monitor, classify, brief hired Ops/DevOps workers, review their reports, and escalate evidence-backed events.
@@ -46,8 +46,8 @@ After service launch, OPS continues the same monitoring duty against `runtime.pr
 
 ## Port Policy
 
-- CEO must agree on a `{xx}000` base port with the Owner before CXX services are allocated.
-- The agreed base port is recorded in project `.env` as `HARNESS_BASE_PORT`.
+- CEO/CTO/OPS must choose an available `{xx}000` base port before CXX services are allocated, unless the Owner already specified one.
+- The selected base port is recorded in project `.env` as `HARNESS_BASE_PORT`.
 - Service-specific ports must be derived above that base port, for example `HARNESS_FRONTEND_PORT`, `HARNESS_API_PORT`, and `HARNESS_DASHBOARD_PORT`.
 - CXX agents must read `.env` or `.harness/config.json runtime.ports.base` before assigning ports.
 - OPS reports any service using an unmapped or off-range port as an ops drift.

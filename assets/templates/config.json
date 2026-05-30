@@ -240,7 +240,7 @@
       "command": ""
     },
     "production": {
-      "comment": "Owner+CEO+CTO 합의로만 services[] 를 수정한다. local/docker/vm/aws/cloud 등 운영 서버 매핑을 Owner에게 받아 기록한다. live=true 이고 services[] 가 있으면 OPS 는 매 hourly review 마다 port/health/log 상태를 운영보고서에 남긴다.",
+      "comment": "CEO+CTO+OPS가 repo config, scripts, running process, Docker, logs, CXX report에서 services[]와 운영 서버 매핑을 우선 도출한다. Owner 입력 대기는 credentials/secrets, unavailable production access, legal/business acceptance 같은 외부 권한이 필요할 때만 허용한다. live=true 이고 services[] 가 있으면 OPS 는 매 hourly review 마다 port/health/log 상태를 운영보고서에 남긴다.",
       "live": false,
       "services": [
         {

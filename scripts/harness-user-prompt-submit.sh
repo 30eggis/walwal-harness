@@ -195,6 +195,8 @@ ${CONTEXT_WARNING}
 - CXX는 직접 전문 산출물을 만들지 않고 worker report를 \`.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/\`에 남겨야 한다
 - Owner에게 "계속 진행", "진행할까요?", "다음 명령을 입력하세요"를 요구하지 않는다. GOAL이 있고 escalation이 아니면 즉시 next_agent/current_agent 업무를 수행한다
 - Owner 입력은 목표 변경·사고·결과 확인용이지 회사 진행을 펌프하는 신호가 아니다
+- CEO가 혼자 결정하기 어려우면 Owner에게 묻지 말고 관련 CXX 회의를 열어 written recommendation 을 받고 결정한다
+- Owner 입력 대기는 credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, stated direction conflict 같은 외부 권한이 필요할 때만 허용한다
 - CEO는 필요한 CXX만 호출하고, CXX는 resource-manager/hiring 없이 worker 업무를 수행하지 않는다
 - 목표 설정/변경 → goal flow | 추가 요구사항 → submission flow | 긴급 수정 → hot-fix flow | 메타 질문 → 짧게 응답 (skip)
 - 활성 pipeline → next_agent/current_agent 컨텍스트로 계속

@@ -31,6 +31,24 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.37 — CEO autonomous decision charter (2026-05-31)
+
+- CEO now has an explicit autonomous operating charter: do not ask the Owner whether to continue, hire workers, choose internal options, or start planned steps.
+- Goal, submission, hot-fix, AGENTS templates, prompt routing, and CEO conventions now require CXX written recommendations when CEO cannot decide alone.
+- OPS port and service mapping policy now derives runtime facts from repo/config/process/log evidence first, escalating to the Owner only for true external authority.
+
+## 7.1.36 — Stop hook active-loop guard + visible heatmap (2026-05-29)
+
+- Stop hook no longer runs worker evidence validation before deciding whether the company loop should chain.
+- Worker evidence validation can be scoped to the newest active mission so legacy/archive mission records cannot keep Stop blocked forever.
+- Dashboard heatmap now uses 10-minute buckets across 24 hours, making activity visible without horizontal scrolling through 1440 minute cells.
+
+## 7.1.35 — Dashboard heatmap mission scoping (2026-05-29)
+
+- Dashboard heatmap samples are now scoped to the selected mission, so worker rows no longer inherit activity from unrelated stale-active missions.
+- Activity recording now chooses the newest active mission when legacy runtime state contains multiple `active:true` mission-state files.
+- Init/migrate now deactivates duplicate active submission/hot-fix children under the same goal instead of only creating missing mission-state files.
+
 ## 7.1.26 — Lazy rule links + MCP steward (2026-05-27)
 
 ### Added
