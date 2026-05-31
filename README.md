@@ -285,6 +285,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
+| 7.1.38 | CEO can approve reversible routine operations without Owner confirmation, including monitoring cadence, local scheduler activation, Telegram briefing formats with existing credentials, dashboard refresh, and consolidation/supersede cleanup |
 | 7.1.37 | Project-local dashboard runtime under `.harness/dashboard/`, unfiltered all-mission heatmap, worker telemetry parsing, and more reliable hourly wake registration/status |
 | 7.1.36 | Stop hook only validates worker evidence while chaining the active loop, scopes validation to the newest active mission, and makes the 24h heatmap visible at 10-minute resolution |
 | 7.1.35 | Fix dashboard heatmap mission scoping, choose the newest active mission for activity recording, and normalize duplicate active child mission states during init/migrate |

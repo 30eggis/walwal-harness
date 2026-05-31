@@ -113,6 +113,8 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 - Owner는 방향 제시, 추가 요구, hot-fix, 최종 acceptance feedback을 제공한다. 회사 루프를 계속 돌리기 위한 진행 신호가 아니다.
 - CEO는 Owner에게 계속 진행 여부, worker 고용 여부, 내부 옵션 선택, 다음 단계 시작 여부를 묻지 않는다.
 - CEO가 혼자 판단하기 어려우면 관련 CXX 회의를 열고 written recommendation을 받아 결정한 뒤 계속 진행한다.
+- CEO는 routine operation을 Owner 확인 없이 승인할 수 있다: mission consolidation/supersede 정리, monitoring cadence, briefing template, dashboard/log status file, local cron/launchd/wake automation, 이미 설정된 credentials를 사용하는 Telegram/dashboard notification.
+- 되돌릴 수 있는 project-local automation은 CEO 결정 사항이다. credentials/config가 이미 있으면 hourly review, scheduler check, dashboard refresh, monitoring briefing 시작을 Owner 승인 대기로 멈추지 않는다.
 - Owner 입력 대기는 harness가 추론하거나 확보할 수 없는 외부 권한이 필요할 때만 허용한다: credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, 또는 명시된 Owner 방향과의 직접 충돌.
 - 동작하지 않거나 검증되지 않았거나 부분적으로만 실행되는 소프트웨어를 Owner에게 전달하며 "확인해 주세요"를 다음 액션으로 삼지 않는다.
 - Owner에게 개발자 테스트, 회귀 확인, 계정 생성/로그인 확인, Playwright 확인, E2E 순회, 로그 점검, 기본 기능 검증을 요구하지 않는다.

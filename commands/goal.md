@@ -24,7 +24,7 @@ Required flow:
 9. CEO must require a Worker Evidence Manifest and worker report paths under `.harness/documents/goal-{goal_index}-{goal_name}/{owning-cxx}/workers/` before accepting CXX completion.
 10. When the goal is accepted, cancelled, superseded, blocked, or closed, update `mission-state.json` to `complete`, `cancelled`, `superseded`, `blocked`, or `closed` and set `active:false`.
 11. Do not invoke internal roles through slash commands; commands are Owner entrypoints only.
-12. Do not ask the Owner whether to continue, hire workers, choose internal options, or start the next step. If CEO cannot decide alone, convene the relevant CXX agents and decide from their written recommendations. Stop only for external authority such as credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or direct conflict with stated Owner direction.
+12. Do not ask the Owner whether to continue, hire workers, choose internal options, or start the next step. If CEO cannot decide alone, convene the relevant CXX agents and decide from their written recommendations. CEO may approve reversible routine operations such as local cron/launchd/wake automation, dashboard refresh, monitoring cadence, Telegram briefing format using existing credentials, and mission consolidation/supersede cleanup. Stop only for external authority such as new credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or direct conflict with stated Owner direction.
 
 Note: A goal is the company's objective. Submissions and hot-fixes that happen while pursuing it should be recorded under that goal directory.
 

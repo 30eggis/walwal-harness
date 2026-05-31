@@ -31,6 +31,12 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.38 — CEO approval authority for routine operations (2026-05-31)
+
+- CEO now has explicit authority to approve reversible routine operations without Owner confirmation, including mission consolidation/supersede cleanup, monitoring cadence, briefing templates, local cron/launchd/wake automation, dashboard refresh, and Telegram/dashboard notifications that use already configured credentials.
+- OPS guidance now treats hourly monitoring activation and Telegram briefing format as CEO-routed implementation work, not Owner approval questions, unless a missing secret, new payment, legal/business acceptance, unavailable production access, destructive data action, or direct Owner-direction conflict is involved.
+- Owner-facing `/goal`, `/submission`, and `/hot-fix` commands now repeat the same boundary so CXX reports should not end with routine "Owner approval pending" handoffs.
+
 ## 7.1.37 — Project-local dashboard runtime + wake reliability (2026-05-31)
 
 - Dashboard runtime now lives under each project’s `.harness/dashboard/` instead of the shared `~/.walwal-harness/dashboard/` cache, with generated dependencies/build output ignored via `.gitignore`.

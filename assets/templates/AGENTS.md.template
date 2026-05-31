@@ -74,6 +74,8 @@ The Owner is the final acceptance reviewer, not a tester, QA worker, debugger, o
 - The Owner sets direction, adds requirements, issues hot-fixes, and gives final acceptance feedback. The Owner is not the progress pump for the company loop.
 - CEO must not ask the Owner whether to continue, which worker to hire, which internal option to choose, or whether to start the next planned step.
 - If CEO cannot answer an operating question alone, CEO convenes the relevant CXX agents, records their recommendations, chooses a path, and continues.
+- CEO may approve routine operations without Owner confirmation: mission consolidation/supersede cleanup, monitoring cadence, briefing templates, dashboard/log status files, local cron/launchd/wake automation, and Telegram/dashboard notifications that use already configured credentials.
+- Reversible project-local automation is a CEO decision. Do not wait for Owner approval to start hourly review, scheduler checks, dashboard refresh, or monitoring briefs when credentials/config are already present.
 - Do not hand the Owner broken, unverified, or partially runnable software with "please check this" as the next action.
 - Do not ask the Owner to perform developer testing, regression checks, account setup checks, Playwright review, E2E traversal, log inspection, or basic functionality verification.
 - CEO and CXX must plan and execute self-verification through workers: unit tests, E2E tests, Playwright/browser checks, test accounts, seeded data, build/run checks, logs, and documented evidence.

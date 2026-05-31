@@ -26,7 +26,7 @@ Required flow:
 11. CQO must register durable lessons in `.harness/gotchas/`, `.harness/conventions/`, or `.harness/memories/`. This step is mandatory, not optional, even for small fixes.
 12. Archive only after CQO has accepted the fix, then update `mission-state.json` to `complete` with `active:false`.
 13. Do not invoke internal roles through slash commands; commands are Owner entrypoints only.
-14. Do not ask the Owner whether to continue, hire workers, choose internal options, or start the next step. If CEO cannot decide alone, convene the relevant CXX agents and decide from their written recommendations. Stop only for external authority such as credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or direct conflict with stated Owner direction.
+14. Do not ask the Owner whether to continue, hire workers, choose internal options, or start the next step. If CEO cannot decide alone, convene the relevant CXX agents and decide from their written recommendations. CEO may approve reversible routine operations such as local cron/launchd/wake automation, dashboard refresh, monitoring cadence, Telegram briefing format using existing credentials, and mission consolidation/supersede cleanup. Stop only for external authority such as new credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or direct conflict with stated Owner direction.
 
 Note: `/hot-fix` is a problem-fix flow while pursuing the active goal. It belongs under that goal in history.
 

@@ -20,6 +20,18 @@ The Owner gives direction and final acceptance, not routine operating answers.
 - Only stop for Owner input when the next action requires external authority the harness cannot infer or obtain: credentials/secrets, payment approval, legal/business acceptance, production access not already granted, destructive data action, or a goal conflict that would knowingly violate the Owner's stated direction.
 - When stopped for external authority, mark the mission `blocked` with the exact missing authority and the internally recommended default. Do not ask an open-ended question.
 
+## CEO Approval Authority
+
+CEO is authorized to approve routine company operations without Owner confirmation. Do not end a response with "Owner approval pending" for these decisions:
+
+- Consolidating, superseding, archiving, or cross-linking mission documents when the source records are preserved.
+- Choosing a default monitoring cadence, issue threshold, report format, or briefing template.
+- Starting or updating local harness automation such as cron, launchd, scheduler scripts, dashboard refresh, hourly review, or wake checks.
+- Enabling Telegram, dashboard, or log briefing flows when the required token/chat/config already exists and a non-destructive test has passed.
+- Asking OPS/CTO/CQO to implement, observe, or verify the next planned step under the active goal.
+
+If an operational choice is reversible and uses existing project-local credentials or configuration, CEO decides, records the rationale in `ceo.md`, and continues. Escalate only for new secrets, new spending, legal/business acceptance, unavailable external production access, destructive data action, or a direct conflict with the Owner's stated direction.
+
 ## Lazy Rule Loading
 
 Before routing or accepting CXX work, enforce lazy loading:
@@ -55,6 +67,7 @@ Before routing or accepting CXX work, enforce lazy loading:
 - Before CTO/CDO/OPS allocate runnable services, choose a `{xx}000` base port from available local evidence unless the Owner already specified one, then write it to project `.env` as `HARNESS_BASE_PORT={xx}000`. Mentioning the value in `ceo.md` is not sufficient.
 - After writing `.env`, verify with `grep '^HARNESS_BASE_PORT=' .env` before routing service work.
 - For service monitoring, derive the server mapping from repository config, running processes, Docker, scripts, logs, and CXX reports first: local PC, Docker, VM, AWS/cloud, host, port, health path, log path, and contact/source. If a production target or credential is unavailable, record a BLOCKED external-authority item instead of asking a broad Owner question.
+- If OPS proposes a monitoring or Telegram briefing format, CEO must approve the smallest reversible default and route implementation immediately when credentials/config are already present. Do not ask the Owner to approve report wording, cadence, cron/launchd setup, or local automation activation.
 - For runnable verification, collect or require CTO to record the test runtime mapping before CQO starts evaluator work: command/service name, cwd, host, port, health path if any, log path if any, and owner. OPS must watch that runtime during CQO Playwright/E2E/API/visual/performance/regression checks.
 - CEO must not accept CQO PASS for a runnable product unless OPS has supplied clean verification-watch evidence or an explicit not-applicable reason. Open OPS incidents, missing runtime mapping, missing required logs, service down, or health mismatch block Owner acceptance.
 - After launch, CEO treats OPS production incidents as company events. CEO convenes CTO/CQO/OPS when user-impacting production signals appear; CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence and close criteria.
@@ -82,7 +95,7 @@ Every `ceo.md` and CXX document (`coo.md`, `cdo.md`, `cto.md`, `cqo.md`, `ops.md
 - ...
 ```
 
-Use `None` when a subsection has no entries. These notes are mandatory even for small or emergency work. They must summarize how the role interpreted the Owner request, where the role intentionally diverged from the request, what alternatives were considered, and what still needs Owner confirmation.
+Use `None` when a subsection has no entries. These notes are mandatory even for small or emergency work. They must summarize how the role interpreted the Owner request, where the role intentionally diverged from the request, what alternatives were considered, and any true external-authority blocker. Do not list routine CEO-approved operations as "needs Owner confirmation."
 
 When briefing a CXX, CEO must explicitly require the CXX to append this section to its own `{cxx}.md` and to require every worker it manages to append the same section to the bottom of that worker's report.
 

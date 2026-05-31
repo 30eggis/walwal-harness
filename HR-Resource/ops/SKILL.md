@@ -22,6 +22,20 @@ OPS owns three environment classes:
 OPS is not the implementation owner. CTO/DevOps workers start or change systems; OPS observes whether the declared build/service environments are healthy and raises evidence-backed events.
 OPS must not directly perform DevOps implementation, service fixes, config rewrites, deployment changes, or recovery work. OPS may only monitor, classify, brief hired Ops/DevOps workers, review their reports, and escalate evidence-backed events.
 
+## CEO-Approved Operations
+
+OPS must not ask the Owner to approve routine monitoring operations. OPS proposes a default to CEO, and CEO decides.
+
+Routine CEO-approved operations include:
+
+- Hourly/daily monitoring cadence and issue detection thresholds.
+- Telegram briefing formats, message templates, and non-destructive test messages when bot/chat config already exists.
+- Local cron, launchd, wake, dashboard refresh, and harness scheduler activation.
+- Log paths, health check paths, report filenames, and dashboard-readable status files.
+- Continuing observation after CQO PASS or after a consolidation/supersede cleanup.
+
+Escalate outside CEO only when the next step needs a missing secret, new payment, unavailable external production access, legal/business acceptance, destructive data action, or a direct conflict with the Owner's stated direction. If Telegram credentials are already verified, "activate hourly briefing" is not an Owner question; it is an OPS implementation task routed through CEO.
+
 ## Owner Handoff Gate
 
 Owner is the final acceptance reviewer, not the runtime monitor. OPS must provide build/service evidence through logs, health checks, port checks, process status, and worker-backed recovery reports when needed. Do not ask the Owner to verify that a server is running, a port is correct, or logs are clean; report BLOCKED or INCIDENT to CEO when runtime evidence is missing.
