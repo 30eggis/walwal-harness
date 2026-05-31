@@ -2,8 +2,8 @@
 # walwal-harness — Brick Office dashboard launcher
 #
 # 처음 쓰는 사용자도 한 줄로 대시보드를 띄워볼 수 있게 만든 helper.
-# npm 패키지에 포함된 apps/harness-dashboard 를 사용자 프로젝트 외부
-# (~/.walwal-harness/dashboard/<project-key>) 에 격리 복사 후 dev 실행한다.
+# npm 패키지에 포함된 apps/harness-dashboard 를 프로젝트별 runtime 영역
+# (.harness/dashboard/) 에 복사 후 dev 실행한다.
 # 구버전 호환을 위해 패키지에 dashboard 가 없으면 git sparse-checkout 으로 fallback 한다.
 #
 # Usage:
@@ -38,9 +38,7 @@ if [[ ! -d "${HARNESS_ROOT}/.harness" ]]; then
   exit 3
 fi
 
-PROJECT_KEY="$(printf '%s' "${HARNESS_ROOT}" | shasum -a 1 | awk '{print substr($1,1,12)}')"
-PROJECT_NAME="$(basename "${HARNESS_ROOT}")"
-LOCAL_DIR="${HOME}/.walwal-harness/dashboard/${PROJECT_NAME}-${PROJECT_KEY}"
+LOCAL_DIR="${HARNESS_ROOT}/.harness/dashboard"
 VERSION_FILE="${LOCAL_DIR}/.walwal-dashboard-version"
 
 PACKAGE_ROOT="${HARNESS_ROOT}/node_modules/@walwal-harness/cli"
@@ -53,8 +51,33 @@ if [[ "$REINSTALL" == "true" ]]; then
   rm -rf "$LOCAL_DIR"
 fi
 
+ensure_gitignore() {
+  local gitignore="${HARNESS_ROOT}/.gitignore"
+  local marker="# walwal-harness dashboard runtime"
+  local block
+  block="$(cat <<'EOF'
+# walwal-harness dashboard runtime
+.harness/dashboard/apps/harness-dashboard/node_modules/
+.harness/dashboard/apps/harness-dashboard/.next/
+.harness/dashboard/apps/harness-dashboard/.turbo/
+.harness/dashboard/apps/harness-dashboard/tsconfig.tsbuildinfo
+.harness/dashboard/.download/
+EOF
+)"
+  if [[ -f "$gitignore" ]] && grep -Fq "$marker" "$gitignore"; then
+    return
+  fi
+  mkdir -p "$(dirname "$gitignore")"
+  if [[ -s "$gitignore" ]] && [[ "$(tail -c 1 "$gitignore" 2>/dev/null || true)" != "" ]]; then
+    printf '\n' >> "$gitignore"
+  fi
+  printf '%s\n' "$block" >> "$gitignore"
+}
+
+ensure_gitignore
+
 echo "[brick-office] HARNESS_ROOT = ${HARNESS_ROOT}"
-echo "[brick-office] dashboard 격리 경로 = ${LOCAL_DIR}"
+echo "[brick-office] dashboard runtime path = ${LOCAL_DIR}"
 
 if [[ -d "${PACKAGED_DASHBOARD}" ]]; then
   INSTALLED_VERSION=""
@@ -70,14 +93,19 @@ if [[ -d "${PACKAGED_DASHBOARD}" ]]; then
   fi
 elif [[ ! -d "${LOCAL_DIR}/${DASHBOARD_PATH}" ]]; then
   echo "[brick-office] 첫 실행 — git sparse-checkout 으로 dashboard 만 가져옵니다 (~5MB)."
-  mkdir -p "${LOCAL_DIR}"
-  cd "${LOCAL_DIR}"
+  rm -rf "${LOCAL_DIR}/.download"
+  mkdir -p "${LOCAL_DIR}/.download"
+  cd "${LOCAL_DIR}/.download"
   git init -q
   git remote add origin "${REPO_URL}" 2>/dev/null || true
   git config core.sparseCheckout true
   echo "${DASHBOARD_PATH}/" > .git/info/sparse-checkout
   git fetch --depth=1 origin main -q
   git checkout main -q
+  mkdir -p "${LOCAL_DIR}/apps"
+  rm -rf "${LOCAL_DIR:?}/${DASHBOARD_PATH}"
+  cp -R "${DASHBOARD_PATH}" "${LOCAL_DIR}/apps/"
+  rm -rf "${LOCAL_DIR}/.download"
   echo "[brick-office] 다운로드 완료."
 fi
 

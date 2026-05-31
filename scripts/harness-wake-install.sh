@@ -26,6 +26,28 @@ LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 PLIST_NAME="com.walwal.harness-wake"
 PLIST_PATH="$LAUNCH_AGENTS_DIR/$PLIST_NAME.plist"
 
+launch_domain() {
+  echo "gui/$(id -u)"
+}
+
+launch_is_loaded() {
+  local domain
+  domain="$(launch_domain)"
+  launchctl print "$domain/$PLIST_NAME" >/dev/null 2>&1
+}
+
+launch_unload() {
+  local domain
+  domain="$(launch_domain)"
+  launchctl bootout "$domain" "$PLIST_PATH" >/dev/null 2>&1 || launchctl unload "$PLIST_PATH" 2>/dev/null || true
+}
+
+launch_load() {
+  local domain
+  domain="$(launch_domain)"
+  launchctl bootstrap "$domain" "$PLIST_PATH" >/dev/null 2>&1 || launchctl load "$PLIST_PATH" 2>/dev/null
+}
+
 # 템플릿 위치 후보 — walwal-harness 패키지 안일 수도, 프로젝트 안일 수도.
 detect_template() {
   local candidates=(
@@ -39,8 +61,8 @@ detect_template() {
 }
 
 ensure_dirs() {
-  mkdir -p "$HARNESS_DIR" "$LOG_DIR" "$LAUNCH_AGENTS_DIR"
-  touch "$PROJECTS_LIST"
+  mkdir -p "$HARNESS_DIR" "$LOG_DIR" "$LAUNCH_AGENTS_DIR" || return 1
+  touch "$PROJECTS_LIST" || return 1
 }
 
 abs_path() {
@@ -53,19 +75,32 @@ abs_path() {
 }
 
 cmd_add() {
-  ensure_dirs
+  ensure_dirs || {
+    echo "[wake] ERROR: cannot prepare $HARNESS_DIR" >&2
+    return 1
+  }
   local project
   project=$(abs_path "$1")
   if grep -Fxq "$project" "$PROJECTS_LIST" 2>/dev/null; then
     echo "[wake] already registered: $project"
     return 0
   fi
-  echo "$project" >> "$PROJECTS_LIST"
+  echo "$project" >> "$PROJECTS_LIST" || {
+    echo "[wake] ERROR: cannot write $PROJECTS_LIST" >&2
+    return 1
+  }
+  if ! grep -Fxq "$project" "$PROJECTS_LIST" 2>/dev/null; then
+    echo "[wake] ERROR: registration did not persist: $project" >&2
+    return 1
+  fi
   echo "[wake] added: $project"
 }
 
 cmd_remove() {
-  ensure_dirs
+  ensure_dirs || {
+    echo "[wake] ERROR: cannot prepare $HARNESS_DIR" >&2
+    return 1
+  }
   local project
   project=$(abs_path "$1")
   if ! grep -Fxq "$project" "$PROJECTS_LIST" 2>/dev/null; then
@@ -80,7 +115,10 @@ cmd_remove() {
 }
 
 cmd_list() {
-  ensure_dirs
+  ensure_dirs || {
+    echo "[wake] ERROR: cannot prepare $HARNESS_DIR" >&2
+    return 1
+  }
   if [ ! -s "$PROJECTS_LIST" ]; then
     echo "(empty)"
     return 0
@@ -89,28 +127,41 @@ cmd_list() {
 }
 
 cmd_status() {
+  ensure_dirs || {
+    echo "[wake] ERROR: cannot prepare $HARNESS_DIR" >&2
+    return 1
+  }
+  local loaded=1
   if [ -f "$PLIST_PATH" ]; then
     echo "[wake] plist: $PLIST_PATH (exists)"
   else
     echo "[wake] plist: $PLIST_PATH (NOT installed)"
   fi
-  if launchctl list 2>/dev/null | grep -q "$PLIST_NAME"; then
+  if launch_is_loaded; then
+    loaded=0
     echo "[wake] launchd: loaded"
-    launchctl list | awk -v n="$PLIST_NAME" '$3==n {print "        pid="$1" exit="$2" label="$3}'
+    launchctl print "$(launch_domain)/$PLIST_NAME" 2>/dev/null | awk '
+      /state =/ {print "        " $0}
+      /run interval =/ {print "        " $0}
+      /runs =/ {print "        " $0}
+    '
   else
     echo "[wake] launchd: NOT loaded"
   fi
   echo "[wake] projects:"
   cmd_list | sed 's/^/        /'
+  return "$loaded"
 }
 
 cmd_install() {
-  ensure_dirs
+  ensure_dirs || {
+    echo "[wake] ERROR: cannot prepare $HARNESS_DIR" >&2
+    return 1
+  }
 
   # 추가 인자가 있으면 add
-  shift_count=0
   for p in "$@"; do
-    cmd_add "$p"
+    cmd_add "$p" || return 1
   done
 
   local template
@@ -127,22 +178,24 @@ cmd_install() {
     "$template" > "$PLIST_PATH"
 
   # 기존 jobs 언로드 (idempotent)
-  launchctl unload "$PLIST_PATH" 2>/dev/null || true
+  launch_unload
 
   # 로드
-  if launchctl load "$PLIST_PATH" 2>/dev/null; then
+  local loaded=1
+  if launch_load; then
+    loaded=0
     echo "[wake] launchd loaded: $PLIST_PATH"
   else
     echo "[wake] WARN: launchctl load 실패. 다음 명령으로 직접 시도해 보세요:" >&2
     echo "         launchctl load $PLIST_PATH" >&2
   fi
 
-  cmd_status
+  cmd_status || return "$loaded"
 }
 
 cmd_uninstall() {
   if [ -f "$PLIST_PATH" ]; then
-    launchctl unload "$PLIST_PATH" 2>/dev/null || true
+    launch_unload
     rm -f "$PLIST_PATH"
     echo "[wake] uninstalled: $PLIST_PATH"
   else

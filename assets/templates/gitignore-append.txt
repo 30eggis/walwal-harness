@@ -1,1 +1,6 @@
-# For consumer projects, add .worktrees/ to .gitignore
+# walwal-harness dashboard runtime
+.harness/dashboard/apps/harness-dashboard/node_modules/
+.harness/dashboard/apps/harness-dashboard/.next/
+.harness/dashboard/apps/harness-dashboard/.turbo/
+.harness/dashboard/apps/harness-dashboard/tsconfig.tsbuildinfo
+.harness/dashboard/.download/

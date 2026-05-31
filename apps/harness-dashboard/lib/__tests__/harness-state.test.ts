@@ -382,7 +382,7 @@ describe("readHarnessState", () => {
     });
   });
 
-  it("keeps recently written docmeta worker reports active without an explicit COMPLETE marker", () => {
+  it("does not treat a recently written docmeta draft as live worker activity without runtime state", () => {
     const harnessDir = path.join(dir, ".harness");
     const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
     mkdirSync(path.join(missionDir, "cto", "workers"), { recursive: true });
@@ -403,9 +403,42 @@ describe("readHarnessState", () => {
     const workers = readHarnessState(dir).missions[0].workers;
     expect(workers[0]).toMatchObject({
       name: "frontend-worker",
-      status: "IN_PROGRESS",
-      active: true,
+      status: "COMPLETE",
+      active: false,
     });
+  });
+
+  it("reads manual worker telemetry with name, progress, eta, and report_path", () => {
+    const harnessDir = path.join(dir, ".harness");
+    mkdirSync(harnessDir, { recursive: true });
+    writeFileSync(
+      path.join(harnessDir, "progress.json"),
+      JSON.stringify({
+        agent_status: "running",
+        company_state: {
+          active_workers: 2,
+          workers: [
+            {
+              name: "frontend-engineer-multi-strategy",
+              status: "running",
+              progress: "70%",
+              eta: "2026-05-31 17:00",
+              report_path: ".harness/documents/goal-1/cto/workers/frontend-engineer-multi-strategy.md",
+            },
+          ],
+        },
+      })
+    );
+
+    const worker = readHarnessState(dir).dashboard.workers[0];
+    expect(worker).toMatchObject({
+      agent: "frontend-engineer-multi-strategy",
+      feature: "frontend-engineer-multi-strategy",
+      status: "running",
+      log: ".harness/documents/goal-1/cto/workers/frontend-engineer-multi-strategy.md",
+      progress: 0.7,
+    });
+    expect(worker.summary).toContain("2026-05-31 17:00");
   });
 
   it("accepts keyed company_state.workers maps from manual CXX telemetry", () => {

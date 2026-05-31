@@ -31,11 +31,12 @@ docmeta:
 
 ## Unreleased
 
-## 7.1.37 — CEO autonomous decision charter (2026-05-31)
+## 7.1.37 — Project-local dashboard runtime + wake reliability (2026-05-31)
 
-- CEO now has an explicit autonomous operating charter: do not ask the Owner whether to continue, hire workers, choose internal options, or start planned steps.
-- Goal, submission, hot-fix, AGENTS templates, prompt routing, and CEO conventions now require CXX written recommendations when CEO cannot decide alone.
-- OPS port and service mapping policy now derives runtime facts from repo/config/process/log evidence first, escalating to the Owner only for true external authority.
+- Dashboard runtime now lives under each project’s `.harness/dashboard/` instead of the shared `~/.walwal-harness/dashboard/` cache, with generated dependencies/build output ignored via `.gitignore`.
+- Dashboard heatmap is no longer filtered by the selected goal/submission/hot-fix; it shows all recorded activity while still preserving mission IDs on active cells.
+- Dashboard worker parsing now accepts `name`, `progress`, `eta`, and `report_path` telemetry and no longer treats docmeta-only report drafts as proof of live worker activity.
+- Init/migrate now best-effort registers the project with the hourly wake scheduler, and wake status now uses the macOS `launchctl print gui/$UID/...` state to avoid false `NOT loaded` reports.
 
 ## 7.1.36 — Stop hook active-loop guard + visible heatmap (2026-05-29)
 

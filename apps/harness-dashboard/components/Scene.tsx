@@ -116,7 +116,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     );
   }, [snapshot.missions, selectedGoal]);
 
-  const lanes = useMemo(() => buildLanes(snapshot, selectedMission), [selectedMission, snapshot]);
+  const lanes = useMemo(() => buildLanes(snapshot), [snapshot]);
   const heatmapStartedAt = useMemo(() => Date.now() - VISIBLE_BUCKETS * BUCKET_MS, [snapshot.ts]);
   const persistedHeatSamples = useMemo<HeatSample[]>(
     () =>
@@ -130,13 +130,13 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     [snapshot.activitySamples]
   );
   const [heatSamples, setHeatSamples] = useState<HeatSample[]>([]);
-  const sampleSourceRef = useRef({ lanes, snapshot, selectedMission });
+  const sampleSourceRef = useRef({ lanes, snapshot });
   useEffect(() => {
-    sampleSourceRef.current = { lanes, snapshot, selectedMission };
-  });
+    sampleSourceRef.current = { lanes, snapshot };
+  }, [lanes, snapshot]);
   useEffect(() => {
     const tick = () => {
-      const { lanes, snapshot, selectedMission } = sampleSourceRef.current;
+      const { lanes, snapshot } = sampleSourceRef.current;
       // Gate live samples on the harness runtime — once the session reports
       // completion (or there's no current/next agent), every "active" signal
       // is stale (todos stay status="active", worker mtimes stay recent), so
@@ -156,7 +156,7 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
       }
       setHeatSamples((prev) => {
         const now = Date.now();
-        const activeMission = selectedMission ?? snapshot.missions[0] ?? null;
+        const activeMission = snapshot.missions.find((mission) => mission.active) ?? snapshot.missions[0] ?? null;
         const next: HeatSample[] = [];
         for (const lane of lanes) {
           // Live overlay records active work only. Historical participation is
@@ -204,10 +204,10 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     () => buildHeatmap(
       snapshot,
       lanes,
-      filterHeatSamplesForMission([...persistedHeatSamples, ...heatSamples], selectedMission),
+      [...persistedHeatSamples, ...heatSamples],
       heatmapStartedAt
     ),
-    [heatSamples, heatmapStartedAt, lanes, persistedHeatSamples, selectedMission, snapshot]
+    [heatSamples, heatmapStartedAt, lanes, persistedHeatSamples, snapshot]
   );
   const [selectedLaneId, setSelectedLaneId] = useState(lanes[0]?.id ?? "ceo");
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -1806,14 +1806,39 @@ function heatColor(count: number) {
 
 // ===== Lane / Heatmap builders =====
 
-function buildLanes(snapshot: HarnessSnapshot, selectedMission: MissionDoc | null): AgentLane[] {
-  const activeMission = selectedMission ?? snapshot.missions[0] ?? null;
+function buildLanes(snapshot: HarnessSnapshot): AgentLane[] {
+  const activeMission = snapshot.missions.find((mission) => mission.active) ?? snapshot.missions[0] ?? null;
+  const workersByRole = new Map<CxxRole, Array<{ worker: WorkerDocEntry; mission: MissionDoc }>>();
+  for (const role of CXX_ROLES) workersByRole.set(role, []);
+
+  const workerIndex = new Map<string, { worker: WorkerDocEntry; mission: MissionDoc }>();
+  for (const mission of snapshot.missions) {
+    for (const worker of mission.workers) {
+      if (!CXX_ROLES.includes(worker.owner as CxxRole)) continue;
+      const role = worker.owner as CxxRole;
+      const key = `${role}:${worker.name}`;
+      const existing = workerIndex.get(key);
+      if (
+        !existing ||
+        (!existing.worker.active && worker.active) ||
+        (existing.worker.status === "COMPLETE" && worker.status !== "COMPLETE")
+      ) {
+        workerIndex.set(key, { worker, mission });
+      }
+    }
+  }
+
+  for (const entry of workerIndex.values()) {
+    workersByRole.get(entry.worker.owner as CxxRole)?.push(entry);
+  }
+
   // CXX → its workers, then next CXX → its workers (proper hierarchy).
   // No cap: heatmap container scrolls vertically so OPS at the bottom is always
   // reachable even when upstream CXX bring many workers.
   const lanes: AgentLane[] = [];
   for (const role of CXX_ROLES) {
-    const workers = activeMission?.workers.filter((w) => w.owner === role) ?? [];
+    const workerEntries = workersByRole.get(role) ?? [];
+    const workers = workerEntries.map((entry) => entry.worker);
     const todos = snapshot.todos.filter((t) => t.owner === role);
     const hasError =
       (role === "ops" && snapshot.incidents.length > 0) ||
@@ -1832,7 +1857,7 @@ function buildLanes(snapshot: HarnessSnapshot, selectedMission: MissionDoc | nul
       workers,
       mission: activeMission,
     });
-    for (const worker of workers) {
+    for (const { worker, mission } of workerEntries) {
       lanes.push({
         id: `${role}:${worker.name}`,
         label: `└ ${worker.displayName.slice(0, 16)}`,
@@ -1843,22 +1868,11 @@ function buildLanes(snapshot: HarnessSnapshot, selectedMission: MissionDoc | nul
         todos: 0,
         workers: [],
         worker,
-        mission: activeMission,
+        mission,
       });
     }
   }
   return lanes;
-}
-
-function filterHeatSamplesForMission(samples: HeatSample[], selectedMission: MissionDoc | null) {
-  if (!selectedMission) return samples;
-  return samples.filter((sample) => {
-    if (sample.missionId) return sample.missionId === selectedMission.missionId;
-    // Legacy CXX samples from progress.log did not carry a mission id. Keep
-    // role-level history, but do not project legacy worker rows onto unrelated
-    // mission-specific worker lanes.
-    return !sample.laneId.includes(":");
-  });
 }
 
 function buildHeatmap(

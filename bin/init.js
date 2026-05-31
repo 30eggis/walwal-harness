@@ -963,6 +963,27 @@ function refreshScriptsForMigrate({ dryRun = false, backupDir = null } = {}) {
   chmodShellScripts(scriptsDest);
 }
 
+function ensureWakeScheduler({ dryRun = false } = {}) {
+  const wakeInstall = path.join(PROJECT_ROOT, 'scripts', 'harness-wake-install.sh');
+  if (!fs.existsSync(wakeInstall)) return;
+
+  log('  wake scheduler: project registration + launchd load check');
+  if (dryRun) return;
+
+  try {
+    execSync(`bash ${shellQuote(wakeInstall)} install ${shellQuote(PROJECT_ROOT)}`, {
+      cwd: PROJECT_ROOT,
+      stdio: 'pipe',
+      timeout: 15000,
+    });
+    log('  wake scheduler: registered');
+  } catch (e) {
+    const detail = String(e?.stderr || e?.message || '').trim().split('\n').slice(-1)[0];
+    log(`  wake scheduler: registration skipped (${detail || 'install command failed'})`);
+    log('  wake scheduler: run manually if needed: bash scripts/harness-wake-install.sh install .');
+  }
+}
+
 function migrateActivityHistory({ dryRun = false } = {}) {
   const recorder = path.join(PROJECT_ROOT, 'scripts', 'harness-activity-record.js');
   if (!fs.existsSync(recorder)) return;
@@ -2032,6 +2053,7 @@ function runMigrate(opts = {}) {
   // Runtime scripts are package-owned. Migrate must refresh them so existing
   // projects receive wake/meeting/OPS fixes without requiring a full init.
   refreshScriptsForMigrate({ dryRun, backupDir });
+  ensureWakeScheduler({ dryRun });
   migrateActivityHistory({ dryRun });
   updateRuleRegistryLinks(flags.ruleRegistryLinks || [], { dryRun, backupDir });
 
@@ -2600,6 +2622,7 @@ function main() {
   scaffoldHarness();
   installSkills();
   installScripts();
+  ensureWakeScheduler();
   installCommands();
   installSessionHook();
   installStatusline();

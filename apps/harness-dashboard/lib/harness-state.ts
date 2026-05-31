@@ -45,7 +45,6 @@ import type {
 
 const SNAPSHOT_VERSION = "1.2.0";
 const GOAL_DESC_TRUNCATE = 200;
-const RECENT_WORKER_ACTIVE_MS = 10 * 60 * 1000;
 const ACTIVITY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 interface RawProgress {
@@ -148,22 +147,31 @@ interface RawProgress {
   company_state?: {
     active_workers?: number;
     workers?: Array<{
+      name?: string;
       team?: number | string;
       feature?: string;
       agent?: string;
       phase?: string;
       prompt?: string | null;
       log?: string | null;
+      report?: string | null;
+      report_path?: string | null;
+      progress?: string | number | null;
+      eta?: string | null;
       spawn_status?: string;
       status?: string;
       pid?: number | null;
     }> | Record<string, {
+      name?: string;
       team?: number | string;
       feature?: string;
       agent?: string;
       phase?: string;
       prompt?: string | null;
       log?: string | null;
+      report_path?: string | null;
+      progress?: string | number | null;
+      eta?: string | null;
       spawn_status?: string;
       status?: string;
       pid?: number | null;
@@ -797,6 +805,7 @@ function readFeatureTitles(rootDir: string): Map<string, string> {
 }
 
 interface RawWorker {
+  name?: string;
   team?: number | string;
   feature?: string;
   agent?: string;
@@ -808,6 +817,9 @@ interface RawWorker {
   pid?: number | null;
   owner?: string;
   report?: string | null;
+  report_path?: string | null;
+  progress?: string | number | null;
+  eta?: string | null;
 }
 type WorkerOwner = WorkerDocEntry["owner"];
 
@@ -859,6 +871,14 @@ function readMissionState(missionPath: string): {
 }
 
 function deriveWorkerProgress(worker: RawWorker): number | null {
+  const explicit = worker?.progress;
+  if (typeof explicit === "number" && Number.isFinite(explicit)) {
+    return explicit > 1 ? Math.max(0, Math.min(1, explicit / 100)) : Math.max(0, Math.min(1, explicit));
+  }
+  if (typeof explicit === "string") {
+    const match = explicit.match(/(\d+(?:\.\d+)?)/);
+    if (match) return Math.max(0, Math.min(1, Number(match[1]) / 100));
+  }
   const status = (worker?.status ?? worker?.spawn_status ?? "").toLowerCase();
   if (status === "blocked" || status === "failed") return 0.35;
   if (status === "recorded") return 0.15;
@@ -868,17 +888,24 @@ function deriveWorkerProgress(worker: RawWorker): number | null {
 }
 
 function normalizeRawWorkers(value: RawWorker[] | Record<string, RawWorker> | null | undefined): RawWorker[] {
-  if (Array.isArray(value)) return value;
+  const normalizeOne = (worker: RawWorker, fallbackName: string | null = null, idx = 0): RawWorker => {
+    const name = worker.name ?? worker.agent ?? worker.feature ?? fallbackName ?? `worker-${idx + 1}`;
+    const report = worker.report ?? worker.report_path ?? null;
+    return {
+      ...worker,
+      name,
+      team: worker.team ?? idx + 1,
+      agent: worker.agent ?? name,
+      feature: worker.feature ?? name,
+      log: worker.log ?? report,
+      report,
+    };
+  };
+  if (Array.isArray(value)) return value.map((worker, idx) => normalizeOne(worker, null, idx));
   if (!value || typeof value !== "object") return [];
   return Object.entries(value).map(([name, worker], idx) => {
     const w = worker && typeof worker === "object" ? worker : {};
-    return {
-      ...w,
-      team: (w as RawWorker).team ?? idx + 1,
-      agent: (w as RawWorker).agent ?? name,
-      feature: (w as RawWorker).feature ?? name,
-      log: (w as RawWorker).log ?? (w as RawWorker & { report?: string | null }).report ?? null,
-    };
+    return normalizeOne(w as RawWorker, name, idx);
   });
 }
 
@@ -911,7 +938,8 @@ function buildWorkers(rootDir: string, progress: RawProgress | null): WorkerSnap
     const feature = w.feature ?? `worker-${idx + 1}`;
     const promptText = w.prompt ? readTextSafe(path.join(rootDir, w.prompt)) : null;
     const logText = w.log ? readTextSafe(path.join(rootDir, w.log)) : null;
-    const summarySource = firstLine(logText) || firstLine(promptText) || `${w.agent ?? "worker"} assigned`;
+    const eta = w.eta ? ` ETA ${w.eta}` : "";
+    const summarySource = firstLine(logText) || firstLine(promptText) || `${w.agent ?? w.name ?? "worker"} ${w.status ?? "assigned"}${eta}`;
     const material = w.prompt ?? w.log ?? null;
     const rawStatus = (w.status ?? w.spawn_status ?? "unknown").toLowerCase();
     const status = ["spawned", "recorded", "running", "idle", "blocked"].includes(rawStatus)
@@ -1036,13 +1064,13 @@ function activeWorkerNames(progress: RawProgress | null): Set<string> {
   if (isHarnessRuntimeIdle(progress)) return active;
   const workers = [
     ...normalizeRawWorkers(progress?.company_state?.workers),
-    ...(progress?.company_state?.last_dispatch ?? []),
+    ...normalizeRawWorkers(progress?.company_state?.last_dispatch),
   ];
   for (const worker of workers) {
     const rawStatus = (worker.status ?? worker.spawn_status ?? "").toLowerCase();
     if (["complete", "completed", "done", "idle"].includes(rawStatus)) continue;
-    for (const value of [worker.agent, worker.feature]) {
-      const normalized = normalizeWorkerName(value);
+    for (const value of [worker.name, worker.agent, worker.feature, worker.report, worker.report_path, worker.log]) {
+      const normalized = normalizeWorkerName(value && /[\\/]/.test(value) ? path.basename(value) : value);
       if (normalized) active.add(normalized);
     }
   }
@@ -1262,21 +1290,17 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
             const name = normalizeWorkerName(f);
             const hired = hiredForMission(hiredWorkers, name, owner, rel);
             let updatedAt: string | null = null;
-            let recentlyTouched = false;
             try {
               const mtime = statSync(reportAbs).mtime;
               updatedAt = mtime.toISOString();
-              recentlyTouched = Date.now() - mtime.getTime() < RECENT_WORKER_ACTIVE_MS;
             } catch { /* ignore */ }
             const statusMatch = content.match(/##\s*Status\s*\n+([A-Z_]+)/);
             const hasDocmeta = /^---[\s\S]*?docmeta:[\s\S]*?---/.test(content);
-            // Worker docs often write docmeta before appending final evidence.
-            // Without an explicit COMPLETE marker, keep recent writes visible as
-            // active; after the activity window they become historical reports.
+            // Runtime state is the source of truth for live activity. A
+            // recently touched docmeta-only draft is not enough to prove that a
+            // detached worker session is still running.
             const status: WorkerDocEntry["status"] = statusMatch
               ? (statusMatch[1] as WorkerDocEntry["status"])
-              : hasDocmeta && recentlyTouched && !runtimeIdle
-              ? "IN_PROGRESS"
               : hasDocmeta
               ? "COMPLETE"
               : "unknown";

@@ -164,7 +164,7 @@ Run on a different port:
 bash scripts/harness-dashboard-up.sh --port 3002
 ```
 
-Force-refresh the isolated dashboard cache when an older dashboard is still shown:
+Force-refresh the project-local dashboard runtime when an older dashboard is still shown:
 
 ```bash
 bash scripts/harness-dashboard-up.sh --port 3002 --reinstall
@@ -175,7 +175,9 @@ Dashboard options:
 | Option | Role |
 |---|---|
 | `--port <port>` | Run Brick Office on a custom port, e.g. `3002` |
-| `--reinstall` | Delete and rebuild the isolated dashboard cache under `~/.walwal-harness/dashboard/` |
+| `--reinstall` | Delete and rebuild the project-local dashboard runtime under `.harness/dashboard/` |
+
+The dashboard app copy lives under `.harness/dashboard/` for the current project. Generated dependencies and build output are ignored via `.gitignore`; the runtime files the dashboard reads remain the normal `.harness/` files.
 
 ### Company Auto-Chain State
 
@@ -283,7 +285,7 @@ harness-hiring           → register and onboard worker
 
 | Version | Summary |
 |---|---|
-| 7.1.37 | Adds CEO autonomous decision charter, prevents routine Owner progress questions, and limits Owner waits to true external-authority blocks |
+| 7.1.37 | Project-local dashboard runtime under `.harness/dashboard/`, unfiltered all-mission heatmap, worker telemetry parsing, and more reliable hourly wake registration/status |
 | 7.1.36 | Stop hook only validates worker evidence while chaining the active loop, scopes validation to the newest active mission, and makes the 24h heatmap visible at 10-minute resolution |
 | 7.1.35 | Fix dashboard heatmap mission scoping, choose the newest active mission for activity recording, and normalize duplicate active child mission states during init/migrate |
 | 7.1.34 | Fix dashboard 500 when `company_state.workers` is recorded as a keyed worker map instead of an array |
