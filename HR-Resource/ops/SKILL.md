@@ -84,6 +84,14 @@ After service launch, OPS continues the same monitoring duty against `runtime.pr
 
 Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
 
+## Browser Automation Briefing
+
+Every OPS worker brief that may use Playwright, browser automation, browser-based monitoring, E2E, or visual/runtime verification must explicitly include this requirement:
+
+> Run Playwright/browser automation with a visible browser. Set `headless: false` in launch/config code, use headed test mode (`--headed`, `PWDEBUG=1`, or equivalent), prefer `channel: 'chrome'` when available, and do not use headless mode unless the Owner has explicitly approved an exception in this mission.
+
+OPS must not accept worker plans or reports that omit this requirement when browser automation is in scope.
+
 ## Required Output Sections
 
 1. Worker Task Briefs — monitoring/recovery task, capability needed, selected worker or hiring request, acceptance criteria.

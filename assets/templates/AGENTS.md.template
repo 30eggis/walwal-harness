@@ -141,7 +141,21 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 
 ---
 
-## 7. Hard Rules
+## 7. Browser Automation
+
+All Playwright usage by CEO, CXX, and hired workers must run with a visible real browser window.
+
+- Use `headless: false` in Playwright launch/config code.
+- Use headed mode for Playwright test runs (`--headed`, `PWDEBUG=1`, or equivalent config).
+- Prefer `channel: 'chrome'` when the installed Chrome browser is available.
+- Do not add, recommend, or rely on headless Playwright execution unless the Owner explicitly approves an exception.
+- CTO and OPS must explicitly inject the `headless: false` requirement into every worker brief that may involve Playwright, browser automation, E2E, visual checks, or browser-based monitoring.
+- When browser actions should be observable, add a reasonable `slowMo` value or equivalent step pacing.
+- CQO evaluator evidence must note that the Playwright/browser run was headed or visible.
+
+---
+
+## 8. Hard Rules
 
 1. **No source edit without `{mission}/cto.md`** — CTO scope sign-off is required before any source file is modified.
 2. **No CXX impersonation** — The active model must not act as CEO/CTO/CQO inline. Use installed harness skills in fresh sessions.
@@ -160,10 +174,11 @@ Note: A docmeta skip decision on harness documents (ceo.md, cto.md, cqo.md, work
 15. **Owner is final acceptance only** — Owner is not a tester or QA substitute. CEO/CXX must not report "done, please check" until worker-backed verification proves the goal can be completed. Use unit tests, E2E, Playwright, test accounts, seeded data, build/run checks, logs, and CQO evidence before requesting Owner acceptance.
 16. **OPS watches CQO verification** — For runnable products, CQO PASS is invalid unless OPS has monitored the verification runtime or documented why OPS watch is not applicable. Open OPS incidents, missing runtime mapping, required log gaps, service down, health mismatch, or an unmonitored tested service block Owner acceptance.
 17. **Production incidents are company events** — After launch, user-impacting OPS signals route through CEO to CTO/CQO/OPS. CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence plus close criteria.
+18. **Playwright is visible by default** — All Playwright/browser automation must use headed/visible mode (`headless: false` or equivalent). Headless Playwright requires explicit Owner approval recorded in the mission.
 
 ---
 
-## 8. Project Context
+## 9. Project Context
 
 - **Tech Stack**: {{TECH_STACK}}
 - **Structure**: {{PROJECT_STRUCTURE}}

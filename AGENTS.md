@@ -137,7 +137,20 @@ Hireable worker pool for CXX agents.
 
 ---
 
-## 8. Editing Rules
+## 8. Browser Automation Rule
+
+All Playwright usage must run with a visible real browser window.
+
+- Use `headless: false` for Playwright code.
+- Use headed mode for Playwright test runs (`--headed` or equivalent config).
+- Prefer `channel: 'chrome'` when the installed Chrome browser is available.
+- Workers must not add, recommend, or rely on headless Playwright execution unless the Owner explicitly approves an exception.
+- CTO and OPS must explicitly inject the `headless: false` requirement into every worker brief that may involve Playwright, browser automation, E2E, visual checks, or browser-based monitoring.
+- When browser actions should be observable, add a reasonable `slowMo` value or equivalent step pacing.
+
+---
+
+## 9. Editing Rules
 
 - Do not modify `AGENTS.md` without Owner request or explicit approval.
 - Do not create `.harness/` or commit runtime state to this repository.

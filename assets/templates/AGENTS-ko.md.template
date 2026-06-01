@@ -172,7 +172,19 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 
 `.harness/`는 미션 상태 저장소다. 빌드 산출물이 아니다. 삭제하지 않는다.
 
-## 10. 금지 규칙
+## 10. 브라우저 자동화
+
+CEO, CXX, hired worker의 모든 Playwright 사용은 실제로 보이는 브라우저 창으로 실행한다.
+
+- Playwright launch/config 코드에는 `headless: false`를 사용한다.
+- Playwright test 실행은 headed mode(`--headed`, `PWDEBUG=1`, 또는 동등한 설정)로 수행한다.
+- 설치된 Chrome을 사용할 수 있으면 `channel: 'chrome'`을 우선한다.
+- Owner가 명시적으로 예외를 승인하지 않는 한 headless Playwright 실행을 추가, 권장, 의존하지 않는다.
+- CTO와 OPS는 Playwright, browser automation, E2E, visual check, browser-based monitoring이 포함될 수 있는 모든 worker brief에 `headless: false` 요구사항을 명시적으로 주입한다.
+- 브라우저 동작을 사람이 관찰해야 할 때는 적절한 `slowMo` 또는 동등한 단계 지연을 둔다.
+- CQO evaluator evidence에는 Playwright/browser 실행이 headed 또는 visible이었다는 사실을 기록한다.
+
+## 11. 금지 규칙
 
 1. **`{mission}/cto.md` 없이 소스 코드 편집 금지** — CTO의 범위 승인이 있어야 소스 파일을 수정할 수 있다.
 2. **CXX 사칭 금지** — 현재 모델이 CEO/CTO/CQO를 인라인으로 대행하지 않는다. 설치된 harness skill을 fresh session에서 사용한다.
@@ -184,10 +196,11 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 8. **OPS는 CQO 검수 중 관제한다** — 실행 가능한 제품에서 CQO PASS는 OPS가 검수 runtime을 관제했거나 OPS watch가 불필요한 이유를 기록했을 때만 유효하다. 열린 OPS incident, runtime mapping 누락, 필수 로그 누락, service down, health mismatch, 검수 대상 service 미관제는 Owner acceptance를 막는다.
 9. **Production incident는 회사 이벤트다** — 오픈 후 사용자 영향 OPS signal은 CEO를 통해 CTO/CQO/OPS로 라우팅된다. CTO는 복구, CQO는 회귀 검증, OPS는 증거와 close criteria를 책임진다.
 10. **Implementation Notes는 같은 보고서 하단에 작성** — `ceo.md`, 모든 `{cxx}.md`, 모든 worker report는 하나의 English `## Implementation Notes` 섹션으로 끝나야 한다. 별도 sidecar notes 파일을 만들지 않는다. 결정/증거를 만든 동일한 role 또는 worker report 하단에 `Design Decisions`, `Deviations`, `Tradeoffs`, `Open Questions`를 작성하고 빈 항목은 `None`을 사용한다.
+11. **Playwright는 visible이 기본값이다** — 모든 Playwright/browser automation은 headed/visible mode(`headless: false` 또는 동등한 설정)를 사용한다. Headless Playwright는 mission에 기록된 Owner의 명시적 승인이 필요하다.
 
 ---
 
-## 11. 프로젝트 컨텍스트
+## 12. 프로젝트 컨텍스트
 
 - **기술 스택**: {{TECH_STACK}}
 - **프로젝트 구조**: {{PROJECT_STRUCTURE}}

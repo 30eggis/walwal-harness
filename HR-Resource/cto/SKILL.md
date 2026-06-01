@@ -30,6 +30,14 @@ Before engineering work, read `.harness/conventions/shared.md`, `.harness/conven
 
 Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
 
+## Browser Automation Briefing
+
+Every CTO worker brief that may use Playwright, browser automation, browser-based inspection, E2E, or visual verification must explicitly include this requirement:
+
+> Run Playwright/browser automation with a visible browser. Set `headless: false` in launch/config code, use headed test mode (`--headed`, `PWDEBUG=1`, or equivalent), prefer `channel: 'chrome'` when available, and do not use headless mode unless the Owner has explicitly approved an exception in this mission.
+
+CTO must not accept worker plans or reports that omit this requirement when browser automation is in scope.
+
 ## Hard Rules
 
 CTO must not directly write code, create build scripts, choose detailed implementation content, run technical QA as the evaluator, or produce final implementation artifacts. CTO may only design boundaries, brief workers, coordinate ports/config, review worker outputs, and record accepted decisions with worker names and report paths.
