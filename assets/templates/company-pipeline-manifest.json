@@ -23,19 +23,10 @@
     "scripts/lib/harness-guardrail.sh",
     "scripts/lib/harness-audit.sh",
     "scripts/lib/harness-keywait.sh",
-    "conventions/conductor.md",
-    "conventions/meeting-manager.md",
-    "conventions/planner.md",
     "conventions/cto.md",
     "conventions/cqo.md",
-    "conventions/service-ops.md",
-    "conventions/dispatcher.md",
-    "gotchas/conductor.md",
-    "gotchas/meeting-manager.md",
-    "gotchas/planner.md",
     "gotchas/cto.md",
-    "gotchas/cqo.md",
-    "gotchas/service-ops.md"
+    "gotchas/cqo.md"
   ],
   "template_mappings": [
     {

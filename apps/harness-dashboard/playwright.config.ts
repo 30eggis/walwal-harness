@@ -5,6 +5,9 @@ import { defineConfig, devices } from "@playwright/test";
 //   PW_BASE_URL=http://localhost:3097 PW_NO_WEBSERVER=1 npx playwright test
 const baseURL = process.env.PW_BASE_URL ?? "http://localhost:3001";
 const skipWebServer = process.env.PW_NO_WEBSERVER === "1";
+// AGENTS.md §8: Playwright must run in a visible real browser. Headed by default;
+// headless is only an explicit CI exception via PW_HEADLESS=1.
+const headless = process.env.PW_HEADLESS === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -16,6 +19,9 @@ export default defineConfig({
   use: {
     baseURL,
     trace: "off",
+    headless,
+    channel: "chrome",
+    launchOptions: { slowMo: headless ? 0 : 120 },
   },
   ...(skipWebServer
     ? {}

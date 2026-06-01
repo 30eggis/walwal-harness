@@ -39,7 +39,10 @@ if ! bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
    .next_agent = "none" |
    .agent_status = "completed" |
    .owner_prompt.status = "completed" |
-   .owner_prompt.completed_at = (now | todate)' \
+   .owner_prompt.completed_at = (now | todate) |
+   del(.owner_prompt.blocked_reason) |
+   del(.owner_prompt.blocked_at) |
+   del(.conductor.blocked_at)' \
   --arg reason "$REASON"; then
   echo "[company-complete] FAILED: progress.json transition did not apply (reason=$REASON). Runtime is NOT marked complete." >&2
   exit 1

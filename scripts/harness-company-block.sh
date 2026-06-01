@@ -44,7 +44,10 @@ if ! bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
    .agent_status = "blocked" |
    .owner_prompt.status = "awaiting-authority" |
    .owner_prompt.blocked_reason = $reason |
-   .owner_prompt.blocked_at = (now | todate)' \
+   .owner_prompt.blocked_at = (now | todate) |
+   del(.conductor.completed_at) |
+   del(.owner_prompt.completed_at) |
+   del(.company_state.completed_at)' \
   --arg reason "$REASON"; then
   echo "[company-block] FAILED: progress.json transition did not apply (reason=$REASON). Runtime is NOT marked blocked." >&2
   exit 1
