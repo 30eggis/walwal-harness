@@ -912,7 +912,7 @@ function installSkills() {
     log(`  Installed: ${destName}`);
   };
 
-  const coreHrSkills = ['ceo', 'coo', 'cdo', 'cto', 'cqo', 'ops', 'hiring', 'resource-manager', 'brick-office'];
+  const coreHrSkills = ['ceo', 'coo', 'cdo', 'cto', 'cqo', 'ops', 'hiring', 'resource-manager', 'brick-office', 'ops-prompt-inspector'];
   if (fs.existsSync(hrSrc)) {
     for (const skill of coreHrSkills) {
       const src = path.join(hrSrc, skill);
@@ -1552,7 +1552,7 @@ function detectMigrationNeeded() {
     bundleVersionStale: null,    // { current, installed }
   };
 
-  const coreSkills = ['ceo', 'coo', 'cdo', 'cto', 'cqo', 'ops', 'hiring', 'resource-manager', 'brick-office'];
+  const coreSkills = ['ceo', 'coo', 'cdo', 'cto', 'cqo', 'ops', 'hiring', 'resource-manager', 'brick-office', 'ops-prompt-inspector'];
   for (const skill of coreSkills) {
     const srcPath = path.join(PKG_ROOT, 'HR-Resource', skill, 'SKILL.md');
     if (!fs.existsSync(srcPath)) continue;

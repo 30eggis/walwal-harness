@@ -50,6 +50,16 @@ OPS must actively watch the runtime while CQO evaluator workers test the product
 - CQO cannot issue PASS for a runnable product while OPS reports an open INCIDENT, missing runtime mapping, missing logs required by the mission, or an unmonitored service that is part of the tested scenario.
 - OPS does not wait for the Owner to notice defects. Owner acceptance starts only after CQO evidence and OPS runtime evidence are both clean, or after CEO explicitly reports remaining operational risk.
 
+## Dev-Mode Prompt Inspector
+
+When OPS builds or runs a React/Next.js UI in development mode, and screen-level discussion would benefit from selecting visible UI elements and mapping intended REST/API behavior, OPS must use the installed `harness-ops-prompt-inspector` skill.
+
+- Use Prompt Inspector only for development builds or verification environments. Do not inject it into production builds or production service environments.
+- Install it from the project-local skill path under `.claude/skills/harness-ops-prompt-inspector/` or `.codex/skills/harness-ops-prompt-inspector/`; do not download it at mission runtime.
+- Run its installer against the target app path before or during the dev-mode run so the toolbar is available in the browser for UI/API binding notes.
+- Record the install result, target app path, dev server URL, and generated API discovery evidence in OPS environment evidence.
+- If the project is not React/Next.js or the build is not development mode, report Prompt Inspector as not applicable instead of forcing installation.
+
 ## Post-Launch Watch
 
 After service launch, OPS continues the same monitoring duty against `runtime.production.services[]`.
