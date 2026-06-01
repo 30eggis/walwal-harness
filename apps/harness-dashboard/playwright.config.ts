@@ -20,7 +20,10 @@ export default defineConfig({
     baseURL,
     trace: "off",
     headless,
-    channel: "chrome",
+    // AGENTS.md §8: prefer installed Chrome stable *when available*. Fall back to
+    // bundled Chromium via PW_CHROMIUM=1 on hosts without Chrome stable (CI/containers),
+    // so the suite stays portable instead of hard-failing at launch.
+    channel: process.env.PW_CHROMIUM === "1" ? undefined : "chrome",
     launchOptions: { slowMo: headless ? 0 : 120 },
   },
   ...(skipWebServer

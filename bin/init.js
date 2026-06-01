@@ -1403,13 +1403,14 @@ function checkPlaywrightMcp() {
   log('');
   log('NOTE: Playwright MCP is not configured.');
   log('Evaluator agents require Playwright MCP for browser testing.');
+  log('AGENTS.md §8: run headed (no --headless). Add headless only as an explicit Owner exception.');
   log('Add to ~/.mcp.json:');
   log('');
   log('  {');
   log('    "mcpServers": {');
   log('      "playwright": {');
   log('        "command": "npx",');
-  log('        "args": ["-y", "@playwright/mcp@latest", "--headless", "--caps", "vision"]');
+  log('        "args": ["-y", "@playwright/mcp@latest", "--caps", "vision"]');
   log('      }');
   log('    }');
   log('  }');

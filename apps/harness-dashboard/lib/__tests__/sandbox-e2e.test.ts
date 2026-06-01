@@ -242,6 +242,63 @@ gate("walwal-harness sandbox e2e — two usage modes", () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────
+  // STALE-BLOCKER CONTRACT — block -> complete must leave NO stale blocker state
+  // in ANY of the three layers block.sh writes: progress.json,
+  // .harness/todos/state.json, and per-mission mission-state.json. Guards the
+  // del()/status-reset fixes in harness-company-{block,complete}.sh.
+  // ───────────────────────────────────────────────────────────────────────
+  it("block -> complete clears blocker state across progress, todos, and mission-state", () => {
+    const sbx = path.join(SBX_ROOT, "walwal-sandbox-block-complete");
+    init(sbx);
+    const goalDir = "goal-1-blocked-then-done";
+    const reason = 'needs "STRIPE" key';
+    const msPath = path.join(sbx, ".harness", "documents", goalDir, "mission-state.json");
+    const todosPath = path.join(sbx, ".harness", "todos", "state.json");
+
+    ownerCommand(sbx, "/goal Ship a feature that needs a third-party credential.");
+    writeDoc(sbx, `${goalDir}/ceo.md`, `# CEO\n\nRouted; awaiting external credential.${NOTES}`);
+    writeMissionState(sbx, goalDir, "active", true);
+    // a live todo that block.sh will flip to "blocked"
+    mkdirSync(path.dirname(todosPath), { recursive: true });
+    writeFileSync(todosPath, JSON.stringify({ owners: { coo: [{ id: "t1", title: "integrate API", status: "active" }] } }, null, 2));
+
+    // (1) BLOCK on external authority (quotes in the reason exercise quote-safety).
+    runScript(sbx, "harness-company-block.sh", [".", reason]);
+    let p = progress(sbx);
+    expect(p.conductor.state).toBe("blocked");
+    expect(p.owner_prompt.blocked_reason).toBe(reason);
+    let todos = JSON.parse(readFileSync(todosPath, "utf8"));
+    expect(todos.owners.coo[0].status).toBe("blocked");
+    expect(todos.owners.coo[0].blocked_reason).toBe(reason);
+    let ms = JSON.parse(readFileSync(msPath, "utf8"));
+    expect(ms.lifecycle).toBe("blocked");
+    expect(ms.blocked_reason).toBe(reason);
+
+    // (2) Authority provided → COMPLETE. No stale blocker may survive in any layer.
+    runScript(sbx, "harness-company-complete.sh", [".", "credential provided; shipped"]);
+    p = progress(sbx);
+    expect(p.conductor.state).toBe("completed");
+    expect("blocked_reason" in p.owner_prompt).toBe(false);
+    expect("blocked_at" in p.owner_prompt).toBe(false);
+    expect("blocked_at" in p.conductor).toBe(false);
+
+    todos = JSON.parse(readFileSync(todosPath, "utf8"));
+    expect(todos.owners.coo[0].status).toBe("done");
+    expect("blocked_reason" in todos.owners.coo[0]).toBe(false);
+
+    ms = JSON.parse(readFileSync(msPath, "utf8"));
+    expect(ms.lifecycle).toBe("complete");
+    expect(ms.active).toBe(false);
+    expect("blocked_reason" in ms).toBe(false);
+    expect("blocked_at" in ms).toBe(false);
+
+    // the dashboard must NOT paint a completed run as blocked
+    const m = snap(sbx, "block-complete-final").missions.find((x) => x.missionId === goalDir)!;
+    expect(m.lifecycle).toBe("complete");
+    expect(m.active).toBe(false);
+  });
+
+  // ───────────────────────────────────────────────────────────────────────
   // WAKE CONTROL — the hourly launchd job that drives the perpetual loop across
   // sessions is toggleable from the dashboard and keyed to HARNESS_BASE_PORT.
   // (Read-only + dry-run only — never loads a real job into the tester's launchd.)

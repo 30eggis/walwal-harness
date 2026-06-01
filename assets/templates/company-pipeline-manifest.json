@@ -22,11 +22,7 @@
     "scripts/lib/harness-progress-migrate.sh",
     "scripts/lib/harness-guardrail.sh",
     "scripts/lib/harness-audit.sh",
-    "scripts/lib/harness-keywait.sh",
-    "conventions/cto.md",
-    "conventions/cqo.md",
-    "gotchas/cto.md",
-    "gotchas/cqo.md"
+    "scripts/lib/harness-keywait.sh"
   ],
   "template_mappings": [
     {

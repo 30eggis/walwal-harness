@@ -53,8 +53,8 @@ if [ -f "$TODOS" ]; then
   jq '
     .owners |= with_entries(
       .value |= map(
-        if (.status == "active" or .status == "pending" or .status == "paused")
-        then .status = "done" | .updated_at = (now | todate)
+        if (.status == "active" or .status == "pending" or .status == "paused" or .status == "blocked")
+        then .status = "done" | del(.blocked_reason) | .updated_at = (now | todate)
         else .
         end
       )
@@ -68,11 +68,13 @@ if [ -d "$DOCS" ]; then
     active="$(jq -r '.active // false' "$state" 2>/dev/null || echo false)"
     lifecycle="$(jq -r '.lifecycle // .status // "unknown"' "$state" 2>/dev/null || echo unknown)"
     case "$lifecycle" in
-      closed|cancelled|superseded|complete|blocked) continue ;;
+      closed|cancelled|superseded|complete|completed) continue ;;
     esac
-    if [ "$active" = "true" ]; then
+    # A mission left "blocked" (active=false) is resumed and completed here, so
+    # clear its blocker fields too — block -> complete must leave no stale state.
+    if [ "$active" = "true" ] || [ "$lifecycle" = "blocked" ]; then
       tmp="$(mktemp)"
-      jq '.lifecycle = "complete" | .active = false | .completed_at = (now | todate)' "$state" > "$tmp" && mv "$tmp" "$state"
+      jq '.lifecycle = "complete" | .active = false | .completed_at = (now | todate) | del(.blocked_reason) | del(.blocked_at)' "$state" > "$tmp" && mv "$tmp" "$state"
     fi
   done
 fi
