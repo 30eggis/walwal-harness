@@ -52,13 +52,13 @@ OPS must actively watch the runtime while CQO evaluator workers test the product
 
 ## Dev-Mode Prompt Inspector
 
-When OPS builds or runs a React/Next.js UI in development mode, and screen-level discussion would benefit from selecting visible UI elements and mapping intended REST/API behavior, OPS must use the installed `harness-ops-prompt-inspector` skill.
+When OPS builds or runs a React/Next.js or static HTML UI in development mode, and screen-level discussion would benefit from selecting visible UI elements and mapping intended REST/API behavior, OPS must use the installed `harness-ops-prompt-inspector` skill.
 
 - Use Prompt Inspector only for development builds or verification environments. Do not inject it into production builds or production service environments.
 - Install it from the project-local skill path under `.claude/skills/harness-ops-prompt-inspector/` or `.codex/skills/harness-ops-prompt-inspector/`; do not download it at mission runtime.
 - Run its installer against the target app path before or during the dev-mode run so the toolbar is available in the browser for UI/API binding notes.
 - Record the install result, target app path, dev server URL, and generated API discovery evidence in OPS environment evidence.
-- If the project is not React/Next.js or the build is not development mode, report Prompt Inspector as not applicable instead of forcing installation.
+- If the project is not React/Next.js, static HTML, or the build is not development mode, report Prompt Inspector as not applicable instead of forcing installation.
 
 ## Post-Launch Watch
 
@@ -92,13 +92,21 @@ After service launch, OPS continues the same monitoring duty against `runtime.pr
 
 ## Worker Activity Telemetry
 
-Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
+When CEO routes this mission to you, set yourself as the live agent on entry so the dashboard shows the handoff: `bash scripts/harness-progress-set.sh . '.current_agent="ops" | .agent_status="running"'`.
+
+Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running. Require every worker report to open with a `## Status` line whose body is `IN_PROGRESS` while the worker runs and `COMPLETE` once the report is final, so the dashboard shows true worker liveness instead of guessing from file timestamps.
+
+On exit, after writing `ops.md` and handing back to CEO, run `bash scripts/harness-progress-set.sh . '.agent_status="completed"'` so the loop advances and the dashboard reflects the finished step. Do not clear `conductor.state`; only the CEO's Company Loop Termination step ends the loop.
+
+## Operating Mode — Status Briefing & Agenda
+
+When the active goal is operating (perpetual, `mission-state.json` lifecycle `operating`), OPS is the primary monitor of the never-ending loop. On every CEO 현황 보고, report — with monitoring evidence (logs, health, ports, metrics, P&L or domain KPIs) — whether the live system still operates correctly toward the goal. Any loss, drawdown, drift, incident, degraded health, or opportunity MUST become an agenda item so CEO can adjudicate and route the next research→apply→operate cycle: `bash scripts/harness-agenda.sh . <goal-rel> raise ops <kind> "<title>" "<evidence-path>"` (kinds: loss, drift, incident, opportunity, risk, verification-gap). OPS does not fix systems itself — it surfaces the agenda and supplies evidence; CTO owns the fix, COO owns new-strategy research, CQO owns verification. A clean monitoring round with nothing to raise is itself a valid briefing result.
 
 ## Browser Automation Briefing
 
 Every OPS worker brief that may use Playwright, browser automation, browser-based monitoring, E2E, or visual/runtime verification must explicitly include this requirement:
 
-> Run Playwright/browser automation with a visible browser. Set `headless: false` in launch/config code, use headed test mode (`--headed`, `PWDEBUG=1`, or equivalent), prefer `channel: 'chrome'` when available, and do not use headless mode unless the Owner has explicitly approved an exception in this mission.
+> Run Playwright/browser automation with a visible browser. Set `headless: false` in launch/config code, use headed test mode (`--headed`, `PWDEBUG=1`, or equivalent), prefer `channel: 'chrome'` when available, and do not use headless mode unless the Owner has explicitly approved an exception in this mission. Pace it middle-fast: `slowMo: 120` (ms) — observable but brisk. Do not use `slowMo: 300`+ (too slow); raise it only if the Owner explicitly asks to slow the demo down.
 
 OPS must not accept worker plans or reports that omit this requirement when browser automation is in scope.
 

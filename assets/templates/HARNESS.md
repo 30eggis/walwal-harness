@@ -97,6 +97,8 @@ Runtime state that the harness must parse belongs in JSON or JSONL, not Markdown
 - CDO completion requires `.harness/documents/{mission}/cdo/preview.html`; CEO/Owner can view it from the dashboard by clicking `harness-cdo`.
 - CQO verdicts require evaluator/tester worker evidence.
 - Owner is final acceptance only. Do not report "done, please check" until worker-backed verification proves the goal is complete.
+- The company loop ends only via a runtime transition, never by document state alone. After the final Owner report and terminal `mission-state.json`, CEO runs `bash scripts/harness-company-complete.sh . <reason>` (complete) or `bash scripts/harness-company-block.sh . "<missing authority>"` (external-authority block). These flip `progress.json` out of `running` so the autonomous Stop loop ends cleanly and the dashboard shows idle/done. Until then the company keeps progressing autonomously — the Owner is not the pump.
+- Every worker report must open with a `## Status` line whose body is `IN_PROGRESS` while running and `COMPLETE` when final, so the dashboard reflects true worker liveness.
 - Every `ceo.md`, `{cxx}.md`, and worker report must end with:
 
 ```markdown

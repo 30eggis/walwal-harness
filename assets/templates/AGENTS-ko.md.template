@@ -181,7 +181,7 @@ CEO, CXX, hired worker의 모든 Playwright 사용은 실제로 보이는 브라
 - 설치된 Chrome을 사용할 수 있으면 `channel: 'chrome'`을 우선한다.
 - Owner가 명시적으로 예외를 승인하지 않는 한 headless Playwright 실행을 추가, 권장, 의존하지 않는다.
 - CTO와 OPS는 Playwright, browser automation, E2E, visual check, browser-based monitoring이 포함될 수 있는 모든 worker brief에 `headless: false` 요구사항을 명시적으로 주입한다.
-- 브라우저 동작을 사람이 관찰해야 할 때는 적절한 `slowMo` 또는 동등한 단계 지연을 둔다.
+- 브라우저 동작을 사람이 관찰해야 할 때는 middle-fast로 둔다: 기본값 `slowMo: 120`(ms) — 관찰 가능하되 경쾌하게. `slowMo: 300` 이상은 너무 느리므로 쓰지 말고, Owner가 데모를 일부러 느리게 보길 원할 때만 올린다.
 - CQO evaluator evidence에는 Playwright/browser 실행이 headed 또는 visible이었다는 사실을 기록한다.
 
 ## 11. 금지 규칙

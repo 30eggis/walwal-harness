@@ -34,6 +34,9 @@ def find_project_type(project_path: Path) -> dict:
         'components_dir': None,
     }
 
+    # Check for static/vanilla apps
+    static_index = project_path / 'index.html'
+
     # Check for Next.js App Router
     app_layout = project_path / 'app' / 'layout.tsx'
     app_layout_js = project_path / 'app' / 'layout.js'
@@ -81,6 +84,10 @@ def find_project_type(project_path: Path) -> dict:
         result['type'] = 'nextjs-pages'
         result['layout_file'] = src_pages_app_js
         result['components_dir'] = project_path / 'src' / 'components'
+    elif static_index.exists():
+        result['type'] = 'static-html'
+        result['layout_file'] = static_index
+        result['components_dir'] = project_path / 'public'
 
     return result
 
@@ -227,6 +234,46 @@ def inject_into_layout(layout_file: Path, project_type: str) -> bool:
     return True
 
 
+def copy_static_inspector(public_dir: Path, script_dir: Path, force_update: bool = False) -> bool:
+    """Copy the static Prompt Inspector browser script."""
+    public_dir.mkdir(parents=True, exist_ok=True)
+    source = script_dir.parent / 'assets' / 'prompt-inspector-static.js'
+    dest = public_dir / 'prompt-inspector-static.js'
+    if not source.exists():
+        print(f"  Error: Source static inspector not found at {source}")
+        return False
+    if dest.exists() and not force_update:
+        print(f"  Static inspector already exists at {dest}")
+        return True
+    shutil.copy(source, dest)
+    print(f"  Installed static Prompt Inspector at {dest}")
+    return True
+
+
+def inject_into_static_html(index_file: Path) -> bool:
+    """Inject the static inspector script into index.html."""
+    content = index_file.read_text(encoding='utf-8')
+    marker = 'data-harness-ops-prompt-inspector'
+    if marker in content:
+        print(f"  Static inspector already injected in {index_file}")
+        return True
+
+    script_tag = '    <script src="/public/prompt-inspector-static.js" data-harness-ops-prompt-inspector></script>'
+    if '</body>' in content:
+        new_content = content.replace('</body>', f'{script_tag}\n</body>')
+    else:
+        new_content = content + f'\n{script_tag}\n'
+
+    backup_file = index_file.with_suffix(index_file.suffix + '.backup')
+    if not backup_file.exists():
+        shutil.copy(index_file, backup_file)
+        print(f"  Backup created at {backup_file}")
+
+    index_file.write_text(new_content, encoding='utf-8')
+    print(f"  Injected static inspector into {index_file}")
+    return True
+
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python setup.py <project_path> [options]")
@@ -266,9 +313,9 @@ def main():
 
     if not project_info['type']:
         print("Could not detect project type.")
-        print("Supported: Next.js (App Router / Pages Router)")
-        print("\nManual setup required. Copy PromptInspector.tsx to your components folder")
-        print("and import it in your root layout/app file.")
+        print("Supported: Next.js (App Router / Pages Router), static index.html")
+        print("\nManual setup required. Copy PromptInspector.tsx or prompt-inspector-static.js")
+        print("and import it in your root layout/app file or index.html.")
         return 1
 
     print(f"Detected: {project_info['type']}")
@@ -277,6 +324,12 @@ def main():
 
     # Check-only mode
     if check_only:
+        if project_info['type'] == 'static-html':
+            dest = project_info['components_dir'] / 'prompt-inspector-static.js'
+            print(f"\n  Static install check:")
+            print(f"  └─ Installed: {'yes' if dest.exists() else 'no'}")
+            return 0 if dest.exists() else 1
+
         source = script_dir.parent / 'assets' / 'PromptInspector.tsx'
         dest = project_info['components_dir'] / 'PromptInspector.tsx'
 
@@ -298,6 +351,16 @@ def main():
             return 0
 
     print("\nSetting up Prompt Inspector...")
+
+    if project_info['type'] == 'static-html':
+        if not copy_static_inspector(project_info['components_dir'], script_dir, force_update):
+            return 1
+        if not inject_into_static_html(project_info['layout_file']):
+            return 1
+        print("\nSetup complete!")
+        print("Run your dev server and look for the toolbar in the bottom-right corner.")
+        print("The static inspector is intended for development servers only.")
+        return 0
 
     # Step 1: Copy component
     if not copy_component(project_info['components_dir'], script_dir, force_update):

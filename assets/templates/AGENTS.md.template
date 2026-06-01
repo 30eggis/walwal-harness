@@ -94,7 +94,16 @@ The Owner is the final acceptance reviewer, not a tester, QA worker, debugger, o
 4. CEO aggregates CXX outputs, routes to next CXX or reports to Owner.
 5. If the mission uses a runnable local, preview, Docker, or production-like environment, OPS watches the runtime while CQO evaluator workers run Playwright/E2E/API/visual/performance/regression checks.
 
-**Complete when:** `.harness/documents/goal-{index}-{name}/ceo.md` contains a final Owner report and `mission-state.json` is terminal (`complete`, `closed`, `cancelled`, or `superseded`) with `active:false`.
+**Complete when:** `.harness/documents/goal-{index}-{name}/ceo.md` contains a final Owner report, `mission-state.json` is terminal (`complete`, `closed`, `cancelled`, or `superseded`) with `active:false`, **and** CEO has fired the runtime transition `bash scripts/harness-company-complete.sh . <reason>` (or `harness-company-block.sh` for an external-authority block) so `progress.json` leaves the `running` state. Document state alone does not end the loop — the Stop loop and dashboard read `progress.json`.
+
+### Operating (perpetual) goal
+
+If the goal is to **operate/monitor/keep growing** something indefinitely (e.g. "run a trading system and keep it profitable forever"), CEO sets `mission-state.json` to `{"lifecycle":"operating","active":true}` and runs it as an **agenda-driven standing loop** that NEVER completes:
+
+- The shared agenda `.harness/documents/{goal}/agenda.json` (managed by `scripts/harness-agenda.sh`) is co-written by the CXX. While it has active items the loop runs and the CEO must adjudicate every item; when it is empty the CEO orders each CXX a 현황 보고 (confirm live deliverables still operate toward the goal) which surfaces new agenda items.
+- When a briefing round surfaces nothing, CEO runs `scripts/harness-company-cycle.sh . {goal}` (operating heartbeat) and ends the turn; the hourly wake resumes the next cycle.
+- Canonical cycle: OPS monitor → COO research+backtest new strategy → CTO apply → CQO verify → OPS operate → repeat. A loss is an agenda item, not a stop.
+- An operating goal ends only on explicit Owner stop (then `harness-company-complete.sh`) or a true external-authority block (`harness-company-block.sh`). The dashboard shows it as `⟳ OPERATING`, never "complete".
 
 ### Submission
 
@@ -150,7 +159,7 @@ All Playwright usage by CEO, CXX, and hired workers must run with a visible real
 - Prefer `channel: 'chrome'` when the installed Chrome browser is available.
 - Do not add, recommend, or rely on headless Playwright execution unless the Owner explicitly approves an exception.
 - CTO and OPS must explicitly inject the `headless: false` requirement into every worker brief that may involve Playwright, browser automation, E2E, visual checks, or browser-based monitoring.
-- When browser actions should be observable, add a reasonable `slowMo` value or equivalent step pacing.
+- When browser actions should be observable, pace them middle-fast: use `slowMo: 120` (ms) by default — brisk but watchable. Do not use `slowMo: 300`+, which is sluggish; only raise it when the Owner explicitly asks to slow a demo down.
 - CQO evaluator evidence must note that the Playwright/browser run was headed or visible.
 
 ---
@@ -175,6 +184,7 @@ All Playwright usage by CEO, CXX, and hired workers must run with a visible real
 16. **OPS watches CQO verification** — For runnable products, CQO PASS is invalid unless OPS has monitored the verification runtime or documented why OPS watch is not applicable. Open OPS incidents, missing runtime mapping, required log gaps, service down, health mismatch, or an unmonitored tested service block Owner acceptance.
 17. **Production incidents are company events** — After launch, user-impacting OPS signals route through CEO to CTO/CQO/OPS. CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence plus close criteria.
 18. **Playwright is visible by default** — All Playwright/browser automation must use headed/visible mode (`headless: false` or equivalent). Headless Playwright requires explicit Owner approval recorded in the mission.
+19. **The loop ends only via a runtime transition** — There are exactly two legitimate stop conditions: COMPLETE and BLOCKED-on-external-authority. The autonomous Stop loop and the dashboard read `progress.json` runtime state, not mission documents. After the final Owner report and terminal `mission-state.json`, CEO's last action MUST be `scripts/harness-company-complete.sh` (complete) or `scripts/harness-company-block.sh "<missing authority>"` (blocked). Never end a turn in the `running` state with no queued action, and never fire a terminal transition while real CXX/worker/verification work remains. Between these two endpoints the company keeps progressing autonomously — the Owner is not the pump.
 
 ---
 

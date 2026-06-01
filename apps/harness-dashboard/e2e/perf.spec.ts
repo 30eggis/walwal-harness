@@ -12,7 +12,9 @@ const PROGRESS_PATH = path.resolve(
 
 test("F-025 SSE latency < 500ms (5-sample average)", async ({ page }) => {
   await page.goto("/");
-  await page.waitForSelector('canvas');
+  // The current dashboard is the mission-centric Scene (no 3D canvas); wait for
+  // the header chrome to confirm the app mounted before measuring SSE latency.
+  await page.waitForSelector("header");
   await page.waitForTimeout(2500);
 
   // Record onmessage timestamps from the page side.

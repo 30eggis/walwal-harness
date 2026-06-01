@@ -384,9 +384,79 @@ function TopHeader({
         />
         <HeaderBadge label="Workers" value={String(activeWorkers)} tone="cyan" />
         <HeaderBadge label="Hot-fix" value={String(hotfixCount)} tone="red" />
+        <WakeToggle />
         <PresenceLegend />
       </div>
     </header>
+  );
+}
+
+// Toggles the per-project hourly wake launchd job (keyed by HARNESS_BASE_PORT)
+// that drives the perpetual operating loop across sessions.
+interface WakeStatus {
+  supported?: boolean;
+  enabled?: boolean;
+  base_port?: number | string | null;
+  label?: string;
+  error?: string;
+}
+
+function WakeToggle() {
+  const [status, setStatus] = useState<WakeStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/wake")
+      .then((r) => r.json())
+      .then((s) => { if (alive) setStatus(s); })
+      .catch(() => { if (alive) setStatus({ supported: false }); });
+    return () => { alive = false; };
+  }, []);
+
+  const toggle = async () => {
+    if (busy || !status?.supported) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/wake", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: status?.enabled ? "off" : "on" }),
+      });
+      setStatus(await r.json());
+    } catch {
+      /* keep prior status */
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  const supported = !!status.supported;
+  const on = !!status.enabled;
+  const port = status.base_port ? `:${status.base_port}` : "";
+  const tone = !supported
+    ? "border-slate-600/30 bg-slate-600/10 text-slate-500"
+    : on
+    ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200"
+    : "border-slate-500/30 bg-slate-500/10 text-slate-300";
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={busy || !supported}
+      title={
+        supported
+          ? `Hourly wake launchd job ${status.label ?? ""} — click to turn ${on ? "off" : "on"} (drives the perpetual operating loop across sessions)`
+          : "launchd not available on this OS"
+      }
+      className={`rounded-full border px-2.5 py-1 font-mono text-[10px] transition-colors ${tone} ${
+        supported ? "cursor-pointer hover:brightness-125" : "cursor-default"
+      } ${busy ? "opacity-60" : ""}`}
+    >
+      <span className="text-slate-500">Wake</span>
+      <span className="ml-1.5">{!supported ? "n/a" : on ? `● on${port}` : `○ off${port}`}</span>
+    </button>
   );
 }
 
@@ -565,14 +635,22 @@ function HistoryNavigator({
               <button
                 type="button"
                 onClick={() => onSelect(goal.missionId)}
-                className={`w-full truncate px-2 py-2 text-left ${
+                className={`flex w-full items-center gap-1 px-2 py-2 text-left ${
                   activeMissionId === goal.missionId
                     ? "bg-cyan-400/[0.12] text-cyan-100"
                     : "text-slate-300 hover:bg-white/[0.04]"
                 }`}
                 title={goal.label || goal.missionId}
               >
-                {goal.label || goal.missionId}
+                {goal.lifecycle === "operating" && (
+                  <span
+                    className="shrink-0 rounded bg-emerald-500/20 px-1 py-0.5 font-mono text-[8px] font-semibold text-emerald-300"
+                    title={`영구 운영 중${typeof goal.operatingCycles === "number" ? ` · ${goal.operatingCycles} cycles` : ""}`}
+                  >
+                    ⟳ OPER{typeof goal.agendaOpen === "number" && goal.agendaOpen > 0 ? ` ${goal.agendaOpen}` : ""}
+                  </span>
+                )}
+                <span className="truncate">{goal.label || goal.missionId}</span>
               </button>
               {children.length > 0 && (
                 <div className="border-t border-slate-800/70 py-1 pl-3">
@@ -1732,6 +1810,14 @@ function DocumentViewer({
     | undefined;
   const roleDoc = role ? mission?.[role] : null;
   const workerDoc = lane?.worker?.content ?? null;
+  // CDO ships a self-contained HTML preview (cdo/preview.html). When the CDO
+  // lane is selected and a preview exists, surface the visual deliverable in a
+  // sandboxed iframe (the "click harness-cdo to view the Preview" contract),
+  // with a toggle back to the cdo.md decision record.
+  const cdoPreview = !customDoc && !workerDoc && role === "cdo" ? mission?.cdoPreview ?? null : null;
+  const [cdoMode, setCdoMode] = useState<"preview" | "doc">("preview");
+  const showPreview = !!cdoPreview && cdoMode === "preview";
+
   const rawContent = customDoc
     ? customDoc.content
     : workerDoc ?? roleDoc ?? mission?.ceo ?? "_No document selected._";
@@ -1745,28 +1831,59 @@ function DocumentViewer({
           : role
           ? role.toUpperCase()
           : "CEO"
-      }`;
+      }${cdoPreview ? (showPreview ? " · preview" : " · doc") : ""}`;
   return (
     <section className="panel-shell flex min-h-0 flex-1 flex-col p-2">
       <div className="flex items-center justify-between gap-2">
         <SectionLabel>Document Viewer · {subtitle}</SectionLabel>
-        <button
-          type="button"
-          onClick={onToggle}
-          className="grid h-6 w-6 shrink-0 place-items-center rounded text-[11px] text-slate-400 hover:bg-white/10 hover:text-cyan-200"
-          title={expanded ? "Minimize viewer" : "Expand to 50%"}
-          aria-label={expanded ? "Minimize viewer" : "Expand viewer"}
-        >
-          <span className={`doc-toggle-icon ${expanded ? "rotate-180" : ""}`}>↗</span>
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          {cdoPreview && (
+            <div className="mr-1 flex overflow-hidden rounded border border-slate-700 font-mono text-[9px]">
+              <button
+                type="button"
+                onClick={() => setCdoMode("preview")}
+                className={`px-1.5 py-0.5 ${showPreview ? "bg-violet-500/30 text-violet-200" : "text-slate-400 hover:text-violet-200"}`}
+              >
+                Preview
+              </button>
+              <button
+                type="button"
+                onClick={() => setCdoMode("doc")}
+                className={`px-1.5 py-0.5 ${!showPreview ? "bg-violet-500/30 text-violet-200" : "text-slate-400 hover:text-violet-200"}`}
+              >
+                Doc
+              </button>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onToggle}
+            className="grid h-6 w-6 place-items-center rounded text-[11px] text-slate-400 hover:bg-white/10 hover:text-cyan-200"
+            title={expanded ? "Minimize viewer" : "Expand to 50%"}
+            aria-label={expanded ? "Minimize viewer" : "Expand viewer"}
+          >
+            <span className={`doc-toggle-icon ${expanded ? "rotate-180" : ""}`}>↗</span>
+          </button>
+        </div>
       </div>
-      <div className="inset-shell mt-2 min-h-0 flex-1 overflow-auto p-3">
-        <article className="markdown-doc text-[11px] leading-5 text-slate-300">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-            {content}
-          </ReactMarkdown>
-        </article>
-      </div>
+      {showPreview ? (
+        <div className="inset-shell mt-2 min-h-0 flex-1 overflow-hidden p-1">
+          <iframe
+            title="CDO design preview"
+            sandbox=""
+            className="h-full w-full rounded bg-white"
+            srcDoc={cdoPreview ?? ""}
+          />
+        </div>
+      ) : (
+        <div className="inset-shell mt-2 min-h-0 flex-1 overflow-auto p-3">
+          <article className="markdown-doc text-[11px] leading-5 text-slate-300">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+              {content}
+            </ReactMarkdown>
+          </article>
+        </div>
+      )}
     </section>
   );
 }

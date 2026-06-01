@@ -24,6 +24,18 @@ current_agent=$(jq -r '.current_agent // "null"' "$PROGRESS")
 agent_status=$(jq -r '.agent_status // "pending"' "$PROGRESS")
 pipeline=$(jq -r '.pipeline // "null"' "$PROGRESS")
 mode=$(jq -r '.mode // "company"' "$PROGRESS")
+
+# v7 company mode: the CEO/CXX skills own the current_agent / next_agent /
+# conductor.state transitions through the document-driven flow. conductor-tick
+# has no current_agent="ceo" routing branch (its vocabulary is the legacy v6
+# pipeline: dispatcher/planner/cto/cqo/service-ops/meeting-manager/...), so on a
+# CEO state it would fall through and re-assert conductor.state="running" /
+# next_agent="ceo" at the end, cementing the stuck runtime and clobbering any
+# clean completion. Hand the turn back without touching state.
+if [ "$current_agent" = "ceo" ]; then
+  echo "ceo"
+  exit 0
+fi
 # v6.2 — parallel tracks (fork-join) state
 parallel_tracks=$(jq -c '.conductor.tracks // []' "$PROGRESS")
 parallel_rendezvous=$(jq -c '.conductor.rendezvous // null' "$PROGRESS")

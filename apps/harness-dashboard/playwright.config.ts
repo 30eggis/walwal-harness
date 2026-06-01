@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+// Target is env-overridable so the suite can run against an already-running
+// dashboard on any port (e.g. one started with a specific HARNESS_ROOT):
+//   PW_BASE_URL=http://localhost:3097 PW_NO_WEBSERVER=1 npx playwright test
+const baseURL = process.env.PW_BASE_URL ?? "http://localhost:3001";
+const skipWebServer = process.env.PW_NO_WEBSERVER === "1";
+
 export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
@@ -8,15 +14,19 @@ export default defineConfig({
   retries: 0,
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:3001",
+    baseURL,
     trace: "off",
   },
-  webServer: {
-    command: "npm run dev:dashboard",
-    url: "http://localhost:3001",
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  ...(skipWebServer
+    ? {}
+    : {
+        webServer: {
+          command: "npm run dev:dashboard",
+          url: baseURL,
+          reuseExistingServer: true,
+          timeout: 60_000,
+        },
+      }),
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],

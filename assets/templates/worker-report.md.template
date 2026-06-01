@@ -1,0 +1,38 @@
+# {{WORKER_TITLE}} — Worker Report
+
+## Status
+IN_PROGRESS
+
+<!--
+Worker liveness contract (read by the dashboard):
+- Set the body of this `## Status` section to `IN_PROGRESS` while you are still working.
+- Change it to `COMPLETE` only when this report is final and the deliverable is done.
+The dashboard uses this line (not file timestamps) to show whether the worker is live.
+-->
+
+## Task
+- Mission: {{MISSION_ID}}
+- Owning CXX: {{OWNING_CXX}}
+- Assigned task: {{TASK}}
+- Acceptance criteria: {{ACCEPTANCE_CRITERIA}}
+
+## Evidence
+- Commands run / artifacts produced / changed files:
+- Test or verification output:
+
+## Result
+- Outcome and how it meets the acceptance criteria.
+
+## Implementation Notes
+
+### Design Decisions
+- None
+
+### Deviations
+- None
+
+### Tradeoffs
+- None
+
+### Open Questions
+- None

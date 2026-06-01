@@ -146,7 +146,7 @@ All Playwright usage must run with a visible real browser window.
 - Prefer `channel: 'chrome'` when the installed Chrome browser is available.
 - Workers must not add, recommend, or rely on headless Playwright execution unless the Owner explicitly approves an exception.
 - CTO and OPS must explicitly inject the `headless: false` requirement into every worker brief that may involve Playwright, browser automation, E2E, visual checks, or browser-based monitoring.
-- When browser actions should be observable, add a reasonable `slowMo` value or equivalent step pacing.
+- When browser actions should be observable, pace them middle-fast: use `slowMo: 120` (ms) by default — brisk but watchable. Do not use `slowMo: 300`+, which is sluggish; only raise it when the Owner explicitly asks to slow a demo down.
 
 ---
 

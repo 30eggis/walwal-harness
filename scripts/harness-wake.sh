@@ -167,6 +167,11 @@ Project root: $project_root
 Wake reason: idle=${idle}s force=${force}
 Hourly review: ${review_path:-"(not available)"}
 
+Operating (perpetual) goal mode:
+- If the active goal's mission-state.json lifecycle is "operating", this is a never-completing standing company. Do NOT run harness-company-complete.sh for it.
+- Read the shared agenda .harness/documents/<goal>/agenda.json (scripts/harness-agenda.sh . <goal> list). If it has active items, adjudicate every open item (scripts/harness-agenda.sh . <goal> decide <id> "<decision>" <cxx>) and route the owning CXX to execute+verify, then close it. If the agenda is empty, run a status-briefing round: require each CXX (COO/CDO/CTO/CQO/OPS) to confirm its live deliverables still operate toward the goal and to raise any loss/drift/incident/opportunity/risk via scripts/harness-agenda.sh . <goal> raise <cxx> <kind> "<title>".
+- If a full briefing round genuinely surfaces nothing this tick, run scripts/harness-company-cycle.sh . <goal> to record the operating heartbeat and end the tick; the next hourly wake resumes the cycle. A loss/drawdown is an agenda item that triggers the next research→apply→operate cycle, never a reason to stop or to wait on the Owner.
+
 One-line command:
 Convene CXX + OPS, collect current progress and decisions, decide the next action as CEO with the active goal in mind, drive all teams without asking Owner, and use CQO verification until the goal demonstrably works.
 

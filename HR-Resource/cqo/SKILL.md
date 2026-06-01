@@ -26,7 +26,15 @@ Before quality work, read `.harness/conventions/shared.md`, `.harness/convention
 
 ## Worker Activity Telemetry
 
-Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running.
+When CEO routes this mission to you, set yourself as the live agent on entry so the dashboard shows the handoff: `bash scripts/harness-progress-set.sh . '.current_agent="cqo" | .agent_status="running"'`.
+
+Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running. Require every worker report to open with a `## Status` line whose body is `IN_PROGRESS` while the worker runs and `COMPLETE` once the report is final, so the dashboard shows true worker liveness instead of guessing from file timestamps.
+
+On exit, after writing `cqo.md` and handing back to CEO, run `bash scripts/harness-progress-set.sh . '.agent_status="completed"'` so the loop advances and the dashboard reflects the finished step. Do not clear `conductor.state`; only the CEO's Company Loop Termination step ends the loop.
+
+## Operating Mode — Status Briefing & Agenda
+
+When the active goal is operating (perpetual, `mission-state.json` lifecycle `operating`), CEO periodically orders a 현황 보고. In it, confirm — with evaluator-worker evidence — whether the live system still passes the quality/regression bar toward the goal (for CQO: are regression/e2e/perf/security gates still green on the running system?). If you discover a regression, quality drift, incident, or verification gap, do not silently sit on it: raise it as an agenda item so CEO can adjudicate and route the next cycle: `bash scripts/harness-agenda.sh . <goal-rel> raise cqo <kind> "<title>" "<evidence-path>"` (kinds: loss, drift, incident, opportunity, risk, verification-gap). When CEO routes a decided agenda item to you, run the evaluator/tester workers, issue a verdict, and report so CEO can close the item.
 
 ## Hard Rules
 

@@ -51,6 +51,76 @@ if [ "$HOOK_EVENT" = "Stop" ]; then
   if [ "$STOP_HOOK_ACTIVE" = "true" ]; then exit 0; fi
 fi
 
+# ── v7 깨끗한 정지 short-circuit ──────────────────────────────
+# 회사 루프의 정당한 정지 조건은 둘뿐이다: COMPLETE, 그리고 외부권한 BLOCKED.
+# harness-company-complete.sh / harness-company-block.sh 가 이 terminal 런타임
+# 상태를 기록한다. 그 상태를 여기서 존중해, 끝났는데도 "계속하라"고 채근하지 않고
+# 턴을 깨끗이 종료한다. (/goal 직후 routing/running 상태에서는 발동하지 않는다.)
+case "$CONDUCTOR_STATE" in
+  completed|idle|blocked) exit 0 ;;
+esac
+if [ "$AGENT_STATUS" = "blocked" ] || [ "$OWNER_PROMPT_STATUS" = "completed" ] || [ "$OWNER_PROMPT_STATUS" = "awaiting-authority" ]; then
+  exit 0
+fi
+
+# ── v7 영구 운영(operating) + 완료 backstop ──────────────────
+# .harness/documents 의 mission-state 를 스캔해 루프 종류를 분류한다:
+#   - operating mission 이 active  → 영구 모드: 안건을 강제 구동하거나 wake 로 양보
+#   - 모든 mission 이 terminal      → 유한 루프 종료: 완료 처리 + 깨끗한 정지
+# (mission 문서가 없으면 순수 v6 프로젝트 → 미발동)
+DOCS_DIR="$CWD/.harness/documents"
+if [ "$TASK_STOP_ACTIVE" != "true" ] && [ -d "$DOCS_DIR" ] && \
+   { [ "$CONDUCTOR_STATE" = "running" ] || [ "$CONDUCTOR_STATE" = "operating" ]; }; then
+  any_mission="false"; active_mission="false"; operating_active="false"; operating_rel=""
+  while IFS= read -r state; do
+    [ -n "$state" ] || continue
+    any_mission="true"
+    a=$(jq -r '.active // false' "$state" 2>/dev/null || echo false)
+    lc=$(jq -r '.lifecycle // .status // "unknown"' "$state" 2>/dev/null || echo unknown)
+    case "$lc" in
+      closed|cancelled|superseded|complete|completed|blocked) ;;
+      operating|monitoring)
+        if [ "$a" = "true" ]; then
+          active_mission="true"; operating_active="true"
+          rel="${state#"$DOCS_DIR"/}"; operating_rel="${rel%/mission-state.json}"
+        fi ;;
+      *) [ "$a" = "true" ] && active_mission="true" ;;
+    esac
+  done < <(find "$DOCS_DIR" -name mission-state.json -type f 2>/dev/null)
+
+  if [ "$operating_active" = "true" ]; then
+    active_agenda=0
+    if [ -x "$SCRIPT_DIR/harness-agenda.sh" ]; then
+      active_agenda=$(bash "$SCRIPT_DIR/harness-agenda.sh" "$CWD" "$operating_rel" active-count 2>/dev/null || echo 0)
+    fi
+    # operating tick 도 활동 샘플 1회 + stop_chain_count 증가
+    NEW_COUNT=$((STOP_CHAIN_COUNT + 1))
+    jq --argjson n "$NEW_COUNT" '.conductor.stop_chain_count=$n | .conductor.last_stop_chain_at=(now|todate)' "$PROGRESS" > "$PROGRESS.tmp.$$" 2>/dev/null && mv "$PROGRESS.tmp.$$" "$PROGRESS" || rm -f "$PROGRESS.tmp.$$"
+    if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/harness-activity-record.js" ]; then node "$SCRIPT_DIR/harness-activity-record.js" "$CWD" >/dev/null 2>&1 || true; fi
+    if [ "${active_agenda:-0}" -gt 0 ] 2>/dev/null; then
+      bash "$SCRIPT_DIR/harness-progress-set.sh" "$CWD" '.conductor.state="running"' >/dev/null 2>&1 || true
+      jq -nc --arg n "$active_agenda" --arg g "$operating_rel" '{decision:"block", reason:("영구 운영 루프: 활성 안건 \($n)건. CEO는 .harness/documents/\($g)/agenda.json 의 모든 open 안건을 `scripts/harness-agenda.sh . \($g) decide` 로 판단·라우팅하고, decided 안건은 담당 CXX가 hired worker로 실행·검증한 뒤 `... close` 할 때까지 진행하라. 안건이 남았는데 턴을 끝내지 말 것.")}'
+      exit 0
+    elif [ "$CONDUCTOR_STATE" = "operating" ]; then
+      exit 0   # 안건 0 + heartbeat 기록됨 → 다음 hourly wake 로 양보(깨끗한 정지)
+    else
+      jq -nc --arg g "$operating_rel" '{decision:"block", reason:("영구 운영 루프: 안건 없음. CEO는 각 CXX(COO/CDO/CTO/CQO/OPS)에게 현황 보고를 지시하라 — 각 CXX는 자기 산하 worker 산출물이 goal 기준으로 여전히 올바르게 동작하는지 브리핑하고, 손실·드리프트·기회·리스크가 보이면 `scripts/harness-agenda.sh . \($g) raise <cxx> <kind> \"<title>\"` 로 새 안건을 등록한다. 한 바퀴 브리핑이 정말 무안건이면 `scripts/harness-company-cycle.sh . \($g)` 로 operating heartbeat 를 남기고 다음 hourly wake 로 양보하라.")}'
+      exit 0
+    fi
+  fi
+
+  if [ "$any_mission" = "true" ] && [ "$active_mission" = "false" ] && [ "$CONDUCTOR_STATE" = "running" ]; then
+    # Never silently complete: record why the backstop fired so an operator can
+    # audit a misclassification, and only treat the loop as finished if the
+    # transition actually applied (otherwise fall through and keep chaining).
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | stop-hook | auto-complete | backstop fired (conductor=running but no active mission under .harness/documents)" >> "$CWD/.harness/progress.log" 2>/dev/null || true
+    if bash "$SCRIPT_DIR/harness-company-complete.sh" "$CWD" "loop-idle-no-active-mission" >/dev/null 2>&1; then
+      exit 0
+    fi
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | stop-hook | auto-complete | WARN: harness-company-complete.sh failed during backstop; continuing loop" >> "$CWD/.harness/progress.log" 2>/dev/null || true
+  fi
+fi
+
 # 자동 연쇄 조건:
 #   conductor/company loop 가 running
 #   AND task_stop 비활성
@@ -103,6 +173,12 @@ TMP=$(mktemp)
 jq --argjson n "$NEW_COUNT" '.conductor.stop_chain_count = $n |
   .conductor.last_stop_chain_at = (now | todate)' "$PROGRESS" > "$TMP" 2>/dev/null \
   && mv "$TMP" "$PROGRESS" || rm -f "$TMP"
+
+# 자율 tick 마다 활동 샘플 1회 기록 → 대시보드 히트맵이 라이브 운영 중에도 채워진다.
+# (recorder 의 runtimeIdle 게이트가 완료 후에는 count>0 샘플을 알아서 억제한다.)
+if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/harness-activity-record.js" ]; then
+  node "$SCRIPT_DIR/harness-activity-record.js" "$CWD" >/dev/null 2>&1 || true
+fi
 
 # Claude 에게 다음 행동 지시
 if [ "$ESCALATION" != "null" ]; then

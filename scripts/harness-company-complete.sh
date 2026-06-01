@@ -25,12 +25,12 @@ command -v jq >/dev/null 2>&1 || {
   exit 1
 }
 
-bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
+if ! bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
   '.company_state.state = "idle" |
    .company_state.active_workers = 0 |
    .company_state.completed_at = (now | todate) |
    .conductor.state = "completed" |
-   .conductor.current_action = "complete:'"$REASON"'" |
+   .conductor.current_action = ("complete:" + $reason) |
    .conductor.completed_at = (now | todate) |
    .conductor.tracks = [] |
    .conductor.rendezvous = null |
@@ -39,7 +39,11 @@ bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
    .next_agent = "none" |
    .agent_status = "completed" |
    .owner_prompt.status = "completed" |
-   .owner_prompt.completed_at = (now | todate)'
+   .owner_prompt.completed_at = (now | todate)' \
+  --arg reason "$REASON"; then
+  echo "[company-complete] FAILED: progress.json transition did not apply (reason=$REASON). Runtime is NOT marked complete." >&2
+  exit 1
+fi
 
 if [ -f "$TODOS" ]; then
   tmp="$(mktemp)"

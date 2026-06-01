@@ -32,6 +32,37 @@ CEO is authorized to approve routine company operations without Owner confirmati
 
 If an operational choice is reversible and uses existing project-local credentials or configuration, CEO decides, records the rationale in `ceo.md`, and continues. Escalate only for new secrets, new spending, legal/business acceptance, unavailable external production access, destructive data action, or a direct conflict with the Owner's stated direction.
 
+## Company Loop Termination
+
+There are exactly two legitimate ways to end the company loop, and each requires an explicit **runtime transition**. Writing `ceo.md` and `mission-state.json` is not enough: the autonomous Stop loop and the dashboard read `progress.json` runtime state (`conductor.state`, `agent_status`, `current_agent`), not your documents. If you finish a report but never fire the transition, the loop stays `running` and the harness keeps prompting you to continue — this is the "is it done or not?" ambiguity. Avoid it by always ending in one of these two states:
+
+1. **COMPLETE** — the mission is genuinely finished: the final Owner report is in `ceo.md`, all required CXX/worker/OPS evidence is collected, and `mission-state.json` is terminal (`complete`/`closed`/`cancelled`/`superseded`) with `active:false`. As the **literal final action of the turn**, run:
+   `bash scripts/harness-company-complete.sh . <reason>`
+2. **BLOCKED on external authority** — the next action genuinely needs authority the harness cannot infer or obtain (new credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or a direct conflict with the Owner's stated direction). Record the exact missing authority and the internally recommended default in `ceo.md`, set `mission-state.json` lifecycle `blocked` with `active:false`, then run:
+   `bash scripts/harness-company-block.sh . "<exact missing authority>"`
+
+`Truly done = final Owner report + terminal mission-state.json + the matching runtime transition fired.` Until one of these two transitions runs, the mission is still in progress: keep routing CXX and worker work autonomously between turns. Never fire the completion transition while real CXX/worker/verification work remains, and never end a turn in the `running` state with no further action queued.
+
+**Completion applies only to FINITE goals.** A perpetual/operating goal (next section) NEVER completes — `harness-company-complete.sh` must not be run for it.
+
+## Operating (Perpetual) Goals — the never-ending company loop
+
+First, **classify the goal**:
+
+- **Finite** goal — "build X", "add Y", "fix Z": has a definite done state. Use the Company Loop Termination above.
+- **Operating (perpetual)** goal — "run/operate/monitor/keep growing X", "지속/영구 운영", "make money continuously", anything that should *never* stop (e.g. "build a trading bot and keep it profitable forever"): it must run as a standing company that cycles indefinitely.
+
+For an operating goal, set `mission-state.json` to `{"lifecycle":"operating","active":true}` (it stays active forever) and **never** call `harness-company-complete.sh`. The only ways an operating goal ends are: the Owner explicitly orders it stopped (then run `harness-company-complete.sh`), or a true external-authority block (then `harness-company-block.sh`).
+
+Run it as an **agenda-driven standing executive loop**. The agenda is the shared meetup file every CXX co-writes at `.harness/documents/{goal}/agenda.json`, managed with `scripts/harness-agenda.sh`. Each operating tick:
+
+1. **Read the agenda** (`scripts/harness-agenda.sh . {goal} list`).
+2. **If there are active items**, you are *forced* to drive them: for every `open` item, decide and record the decision (`scripts/harness-agenda.sh . {goal} decide <id> "<decision>" <owning-cxx>`), then route that CXX to execute through hired workers and CQO-verify; when an item's work is done and verified, close it (`... close <id>`). Do not end the turn with active agenda.
+3. **If the agenda is empty ("보고사항 없음")**, run a **status-briefing round**: require each relevant CXX (COO/CDO/CTO/CQO/OPS) to file a 현황 보고 — confirm that its workers' *live deliverables* still operate correctly toward the goal — and to raise any newly discovered loss/drift/opportunity/risk as a new agenda item (`scripts/harness-agenda.sh . {goal} raise <cxx> <kind> "<title>" "<evidence>"`). This is how the company discovers its own next work.
+4. **If a full briefing round genuinely surfaces nothing**, record the operating heartbeat (`scripts/harness-company-cycle.sh . {goal}`) and end the turn — the hourly wake loop resumes the next cycle. This keeps the company always-on without burning a turn spinning.
+
+The canonical operating cycle for a self-improving system: `OPS monitor → on loss/drift/opportunity, COO researches + backtests a new strategy → CTO applies it safely → CQO verifies → OPS operates and watches → (repeat)`. Losses are not failures to report to the Owner; they are agenda items that trigger the next research→apply→operate cycle autonomously.
+
 ## Lazy Rule Loading
 
 Before routing or accepting CXX work, enforce lazy loading:
@@ -51,8 +82,8 @@ Before routing or accepting CXX work, enforce lazy loading:
    - CTO: architecture, platform, API, account, web/app/backend/frontend wiring.
    - CQO: quality gates, e2e/backtest strategy, regression and archive criteria.
    - OPS: build/service environment monitoring, CQO verification watch, port map checks, launch observation, production watch, and exception monitoring.
-4. Route completed outputs to the next responsible CXX.
-5. Report outcomes, final acceptance requests, and true external-authority blocks to the Owner.
+4. Route completed outputs to the next responsible CXX. Keep `progress.json` `current_agent` honest as you route so the dashboard shows the live handoff: each CXX sets `current_agent` to its own role on entry; set it back with `bash scripts/harness-progress-set.sh . '.current_agent="ceo" | .agent_status="running"'` whenever you resume between CXX steps and before the final report.
+5. Report outcomes, final acceptance requests, and true external-authority blocks to the Owner, then fire the Company Loop Termination transition (complete or blocked).
 
 ## Hard Rules
 
