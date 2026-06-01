@@ -65,6 +65,11 @@ export interface RuntimeSnapshot {
   agentStatus: string;
   nextAgent: string | null;
   updatedAt: string | null;
+  conductorState?: string | null;
+  currentAction?: string | null;
+  companyState?: string | null;
+  activeWorkers?: number;
+  lastDispatchAt?: string | null;
   ownerPrompt: {
     command: string;
     summary: string;
@@ -88,6 +93,7 @@ export interface HarnessSnapshot {
   todos: CxxTodo[];
   events: HarnessEvent[];
   activitySamples: ActivitySample[];
+  files: HarnessFileEntry[];
 }
 
 export interface ActivitySample {
@@ -96,6 +102,16 @@ export interface ActivitySample {
   count: number;
   hotfix: boolean;
   missionId: string | null;
+}
+
+export interface HarnessFileEntry {
+  path: string;
+  name: string;
+  kind: "file" | "dir";
+  depth: number;
+  size: number | null;
+  updatedAt: string | null;
+  category: "documents" | "todos" | "activity" | "knowledge" | "runtime" | "config" | "other";
 }
 
 export interface CxxTodo {

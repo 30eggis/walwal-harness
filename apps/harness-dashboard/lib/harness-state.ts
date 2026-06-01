@@ -20,6 +20,7 @@ import type {
   WorkerDocEntry,
   CxxTodo,
   ActivitySample,
+  HarnessFileEntry,
 } from "./types";
 
 const SNAPSHOT_VERSION = "1.2.0";
@@ -101,6 +102,10 @@ interface RawProgress {
   // Real-harness conductor track shape (CLAUDE.md §parallel-tracks). Used when
   // top-level `parallel_tracks` is absent.
   conductor?: {
+    state?: string | null;
+    current_action?: string | null;
+    stop_chain_count?: number | null;
+    last_stop_chain_at?: string | null;
     tracks?: Array<{
       id: string;
       owner?: string;
@@ -124,6 +129,7 @@ interface RawProgress {
     feature_list?: { total?: number; passed?: number; failed?: number };
   };
   company_state?: {
+    state?: string | null;
     active_workers?: number;
     workers?: Array<{
       name?: string;
@@ -194,6 +200,7 @@ function emptySnapshot(banner: ErrorBanner | null = null, rootDir?: string): Har
     todos: [],
     events: [],
     activitySamples: [],
+    files: [],
   };
 }
 
@@ -473,6 +480,11 @@ function buildRuntime(progress: RawProgress | null): RuntimeSnapshot {
     agentStatus: progress?.agent_status ?? "unknown",
     nextAgent: progress?.next_agent ?? null,
     updatedAt: progress?.updated_at ?? null,
+    conductorState: progress?.conductor?.state ?? null,
+    currentAction: progress?.conductor?.current_action ?? null,
+    companyState: progress?.company_state?.state ?? null,
+    activeWorkers: progress?.company_state?.active_workers ?? 0,
+    lastDispatchAt: progress?.company_state?.last_dispatch_at ?? null,
     ownerPrompt,
   };
 }
@@ -876,6 +888,80 @@ function readActivitySamples(rootDir: string): ActivitySample[] {
   return rows.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
 }
 
+function fileCategory(relPath: string): HarnessFileEntry["category"] {
+  if (relPath.startsWith(".harness/documents/")) return "documents";
+  if (relPath.startsWith(".harness/todos/")) return "todos";
+  if (relPath.startsWith(".harness/activity/")) return "activity";
+  if (relPath.startsWith(".harness/gotchas/") || relPath.startsWith(".harness/conventions/")) return "knowledge";
+  if (relPath.startsWith(".harness/runtime/")) return "runtime";
+  if (relPath === ".harness/progress.json" || relPath === ".harness/config.json") return "config";
+  return "other";
+}
+
+function shouldSkipHarnessDir(relPath: string): boolean {
+  return (
+    relPath === ".harness/dashboard" ||
+    relPath.startsWith(".harness/dashboard/") ||
+    relPath === ".harness/shared/HR-Resource" ||
+    relPath.startsWith(".harness/shared/HR-Resource/")
+  );
+}
+
+function readHarnessFiles(rootDir: string, limit = 180): HarnessFileEntry[] {
+  const harnessDir = path.join(rootDir, ".harness");
+  if (!existsSync(harnessDir)) return [];
+
+  const entries: HarnessFileEntry[] = [];
+  const visit = (absDir: string, relDir: string, depth: number) => {
+    if (entries.length >= limit || depth > 5 || shouldSkipHarnessDir(relDir)) return;
+    let dirents: Dirent[];
+    try {
+      dirents = readdirSync(absDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    dirents.sort((a, b) => {
+      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const entry of dirents) {
+      if (entries.length >= limit || entry.name === ".DS_Store") break;
+      const abs = path.join(absDir, entry.name);
+      const rel = `${relDir}/${entry.name}`;
+      if (shouldSkipHarnessDir(rel)) continue;
+      let stat = null as ReturnType<typeof statSync> | null;
+      try {
+        stat = statSync(abs);
+      } catch {
+        continue;
+      }
+      entries.push({
+        path: rel,
+        name: entry.name,
+        kind: entry.isDirectory() ? "dir" : "file",
+        depth,
+        size: entry.isDirectory() ? null : stat.size,
+        updatedAt: stat.mtime.toISOString(),
+        category: fileCategory(rel),
+      });
+      if (entry.isDirectory()) visit(abs, rel, depth + 1);
+    }
+  };
+
+  entries.push({
+    path: ".harness",
+    name: ".harness",
+    kind: "dir",
+    depth: 0,
+    size: null,
+    updatedAt: null,
+    category: "runtime",
+  });
+  visit(harnessDir, ".harness", 1);
+
+  return entries;
+}
+
 export function readHarnessState(rootDir: string): HarnessSnapshot {
   const harnessDir = path.join(rootDir, ".harness");
   if (!existsSync(harnessDir)) {
@@ -908,6 +994,7 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     snapshot.todos = readTodos(rootDir);
     snapshot.events = readEvents(rootDir);
     snapshot.activitySamples = readActivitySamples(rootDir);
+    snapshot.files = readHarnessFiles(rootDir);
     return snapshot;
   }
 
@@ -929,5 +1016,6 @@ export function readHarnessState(rootDir: string): HarnessSnapshot {
     todos: readTodos(rootDir),
     events: readEvents(rootDir),
     activitySamples: readActivitySamples(rootDir),
+    files: readHarnessFiles(rootDir),
   };
 }

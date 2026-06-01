@@ -7,6 +7,7 @@ import type {
   ConventionEntry,
   CxxTodo,
   GotchaEntry,
+  HarnessFileEntry,
   HarnessSnapshot,
   MissionDoc,
   OwnerPromptEntry,
@@ -53,6 +54,14 @@ type HeatSample = {
 };
 
 type GoalGroup = { goal: MissionDoc; children: MissionDoc[] };
+type HealthTone = "green" | "orange" | "red" | "cyan" | "slate";
+type RuntimeHealth = {
+  label: string;
+  detail: string;
+  tone: HealthTone;
+  ageMs: number | null;
+  lastSignalAt: string | null;
+};
 
 const CXX_ROLES = ["ceo", "coo", "cdo", "cto", "cqo", "ops"] as const;
 type CxxRole = typeof CXX_ROLES[number];
@@ -220,10 +229,12 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     title: string;
     content: string;
   } | null>(null);
+  const [selectedHarnessPath, setSelectedHarnessPath] = useState<string | null>(null);
 
   // Selecting a mission or lane returns the viewer to mission-context mode.
   useEffect(() => {
     setCustomDoc(null);
+    setSelectedHarnessPath(null);
   }, [selectedMissionId, selectedLaneId]);
 
   void lang;
@@ -233,10 +244,33 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
   const activeWorkers =
     (snapshot.missions.find((mission) => mission.active) ?? snapshot.missions[0])?.workers.filter((w) => w.active).length ?? 0;
   const hotfixCount = snapshot.missions.filter((m) => m.type === "hotfix").length;
+  const runtimeHealth = useMemo(() => deriveRuntimeHealth(snapshot), [snapshot]);
+  const highlightedPaths = useMemo(
+    () => buildHighlightedPaths(selectedMission, selectedLane, snapshot.todos),
+    [selectedMission, selectedLane, snapshot.todos]
+  );
 
   const handleSelectWorker = (mission: MissionDoc, worker: WorkerDocEntry) => {
     setSelectedMissionId(mission.missionId);
     setSelectedLaneId(`${worker.owner}:${worker.name}`);
+  };
+
+  const handleSelectHarnessFile = (entry: HarnessFileEntry) => {
+    setSelectedHarnessPath(entry.path);
+    setCustomDoc({
+      source: "Harness file",
+      title: entry.path,
+      content: [
+        `# ${entry.path}`,
+        "",
+        `- kind: ${entry.kind}`,
+        `- category: ${entry.category}`,
+        `- updated: ${entry.updatedAt ?? "(unknown)"}`,
+        `- size: ${entry.size === null ? "(directory)" : `${entry.size} bytes`}`,
+        "",
+        "Select a mission, CXX lane, or worker report to inspect document contents.",
+      ].join("\n"),
+    });
   };
 
   return (
@@ -261,24 +295,23 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         />
 
         <main className="flex min-w-0 flex-1 flex-col gap-2 p-2">
-          {/* Top row: Knowledge | Layer Activity | Recent Report */}
-          <section className="grid shrink-0 grid-cols-3 gap-2" style={{ height: 280 }}>
-            <KnowledgeBasePanel
-              gotchas={snapshot.gotchas}
-              conventions={snapshot.conventions}
-              baselineTs={selectedGoal?.ts ?? null}
-              onSelect={(entry, kind) =>
-                setCustomDoc({
-                  source: kind,
-                  title: `${entry.id}.md`,
-                  content: entry.content,
-                })
-              }
+          {/* Top row: Owner situational awareness */}
+          <section className="grid shrink-0 grid-cols-4 gap-2" style={{ height: 310 }}>
+            <OperationalStatusPanel
+              snapshot={snapshot}
+              health={runtimeHealth}
+              mission={selectedMission}
             />
-            <LayerActivityPanel
-              goalScope={goalScopeMissions}
+            <StepProgressPanel
+              mission={selectedMission}
+              runtimeAgent={snapshot.runtime.currentAgent}
               todos={snapshot.todos}
-              label={selectedGoal?.missionId ?? "no goal"}
+            />
+            <HarnessFileMapPanel
+              files={snapshot.files}
+              highlightedPaths={highlightedPaths}
+              selectedPath={selectedHarnessPath}
+              onSelect={handleSelectHarnessFile}
             />
             <RecentReportPanel
               missions={snapshot.missions}
@@ -777,6 +810,389 @@ function formatTime(iso: string | null | undefined) {
   } catch {
     return "";
   }
+}
+
+function formatRelativeTime(iso: string | null | undefined) {
+  if (!iso) return "no signal";
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return "bad timestamp";
+  const diff = Math.max(0, Date.now() - t);
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function newestIso(values: Array<string | null | undefined>) {
+  let best: string | null = null;
+  let bestTime = 0;
+  for (const value of values) {
+    if (!value) continue;
+    const time = Date.parse(value);
+    if (!Number.isFinite(time) || time <= bestTime) continue;
+    best = value;
+    bestTime = time;
+  }
+  return best;
+}
+
+function deriveRuntimeHealth(snapshot: HarnessSnapshot): RuntimeHealth {
+  const rt = snapshot.runtime;
+  const status = (rt.agentStatus ?? "").toLowerCase();
+  const conductor = (rt.conductorState ?? "").toLowerCase();
+  const nextAgent = (rt.nextAgent ?? "").toLowerCase();
+  const hasNextAgent = nextAgent !== "" && nextAgent !== "none";
+  const hasActiveDispatch =
+    status === "running" ||
+    conductor === "running" ||
+    conductor === "active" ||
+    conductor === "dispatching" ||
+    hasNextAgent;
+  const lastSignalAt = newestIso([
+    rt.updatedAt,
+    rt.lastDispatchAt,
+    snapshot.activitySamples.at(-1)?.ts,
+    snapshot.events[0]?.ts,
+    ...snapshot.todos.map((todo) => todo.lastHeartbeatAt ?? todo.updatedAt),
+    ...snapshot.missions.flatMap((mission) => [
+      mission.ts,
+      ...mission.workers.map((worker) => worker.updatedAt),
+    ]),
+  ]);
+  const ageMs = lastSignalAt ? Date.now() - Date.parse(lastSignalAt) : null;
+  const completedLoop =
+    status === "completed" ||
+    status === "complete" ||
+    conductor === "completed" ||
+    conductor === "complete";
+  const idle =
+    !hasActiveDispatch &&
+    (completedLoop || ((rt.currentAgent ?? null) === null && !hasNextAgent));
+
+  if (status === "blocked" || conductor === "blocked" || rt.ownerPrompt?.status === "awaiting-authority") {
+    return {
+      label: "BLOCKED",
+      detail: rt.ownerPrompt?.summary || rt.currentAction || "external authority required",
+      tone: "red",
+      ageMs,
+      lastSignalAt,
+    };
+  }
+  if (idle) {
+    return {
+      label: conductor === "operating" || status === "operating" ? "OPERATING" : "IDLE",
+      detail: conductor === "operating" || status === "operating" ? "yielded to hourly wake" : "runtime loop is closed",
+      tone: conductor === "operating" || status === "operating" ? "cyan" : "slate",
+      ageMs,
+      lastSignalAt,
+    };
+  }
+  if (ageMs === null) {
+    return { label: "UNKNOWN", detail: "no heartbeat yet", tone: "orange", ageMs, lastSignalAt };
+  }
+  if (ageMs > 15 * 60_000) {
+    return {
+      label: "STUCK?",
+      detail: "running state with no recent file or heartbeat movement",
+      tone: "red",
+      ageMs,
+      lastSignalAt,
+    };
+  }
+  if (ageMs > 3 * 60_000) {
+    return {
+      label: "STALE",
+      detail: "running, but no recent visible movement",
+      tone: "orange",
+      ageMs,
+      lastSignalAt,
+    };
+  }
+  return {
+    label: "ALIVE",
+    detail: rt.currentAction || `${rt.currentAgent ?? rt.nextAgent ?? "company"} is active`,
+    tone: "green",
+    ageMs,
+    lastSignalAt,
+  };
+}
+
+function healthToneClass(tone: HealthTone) {
+  return {
+    green: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
+    orange: "border-orange-400/40 bg-orange-400/10 text-orange-200",
+    red: "border-rose-400/50 bg-rose-400/10 text-rose-200",
+    cyan: "border-cyan-400/40 bg-cyan-400/10 text-cyan-200",
+    slate: "border-slate-500/30 bg-slate-500/10 text-slate-300",
+  }[tone];
+}
+
+function buildHighlightedPaths(
+  mission: MissionDoc | null,
+  lane: AgentLane | null,
+  todos: CxxTodo[]
+) {
+  const paths = new Set<string>();
+  if (mission) {
+    const base = `.harness/documents/${mission.missionId}`;
+    paths.add(base);
+    paths.add(`${base}/mission-state.json`);
+    for (const role of ["ceo", "coo", "cdo", "cto", "cqo", "ops"]) {
+      const key = role as keyof Pick<MissionDoc, "ceo" | "coo" | "cdo" | "cto" | "cqo" | "ops">;
+      if (mission[key]) paths.add(`${base}/${role}.md`);
+    }
+    for (const worker of mission.workers) {
+      if (worker.reportPath) paths.add(worker.reportPath);
+    }
+  }
+  if (lane?.worker?.reportPath) paths.add(lane.worker.reportPath);
+  for (const todo of todos) {
+    if (todo.missionPath) paths.add(todo.missionPath);
+    for (const artifact of todo.requiredArtifacts) paths.add(artifact);
+  }
+  paths.add(".harness/progress.json");
+  paths.add(".harness/todos/state.json");
+  return paths;
+}
+
+function OperationalStatusPanel({
+  snapshot,
+  health,
+  mission,
+}: {
+  snapshot: HarnessSnapshot;
+  health: RuntimeHealth;
+  mission: MissionDoc | null;
+}) {
+  const rt = snapshot.runtime;
+  const openTodos = snapshot.todos.filter((todo) => !["done", "completed"].includes(todo.status)).length;
+  const activeMission = mission ?? snapshot.missions.find((m) => m.active) ?? null;
+  return (
+    <div className="panel-shell fade-in flex h-full min-h-0 flex-col overflow-hidden p-2">
+      <SectionLabel>Now · Runtime</SectionLabel>
+      <div className={`mt-2 rounded border px-3 py-2 ${healthToneClass(health.tone)}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-mono text-lg font-semibold tracking-wide">{health.label}</span>
+          <span className="font-mono text-[10px] opacity-80">{formatRelativeTime(health.lastSignalAt)}</span>
+        </div>
+        <div className="mt-1 line-clamp-2 text-[11px] leading-4 opacity-90">{health.detail}</div>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+        <RuntimeMetric label="agent" value={rt.currentAgent ?? rt.nextAgent ?? "none"} />
+        <RuntimeMetric label="status" value={rt.agentStatus ?? "unknown"} />
+        <RuntimeMetric label="loop" value={rt.conductorState ?? rt.companyState ?? "n/a"} />
+        <RuntimeMetric label="workers" value={String(rt.activeWorkers ?? 0)} />
+      </div>
+      <div className="inset-shell mt-2 min-h-0 flex-1 overflow-hidden p-2">
+        <div className="font-mono text-[9px] uppercase tracking-wider text-slate-500">Current Work</div>
+        <div className="mt-1 truncate text-[11px] text-cyan-100" title={activeMission?.missionId}>
+          {activeMission?.missionId ?? "no mission selected"}
+        </div>
+        <div className="mt-1 line-clamp-2 text-[10px] leading-4 text-slate-300" title={rt.currentAction ?? ""}>
+          {rt.currentAction ?? rt.ownerPrompt?.summary ?? "no current action recorded"}
+        </div>
+        <div className="mt-2 flex items-center justify-between font-mono text-[9px] text-slate-500">
+          <span>{openTodos} open todos</span>
+          <span>{snapshot.events.length} recent events</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RuntimeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="inset-shell min-w-0 px-2 py-1">
+      <div className="font-mono text-[8px] uppercase tracking-wider text-slate-600">{label}</div>
+      <div className="truncate font-mono text-[10px] text-slate-200" title={value}>{value}</div>
+    </div>
+  );
+}
+
+function StepProgressPanel({
+  mission,
+  runtimeAgent,
+  todos,
+}: {
+  mission: MissionDoc | null;
+  runtimeAgent: string | null;
+  todos: CxxTodo[];
+}) {
+  const steps = useMemo(() => buildMissionSteps(mission, runtimeAgent, todos), [mission, runtimeAgent, todos]);
+  return (
+    <div className="panel-shell fade-in flex h-full min-h-0 flex-col overflow-hidden p-2">
+      <SectionLabel>Plan · Current Step</SectionLabel>
+      <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-auto pr-1">
+        {steps.map((step, idx) => (
+          <div
+            key={step.id}
+            className={`flex items-center gap-2 rounded border px-2 py-1.5 ${
+              step.state === "active"
+                ? "border-cyan-400/50 bg-cyan-400/10"
+                : step.state === "done"
+                ? "border-emerald-400/20 bg-emerald-400/[0.06]"
+                : step.state === "blocked"
+                ? "border-rose-400/40 bg-rose-400/10"
+                : "border-slate-800 bg-slate-950/30"
+            }`}
+          >
+            <span className={`grid h-5 w-5 shrink-0 place-items-center rounded font-mono text-[9px] ${
+              step.state === "active"
+                ? "bg-cyan-400 text-slate-950"
+                : step.state === "done"
+                ? "bg-emerald-500/70 text-slate-950"
+                : step.state === "blocked"
+                ? "bg-rose-500/80 text-white"
+                : "bg-slate-800 text-slate-500"
+            }`}>
+              {idx + 1}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[11px] font-semibold text-slate-100">{step.label}</div>
+              <div className="truncate font-mono text-[9px] text-slate-500">{step.detail}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function buildMissionSteps(
+  mission: MissionDoc | null,
+  runtimeAgent: string | null,
+  todos: CxxTodo[]
+) {
+  const roleDone = (role: keyof Pick<MissionDoc, "ceo" | "coo" | "cdo" | "cto" | "cqo" | "ops">) => !!mission?.[role];
+  const workerTotal = mission?.workers.length ?? 0;
+  const workerDone = mission?.workers.filter((w) => w.status === "COMPLETE").length ?? 0;
+  const blockedOwners = new Set(todos.filter((todo) => todo.status === "blocked").map((todo) => todo.owner));
+  const terminal = mission ? isTerminalLifecycle(mission.lifecycle) || mission.lifecycle === "blocked" : false;
+  const activeRole = (runtimeAgent ?? "").replace(/^harness-/, "");
+  const rows = [
+    { id: "owner", label: "Owner intake", done: !!mission, detail: mission?.type ?? "waiting for command" },
+    { id: "ceo", label: "CEO routing/report", done: roleDone("ceo"), detail: mission?.ceo ? "ceo.md present" : "needs CEO record" },
+    { id: "coo", label: "COO plan/research", done: roleDone("coo"), detail: mission?.coo ? "coo.md present" : "not routed yet" },
+    { id: "cdo", label: "CDO design", done: roleDone("cdo"), detail: mission?.cdoPreview ? "preview available" : mission?.cdo ? "cdo.md present" : "not routed yet" },
+    { id: "cto", label: "CTO implementation", done: roleDone("cto"), detail: mission?.cto ? "cto.md present" : "not routed yet" },
+    { id: "cqo", label: "CQO verification", done: roleDone("cqo"), detail: mission?.cqo ? "cqo.md present" : "not routed yet" },
+    { id: "ops", label: "OPS watch", done: roleDone("ops"), detail: mission?.ops ? "ops.md present" : "not routed yet" },
+    { id: "workers", label: "Hired workers", done: workerTotal > 0 && workerDone >= workerTotal, detail: `${workerDone}/${workerTotal} reports complete` },
+    { id: "terminal", label: "Runtime transition", done: terminal, detail: mission?.lifecycle ?? "unknown" },
+  ];
+  return rows.map((row) => ({
+    ...row,
+    state: blockedOwners.has(row.id)
+      ? "blocked"
+      : activeRole === row.id || (row.id === "workers" && workerTotal > workerDone)
+      ? "active"
+      : row.done
+      ? "done"
+      : "pending",
+  }));
+}
+
+function HarnessFileMapPanel({
+  files,
+  highlightedPaths,
+  selectedPath,
+  onSelect,
+}: {
+  files: HarnessFileEntry[];
+  highlightedPaths: Set<string>;
+  selectedPath: string | null;
+  onSelect: (entry: HarnessFileEntry) => void;
+}) {
+  const visibleFiles = useMemo(() => {
+    const priority = new Map<HarnessFileEntry["category"], number>([
+      ["documents", 0],
+      ["todos", 1],
+      ["activity", 2],
+      ["knowledge", 3],
+      ["runtime", 4],
+      ["config", 5],
+      ["other", 6],
+    ]);
+    return [...files]
+      .sort((a, b) => {
+        const hotA = isHighlightedPath(a.path, highlightedPaths) ? -1 : 0;
+        const hotB = isHighlightedPath(b.path, highlightedPaths) ? -1 : 0;
+        if (hotA !== hotB) return hotA - hotB;
+        const cat = (priority.get(a.category) ?? 9) - (priority.get(b.category) ?? 9);
+        if (cat !== 0) return cat;
+        return (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+      })
+      .slice(0, 90);
+  }, [files, highlightedPaths]);
+  return (
+    <div className="panel-shell fade-in flex h-full min-h-0 flex-col overflow-hidden p-2">
+      <div className="flex items-center justify-between">
+        <SectionLabel>.harness · File Map</SectionLabel>
+        <span className="font-mono text-[9px] text-slate-500">{files.length} indexed</span>
+      </div>
+      <div className="mt-2 min-h-0 flex-1 overflow-auto pr-1">
+        {visibleFiles.length === 0 ? (
+          <div className="text-[10px] text-slate-500">No .harness files indexed.</div>
+        ) : (
+          visibleFiles.map((entry) => {
+            const active = isHighlightedPath(entry.path, highlightedPaths);
+            const selected = selectedPath === entry.path;
+            return (
+              <button
+                key={entry.path}
+                type="button"
+                onClick={() => onSelect(entry)}
+                className={`mb-0.5 grid w-full grid-cols-[1fr_auto] items-center gap-2 rounded border px-1.5 py-1 text-left ${
+                  selected
+                    ? "border-cyan-300 bg-cyan-400/10"
+                    : active
+                    ? "border-emerald-400/40 bg-emerald-400/10"
+                    : "border-transparent hover:border-cyan-400/20 hover:bg-white/[0.03]"
+                }`}
+                title={entry.path}
+              >
+                <span className="min-w-0 truncate font-mono text-[10px] text-slate-200" style={{ paddingLeft: `${Math.max(0, entry.depth - 1) * 10}px` }}>
+                  <span className={entry.kind === "dir" ? "text-amber-300" : "text-slate-500"}>
+                    {entry.kind === "dir" ? "▸" : "•"}
+                  </span>{" "}
+                  {entry.name}
+                </span>
+                <span className={`rounded px-1 py-0.5 font-mono text-[8px] ${fileCategoryClass(entry.category)}`}>
+                  {active ? "focus" : entry.category}
+                </span>
+                <span className="col-span-2 truncate pl-4 font-mono text-[8px] text-slate-600">
+                  {entry.path} · {formatRelativeTime(entry.updatedAt)}
+                </span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function isHighlightedPath(pathValue: string, highlightedPaths: Set<string>) {
+  if (highlightedPaths.has(pathValue)) return true;
+  for (const candidate of highlightedPaths) {
+    if (candidate && pathValue.startsWith(`${candidate}/`)) return true;
+  }
+  return false;
+}
+
+function fileCategoryClass(category: HarnessFileEntry["category"]) {
+  return {
+    documents: "bg-cyan-400/10 text-cyan-200",
+    todos: "bg-orange-400/10 text-orange-200",
+    activity: "bg-emerald-400/10 text-emerald-200",
+    knowledge: "bg-violet-400/10 text-violet-200",
+    runtime: "bg-slate-500/10 text-slate-300",
+    config: "bg-amber-400/10 text-amber-200",
+    other: "bg-slate-800 text-slate-400",
+  }[category];
 }
 
 // ===== Knowledge base panel =====
