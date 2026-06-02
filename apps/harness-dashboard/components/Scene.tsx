@@ -229,12 +229,10 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     title: string;
     content: string;
   } | null>(null);
-  const [selectedHarnessPath, setSelectedHarnessPath] = useState<string | null>(null);
 
   // Selecting a mission or lane returns the viewer to mission-context mode.
   useEffect(() => {
     setCustomDoc(null);
-    setSelectedHarnessPath(null);
   }, [selectedMissionId, selectedLaneId]);
 
   void lang;
@@ -245,32 +243,19 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
     (snapshot.missions.find((mission) => mission.active) ?? snapshot.missions[0])?.workers.filter((w) => w.active).length ?? 0;
   const hotfixCount = snapshot.missions.filter((m) => m.type === "hotfix").length;
   const runtimeHealth = useMemo(() => deriveRuntimeHealth(snapshot), [snapshot]);
-  const highlightedPaths = useMemo(
-    () => buildHighlightedPaths(selectedMission, selectedLane, snapshot.todos),
-    [selectedMission, selectedLane, snapshot.todos]
-  );
 
   const handleSelectWorker = (mission: MissionDoc, worker: WorkerDocEntry) => {
     setSelectedMissionId(mission.missionId);
     setSelectedLaneId(`${worker.owner}:${worker.name}`);
   };
 
-  const handleSelectHarnessFile = (entry: HarnessFileEntry) => {
-    setSelectedHarnessPath(entry.path);
-    setCustomDoc({
-      source: "Harness file",
-      title: entry.path,
-      content: [
-        `# ${entry.path}`,
-        "",
-        `- kind: ${entry.kind}`,
-        `- category: ${entry.category}`,
-        `- updated: ${entry.updatedAt ?? "(unknown)"}`,
-        `- size: ${entry.size === null ? "(directory)" : `${entry.size} bytes`}`,
-        "",
-        "Select a mission, CXX lane, or worker report to inspect document contents.",
-      ].join("\n"),
-    });
+  // Open a gotcha/convention in the document viewer with its FULL markdown body
+  // (entry.content is the real readFileSync'd file — restores full-document reading).
+  const handleSelectKnowledge = (
+    entry: GotchaEntry | ConventionEntry,
+    kind: KnowledgeKind
+  ) => {
+    setCustomDoc({ source: kind, title: `${entry.id}.md`, content: entry.content });
   };
 
   return (
@@ -295,23 +280,27 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
         />
 
         <main className="flex min-w-0 flex-1 flex-col gap-2 p-2">
-          {/* Top row: Owner situational awareness */}
+          {/* Top row: Owner situational awareness.
+              PULSE (trust verdict) · ACTIVE NOW (per-CXX activity, fixes the
+              "only CEO" heatmap illusion) · KNOWLEDGE (gotchas/conventions, full
+              body) · RECENT (worker reports, full body). All viewer-openable. */}
           <section className="grid shrink-0 grid-cols-4 gap-2" style={{ height: 310 }}>
             <OperationalStatusPanel
               snapshot={snapshot}
               health={runtimeHealth}
               mission={selectedMission}
             />
-            <StepProgressPanel
-              mission={selectedMission}
-              runtimeAgent={snapshot.runtime.currentAgent}
-              todos={snapshot.todos}
+            <ActiveNowPanel
+              lanes={lanes}
+              snapshot={snapshot}
+              selectedLaneId={selectedLaneId}
+              onSelectLane={setSelectedLaneId}
             />
-            <HarnessFileMapPanel
-              files={snapshot.files}
-              highlightedPaths={highlightedPaths}
-              selectedPath={selectedHarnessPath}
-              onSelect={handleSelectHarnessFile}
+            <KnowledgeBasePanel
+              gotchas={snapshot.gotchas}
+              conventions={snapshot.conventions}
+              baselineTs={selectedGoal?.ts ?? null}
+              onSelect={handleSelectKnowledge}
             />
             <RecentReportPanel
               missions={snapshot.missions}
@@ -1008,6 +997,97 @@ function RuntimeMetric({ label, value }: { label: string; value: string }) {
     <div className="inset-shell min-w-0 px-2 py-1">
       <div className="font-mono text-[8px] uppercase tracking-wider text-slate-600">{label}</div>
       <div className="truncate font-mono text-[10px] text-slate-200" title={value}>{value}</div>
+    </div>
+  );
+}
+
+// ACTIVE NOW — a per-CXX roster so the whole company is legible at a glance,
+// independent of heatmap brightness. Each role shows LIVE (open todo / running
+// worker), RECENT (newest activity sample, relative age), or IDLE — in its own
+// CXX colour. This is the perception-level fix for "heatmap shows only CEO".
+function ActiveNowPanel({
+  lanes,
+  snapshot,
+  selectedLaneId,
+  onSelectLane,
+}: {
+  lanes: AgentLane[];
+  snapshot: HarnessSnapshot;
+  selectedLaneId: string | null;
+  onSelectLane: (laneId: string) => void;
+}) {
+  const lastSampleByRole = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of snapshot.activitySamples) {
+      const role = s.laneId.split(":")[0];
+      const prev = m.get(role);
+      if (!prev || Date.parse(s.ts) > Date.parse(prev)) m.set(role, s.ts);
+    }
+    return m;
+  }, [snapshot.activitySamples]);
+
+  const rows = CXX_ROLES.map((role) => {
+    const lane = lanes.find((l) => l.kind === "cxx" && l.role === role) ?? null;
+    const openTodos = snapshot.todos.filter(
+      (t) => t.owner === role && t.status !== "done" && t.status !== "completed"
+    ).length;
+    const runningWorkers = (lane?.workers ?? []).filter(
+      (w) => w.active || w.status === "IN_PROGRESS"
+    ).length;
+    const lastTs = lastSampleByRole.get(role) ?? null;
+    const state: "live" | "recent" | "idle" = openTodos > 0 || runningWorkers > 0 ? "live" : lastTs ? "recent" : "idle";
+    return { role, lane, openTodos, runningWorkers, lastTs, state };
+  });
+
+  return (
+    <div className="panel-shell fade-in flex h-full min-h-0 flex-col overflow-hidden p-2">
+      <SectionLabel>Active Now · Who · What</SectionLabel>
+      <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-auto pr-1">
+        {rows.map(({ role, lane, openTodos, runningWorkers, lastTs, state }) => {
+          const selected = !!lane && selectedLaneId === lane.id;
+          return (
+            <button
+              key={role}
+              type="button"
+              disabled={!lane}
+              onClick={() => lane && onSelectLane(lane.id)}
+              title={lane ? `Open ${role.toUpperCase()} document` : `${role.toUpperCase()} not active in this mission`}
+              className={`flex w-full items-center gap-2 rounded border px-2 py-1.5 text-left transition-colors ${
+                selected
+                  ? "border-cyan-300 bg-cyan-400/10"
+                  : state === "live"
+                  ? "border-cyan-400/40 bg-cyan-400/5"
+                  : "border-slate-800 hover:border-cyan-400/20 hover:bg-white/[0.03]"
+              } ${lane ? "cursor-pointer" : "cursor-default opacity-60"}`}
+            >
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                  state === "idle" ? "bg-slate-700" : CXX_COLOR[role]
+                } ${state === "live" ? "animate-pulse" : state === "recent" ? "opacity-60" : ""}`}
+              />
+              <span className={`w-9 shrink-0 font-mono text-[11px] font-semibold ${CXX_TEXT[role]}`}>
+                {role.toUpperCase()}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[10px] text-slate-300">
+                {state === "live"
+                  ? runningWorkers > 0
+                    ? `${runningWorkers} worker${runningWorkers > 1 ? "s" : ""} running`
+                    : `${openTodos} open todo${openTodos > 1 ? "s" : ""}`
+                  : state === "recent"
+                  ? `active ${formatRelativeTime(lastTs)}`
+                  : "idle"}
+              </span>
+              <span
+                className={`shrink-0 font-mono text-[8px] uppercase tracking-wider ${
+                  state === "live" ? "text-cyan-300" : state === "recent" ? "text-slate-500" : "text-slate-600"
+                }`}
+              >
+                {state}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2036,7 +2116,7 @@ function WorkflowHeatmap({
                     : selected
                     ? "border-cyan-300"
                     : "border-transparent"
-                } ${heatColor(cell.count)}`}
+                } ${heatColor(cell.count, cell.laneId)}`}
                 style={{ gridColumn: cell.x + 2, gridRow: cell.y + 2 }}
                 title={
                   interactive
@@ -2330,8 +2410,16 @@ function Arrow() {
   return <span className="text-slate-600">→</span>;
 }
 
-function heatColor(count: number) {
-  // 3-state activity from sample.count: 0 idle / 1 standby / 2 in-progress.
+function heatColor(count: number, laneId?: string) {
+  // 3-state activity from sample.count: 0 idle / 1 recent / 2 in-progress.
+  // Render per-role so each lane's history shows in its own CXX colour instead of
+  // collapsing into one dim emerald (which read as "only CEO is working"). The
+  // base colour + "/30" variant mirror the patterns already used in LayerActivityPanel.
+  const role = (laneId ?? "").split(":")[0] as CxxRole;
+  if (role in CXX_COLOR) {
+    if (count >= 2) return CXX_COLOR[role];
+    if (count >= 1) return `${CXX_COLOR[role]}/30`;
+  }
   if (count >= 2) return "bg-emerald-500/80";
   if (count >= 1) return "bg-emerald-500/30";
   return "bg-slate-900";
