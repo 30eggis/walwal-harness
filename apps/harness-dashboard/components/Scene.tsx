@@ -199,6 +199,23 @@ export function Scene({ snapshot: initial, lang = "ko" }: SceneProps) {
             missionId: activeMission?.missionId ?? null,
           });
         }
+        // Authoritative "who's working now": always light the runtime's current
+        // agent lane while the loop is active (we only reach here when not idle),
+        // even if that agent has no per-lane todo/worker row yet — work often runs
+        // in a background agent the runtime only names via current_agent.
+        const currentRole = (snapshot.runtime?.currentAgent ?? "").replace(/^harness-/, "");
+        if (currentRole) {
+          const currentLane = lanes.find((l) => l.kind === "cxx" && l.role === currentRole);
+          if (currentLane && !next.some((s) => s.laneId === currentLane.id)) {
+            next.push({
+              ts: now,
+              laneId: currentLane.id,
+              count: 2,
+              hotfix: activeMission?.type === "hotfix",
+              missionId: activeMission?.missionId ?? null,
+            });
+          }
+        }
         if (next.length === 0) return prev;
         return [...prev, ...next]
           .filter((sample) => now - sample.ts < 30 * 60 * 1000)
@@ -1026,6 +1043,18 @@ function ActiveNowPanel({
     return m;
   }, [snapshot.activitySamples]);
 
+  // The runtime's current_agent is the authoritative "who is working now" signal:
+  // a freshly-spawned agent often has no per-lane todo/worker row yet (work runs in
+  // a background agent the runtime only names via current_agent + current_action),
+  // so honour it directly instead of inferring liveness from todos/workers alone.
+  const rt = snapshot.runtime;
+  const currentRole = (rt.currentAgent ?? "").replace(/^harness-/, "");
+  const loopActive =
+    rt.agentStatus !== "completed" &&
+    rt.agentStatus !== "complete" &&
+    rt.conductorState !== "completed" &&
+    rt.conductorState !== "blocked";
+
   const rows = CXX_ROLES.map((role) => {
     const lane = lanes.find((l) => l.kind === "cxx" && l.role === role) ?? null;
     const openTodos = snapshot.todos.filter(
@@ -1035,15 +1064,17 @@ function ActiveNowPanel({
       (w) => w.active || w.status === "IN_PROGRESS"
     ).length;
     const lastTs = lastSampleByRole.get(role) ?? null;
-    const state: "live" | "recent" | "idle" = openTodos > 0 || runningWorkers > 0 ? "live" : lastTs ? "recent" : "idle";
-    return { role, lane, openTodos, runningWorkers, lastTs, state };
+    const isCurrent = loopActive && currentRole === role;
+    const state: "live" | "recent" | "idle" =
+      isCurrent || openTodos > 0 || runningWorkers > 0 ? "live" : lastTs ? "recent" : "idle";
+    return { role, lane, openTodos, runningWorkers, lastTs, isCurrent, state };
   });
 
   return (
     <div className="panel-shell fade-in flex h-full min-h-0 flex-col overflow-hidden p-2">
       <SectionLabel>Active Now · Who · What</SectionLabel>
       <div className="mt-2 min-h-0 flex-1 space-y-1 overflow-auto pr-1">
-        {rows.map(({ role, lane, openTodos, runningWorkers, lastTs, state }) => {
+        {rows.map(({ role, lane, openTodos, runningWorkers, lastTs, isCurrent, state }) => {
           const selected = !!lane && selectedLaneId === lane.id;
           return (
             <button
@@ -1070,7 +1101,9 @@ function ActiveNowPanel({
               </span>
               <span className="min-w-0 flex-1 truncate text-[10px] text-slate-300">
                 {state === "live"
-                  ? runningWorkers > 0
+                  ? isCurrent
+                    ? rt.currentAction ?? "current agent · running"
+                    : runningWorkers > 0
                     ? `${runningWorkers} worker${runningWorkers > 1 ? "s" : ""} running`
                     : `${openTodos} open todo${openTodos > 1 ? "s" : ""}`
                   : state === "recent"
