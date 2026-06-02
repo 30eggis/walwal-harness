@@ -1,6 +1,6 @@
 import { readHarnessState } from "@/lib/harness-state";
 import { resolveHarnessRoot } from "@/lib/harness-root";
-import { Scene } from "@/components/Scene";
+import { BrickDashboard } from "@/components/brick/BrickDashboard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -25,7 +25,7 @@ export default function Page() {
           <div className="mt-1 text-[10px] opacity-60">{banner.message_en}</div>
         </div>
       )}
-      <Scene snapshot={snapshot} />
+      <BrickDashboard initialSnapshot={snapshot} />
     </main>
   );
 }
