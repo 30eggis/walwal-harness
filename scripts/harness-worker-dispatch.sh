@@ -103,7 +103,7 @@ fi
 
 count="$(jq 'length' <<<"$pairs")"
 if [ "$count" -eq 0 ]; then
-  active_workers="$(jq '[.teams | to_entries[] | select(.value.status == "busy") | {team:(.key|tonumber), feature:.value.feature, pid:.value.pid, phase:(.value.phase // "gen")}]' "$QUEUE" 2>/dev/null || echo "[]")"
+  active_workers="$(jq '[.teams | to_entries[] | select(.value.status == "busy") | {team:(.key|tonumber), feature:.value.feature, pid:.value.pid, tmux_session:.value.tmux_session, phase:(.value.phase // "gen")}]' "$QUEUE" 2>/dev/null || echo "[]")"
   jq --arg ts "$ts" --argjson workers "$active_workers" '
     .company_state.active_workers = ($workers | length) |
     .company_state.workers = $workers |
@@ -141,8 +141,30 @@ while [ "$i" -lt "$count" ]; do
   build_prompt "$team" "$fid" "$agent" "$prompt_path" "$log_path"
 
   pid="null"
+  tmux_session="null"
   status="recorded"
-  if [ "$spawn_mode" = "claude" ] && command -v claude >/dev/null 2>&1; then
+  if [ "$spawn_mode" = "tmux" ] && command -v tmux >/dev/null 2>&1 && command -v claude >/dev/null 2>&1; then
+    session_safe="$(basename "$PROJECT_ROOT" | tr -c '[:alnum:]_' '_')"
+    session_name="walwal_${session_safe}_w${team}_${stamp}"
+    if tmux new-session -d -s "$session_name" "cd '$PROJECT_ROOT' && claude -p \"\$(cat '$prompt_path')\" > '$log_path' 2>&1"; then
+      pane_pid="$(tmux list-panes -t "$session_name" -F '#{pane_pid}' 2>/dev/null | head -n1)"
+      if [ -n "$pane_pid" ]; then
+        pid="$pane_pid"
+      fi
+      tmux_session="\"$session_name\""
+      status="spawned-tmux"
+    else
+      status="recorded tmux-spawn-failed"
+    fi
+  elif [ "$spawn_mode" = "tmux" ] && command -v claude >/dev/null 2>&1; then
+    # tmux requested but unavailable: fall back to background claude spawn
+    (
+      cd "$PROJECT_ROOT" || exit 1
+      claude -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+    ) &
+    pid="$!"
+    status="spawned tmux-fallback-claude"
+  elif [ "$spawn_mode" = "claude" ] && command -v claude >/dev/null 2>&1; then
     (
       cd "$PROJECT_ROOT" || exit 1
       claude -p "$(cat "$prompt_path")" > "$log_path" 2>&1
@@ -152,8 +174,9 @@ while [ "$i" -lt "$count" ]; do
   fi
 
   tmpq="${QUEUE}.tmp.$$.$i"
-  jq --arg tid "$team" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --arg ts "$ts" '
+  jq --arg tid "$team" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --argjson tmux_session "$tmux_session" --arg ts "$ts" '
     .teams[$tid].pid = $pid |
+    .teams[$tid].tmux_session = $tmux_session |
     .teams[$tid].agent = $agent |
     .teams[$tid].phase = $phase |
     .teams[$tid].prompt = $prompt |
@@ -164,18 +187,19 @@ while [ "$i" -lt "$count" ]; do
     .queue.in_progress[.teams[$tid].feature].phase = $phase |
     .queue.in_progress[.teams[$tid].feature].prompt = $prompt |
     .queue.in_progress[.teams[$tid].feature].log = $log |
-    .queue.in_progress[.teams[$tid].feature].pid = $pid
+    .queue.in_progress[.teams[$tid].feature].pid = $pid |
+    .queue.in_progress[.teams[$tid].feature].tmux_session = $tmux_session
   ' "$QUEUE" > "$tmpq" && mv "$tmpq" "$QUEUE"
 
-  jq -n --argjson team "$team" --arg feature "$fid" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" \
-    '{team:$team, feature:$feature, agent:$agent, phase:$phase, prompt:$prompt, log:$log, status:$status, pid:$pid}' >> "$dispatches_file"
+  jq -n --argjson team "$team" --arg feature "$fid" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --argjson tmux_session "$tmux_session" \
+    '{team:$team, feature:$feature, agent:$agent, phase:$phase, prompt:$prompt, log:$log, status:$status, pid:$pid, tmux_session:$tmux_session}' >> "$dispatches_file"
   echo "$ts | conductor | worker-dispatch | $status | T${team}/${fid} | $agent phase=$phase pid=$pid" >> "$PROJECT_ROOT/.harness/progress.log"
   i=$((i + 1))
 done
 
 dispatches="$(jq -s '.' "$dispatches_file")"
 rm -f "$dispatches_file"
-active_workers="$(jq '[.teams | to_entries[] | select(.value.status == "busy") | {team:(.key|tonumber), feature:.value.feature, agent:.value.agent, pid:.value.pid, phase:(.value.phase // "gen"), prompt:.value.prompt, log:.value.log, spawn_status:.value.spawn_status}]' "$QUEUE")"
+active_workers="$(jq '[.teams | to_entries[] | select(.value.status == "busy") | {team:(.key|tonumber), feature:.value.feature, agent:.value.agent, pid:.value.pid, tmux_session:.value.tmux_session, phase:(.value.phase // "gen"), prompt:.value.prompt, log:.value.log, spawn_status:.value.spawn_status}]' "$QUEUE")"
 
 jq --arg ts "$ts" --argjson dispatches "$dispatches" --argjson workers "$active_workers" '
   .company_state.active_workers = ($workers | length) |

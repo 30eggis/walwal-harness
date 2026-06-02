@@ -50,19 +50,24 @@ interface MetricTileProps {
   value: React.ReactNode;
   sub?: string;
   color: string;
+  /** Small qualifier shown next to the label, e.g. "est." for estimates. */
+  tag?: string;
   /** line sparkline data; null/empty -> no sparkline */
   spark?: number[] | null;
   /** bar distribution data; null/empty -> no bars */
   bars?: number[] | null;
 }
 
-function MetricTile({ label, value, sub, color, spark, bars }: MetricTileProps) {
+function MetricTile({ label, value, sub, color, tag, spark, bars }: MetricTileProps) {
   const hasSpark = !!spark && spark.length > 0;
   const hasBars = !!bars && bars.length > 0;
   return (
     <div className="mtile">
       <div className="mtile-top">
-        <span className="mtile-label">{label}</span>
+        <span className="mtile-label">
+          {label}
+          {tag && <span className="mtile-tag">{tag}</span>}
+        </span>
         {hasSpark && <Spark data={spark!} color={color} w={56} h={16} />}
         {hasBars && <Bars data={bars!} color={color} w={56} h={16} />}
       </div>
@@ -90,6 +95,11 @@ export function HealthStrip({ s }: HealthStripProps) {
   // there is a real reading over 80%.
   const cpuColor = m.cpu != null && m.cpu > 80 ? "#f0506b" : "#3fd17a";
   const cpuValue = m.cpu != null ? m.cpu + "%" : "—";
+  // Context-window occupancy of the most-active session (real, from transcripts).
+  const ctxColor = m.contextPct != null && m.contextPct > 80 ? "#f0506b" : "#4cc2ff";
+  const ctxValue = m.contextPct != null ? m.contextPct + "%" : "—";
+  // costToday is a price-table estimate -> show a small "est." qualifier when present.
+  const costTag = m.costToday != null && m.costEstimated ? "est." : undefined;
   return (
     <div className="healthstrip">
       <MetricTile
@@ -117,7 +127,14 @@ export function HealthStrip({ s }: HealthStripProps) {
         value={fmt.money(m.costToday)}
         sub="usd"
         color="#f0a23b"
+        tag={costTag}
         spark={s.ctrend}
+      />
+      <MetricTile
+        label="CONTEXT"
+        value={ctxValue}
+        sub="active session"
+        color={ctxColor}
       />
       <MetricTile
         label="THROUGHPUT"

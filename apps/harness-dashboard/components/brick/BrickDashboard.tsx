@@ -24,6 +24,7 @@ import type { HarnessSnapshot } from "../../lib/types";
 import { useHarnessStream } from "../../hooks/useHarnessStream";
 import { toContractState } from "../../lib/brick/adapter";
 import type { AgentRole, DocTarget } from "../../lib/brick/contract";
+import type { MetricsSample } from "../../lib/metrics/sampler";
 
 import { Header, Sidebar, type BrickView } from "./ui";
 import { GridView } from "./views-grid";
@@ -58,9 +59,46 @@ export function BrickDashboard({
     return () => window.clearInterval(id);
   }, []);
 
+  // REAL telemetry poll (read-only): /api/metrics every ~5s. On any failure we
+  // keep the last good sample (or null), and the honest "—" placeholders stand.
+  const [metrics, setMetrics] = useState<MetricsSample | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async (): Promise<void> => {
+      try {
+        const res = await fetch("/api/metrics", { cache: "no-store" });
+        if (!res.ok) return;
+        const sample = (await res.json()) as MetricsSample;
+        if (!cancelled && sample && typeof sample === "object") {
+          setMetrics(sample);
+        }
+      } catch {
+        /* network/parse error — keep last sample; never fabricate */
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
   // build the single Contract state object every view renders from.
   const connected = connectionState === "open";
   const s = toContractState(snapshot, connected, nowMs);
+
+  // Override the adapter's honest nulls with REAL sampled telemetry where it
+  // exists. Anything still null stays null -> the views render "—".
+  if (metrics) {
+    s.metrics.tokensPerMin = metrics.tokensPerMin;
+    s.metrics.costToday = metrics.costToday;
+    s.metrics.cpu = metrics.cpu;
+    s.metrics.contextPct = metrics.contextPct;
+    s.metrics.costEstimated = metrics.costEstimated;
+    s.mtrend = metrics.mtrend ?? [];
+    s.ctrend = metrics.ctrend ?? [];
+  }
 
   const openDoc = (target: DocTarget): void => setDoc(target);
   const closeDoc = (): void => setDoc(null);

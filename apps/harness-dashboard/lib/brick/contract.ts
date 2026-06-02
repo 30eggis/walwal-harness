@@ -139,13 +139,17 @@ export interface ContractAlert {
 export interface ContractMetrics {
   /** "open" when the SSE stream is connected, else "closed". */
   sse: "open" | "closed";
-  /** No real source -> null. */
+  /** Rolling tokens/min from /api/metrics ring buffer; null until sourced. */
   tokensPerMin: number | null;
-  /** No real source -> null. */
+  /** USD cost; an ESTIMATE from /api/metrics (see costEstimated); null when unsourced. */
   costToday: number | null;
+  /** True when costToday is a price-table estimate (not a billed figure). */
+  costEstimated?: boolean;
+  /** 0..100 context-window occupancy of the most-active session; null when unknown. */
+  contextPct?: number | null;
   /** Count of events in the last 60s (derived). */
   throughput: number | null;
-  /** No real source -> null. */
+  /** Summed %cpu of discovered company PIDs; null when no telemetry. */
   cpu: number | null;
   /** Count of missions of type 'hotfix'. */
   hotfix: number;

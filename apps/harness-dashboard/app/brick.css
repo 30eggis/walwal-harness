@@ -122,10 +122,11 @@
 .glyph-lg{ font-size:14px; padding:6px 10px; }
 
 /* ===================== HEALTH STRIP ===================== */
-.healthstrip{ display:grid; grid-template-columns:repeat(8,1fr); gap:var(--gap); margin-bottom:var(--gap); }
+.healthstrip{ display:grid; grid-template-columns:repeat(9,1fr); gap:var(--gap); margin-bottom:var(--gap); }
 .mtile{ background:var(--bg1); border:1px solid var(--bd); border-radius:var(--radius); padding:10px 12px; min-width:0; }
 .mtile-top{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
-.mtile-label{ font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; color:var(--tx-lo); white-space:nowrap; }
+.mtile-label{ font-family:var(--mono); font-size:9.5px; letter-spacing:.1em; color:var(--tx-lo); white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
+.mtile-tag{ font-family:var(--mono); font-size:8px; letter-spacing:.05em; color:var(--tx-faint); border:1px solid var(--bd); border-radius:3px; padding:0 3px; text-transform:none; }
 .mtile-val{ font-family:var(--mono); font-size:22px; font-weight:600; line-height:1.15; margin-top:6px; letter-spacing:-.01em; }
 .mtile-sub{ font-family:var(--mono); font-size:9.5px; color:var(--tx-faint); }
 .spark{ display:block; }
