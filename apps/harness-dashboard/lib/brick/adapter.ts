@@ -284,6 +284,17 @@ export function toContractState(
     eventsTotal: snapshot.events.length,
   };
 
+  // ---- timeline marks: real per-lane activity (epoch + mission) ----------
+  const marks: Record<string, Array<{ at: number; mission: string | null }>> = {};
+  for (const sample of snapshot.activitySamples) {
+    const at = parseTs(sample.ts);
+    if (at == null) continue;
+    (marks[sample.laneId] = marks[sample.laneId] ?? []).push({
+      at,
+      mission: sample.missionId ?? null,
+    });
+  }
+
   return {
     now: nowMs,
     agents,
@@ -295,6 +306,7 @@ export function toContractState(
     metrics,
     mtrend: [],
     ctrend: [],
+    marks,
   };
 }
 

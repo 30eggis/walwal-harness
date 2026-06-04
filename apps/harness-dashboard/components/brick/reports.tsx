@@ -172,23 +172,32 @@ export function buildReport(target: DocTarget, state: ContractState): BuiltRepor
   const agent =
     state.agents.find((a) => a.id === target.agent) ?? state.agents[0];
 
+  // When opened from a timeline activity block, prefix the report with the
+  // moment (time + mission) the clicked block represents.
+  const moment =
+    target.at != null
+      ? `**Activity @ ${new Date(target.at).toLocaleString()}**` +
+        (target.mission ? ` · mission \`${target.mission}\`` : "") +
+        `\n\n---\n\n`
+      : "";
+
   if (target.type === "worker") {
     const worker = target.worker;
-    const body = stripFrontmatter(worker.report) || NO_WORKER_SOURCE;
+    const body = moment + (stripFrontmatter(worker.report) || NO_WORKER_SOURCE);
     return {
       title: worker.name,
       owner: agent,
-      kind: "Worker Brief",
+      kind: target.at != null ? "Worker · moment" : "Worker Brief",
       status: worker.status,
       body,
     };
   }
 
-  const body = stripFrontmatter(agent.report) || NO_SOURCE;
+  const body = moment + (stripFrontmatter(agent.report) || NO_SOURCE);
   return {
     title: agent.work,
     owner: agent,
-    kind: "CXX Document",
+    kind: target.at != null ? "CXX · moment" : "CXX Document",
     status: agent.status,
     body,
   };

@@ -39,8 +39,8 @@ export type AlertLevel = "stale" | "attention";
 
 /** A reference to a document the DocViewer can render. */
 export type DocTarget =
-  | { type: "agent"; agent: AgentRole }
-  | { type: "worker"; agent: AgentRole; worker: ContractWorker };
+  | { type: "agent"; agent: AgentRole; at?: number; mission?: string | null }
+  | { type: "worker"; agent: AgentRole; worker: ContractWorker; at?: number; mission?: string | null };
 
 /** Static, design-fixed definition of one exec agent. */
 export interface AgentDef {
@@ -173,6 +173,17 @@ export interface ContractState {
   mtrend: number[];
   /** cost sparkline samples; [] when no source. */
   ctrend: number[];
+  /** Real per-lane activity marks (epoch ms + mission) for the timeline
+   *  swimlanes, keyed by laneId ("cto" exec lane or "cto:worker-name" sub-lane). */
+  marks: Record<string, TimelineMark[]>;
+}
+
+/** One real activity mark on a timeline lane (from an activity sample). */
+export interface TimelineMark {
+  /** epoch ms of the activity. */
+  at: number;
+  /** mission the activity belonged to, if known. */
+  mission: string | null;
 }
 
 /* ---- agent (exec) definitions -----------------------------------------

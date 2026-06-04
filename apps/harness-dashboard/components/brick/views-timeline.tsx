@@ -2,11 +2,12 @@
 
 /* =============================================================
    walwal-harness · VIEW 3 — TIMELINE (cadence heatmap + swimlanes)
-   Ported from harness/views-timeline.jsx (design handoff).
+   Ported from harness/views-timeline.jsx (design handoff), wired to REAL
+   per-lane activity marks (s.marks) instead of the prototype's random marks.
    Exports: TimelineView, Cadence
    ============================================================= */
 
-import React, { useRef } from "react";
+import React from "react";
 import type { CSSProperties } from "react";
 
 import type {
@@ -14,6 +15,7 @@ import type {
   ContractState,
   ContractWorker,
   DocTarget,
+  TimelineMark,
 } from "../../lib/brick/contract";
 import { StatusDot, Label } from "./ui";
 
@@ -66,104 +68,92 @@ export interface TimelineViewProps {
   openDoc?: (target: DocTarget) => void;
 }
 
-type SwimMark = { ago: number; dur: number };
-
 type SwimRow = {
   kind: "exec" | "worker";
   id: string;
+  /** activity lane id: "cto" for an exec, "cto:worker-name" for a worker. */
+  laneId: string;
   label: string;
   hue: string;
   agent: AgentRole;
   status: string;
   progress?: number | null;
+  worker?: ContractWorker;
 };
 
 export function TimelineView({ s, openDoc }: TimelineViewProps) {
-  // stable seeded marks per row id
-  const markCache = useRef<Record<string, SwimMark[]>>({});
-  function seedMarks(id: string, density: number): SwimMark[] {
-    const cached = markCache.current[id];
-    if (cached) return cached;
-    const arr: SwimMark[] = [];
-    const n = Math.floor(density * (4 + Math.random() * 7));
-    for (let i = 0; i < n; i++) {
-      arr.push({ ago: Math.random() * SPAN_MS, dur: 40000 + Math.random() * 600000 });
-    }
-    markCache.current[id] = arr;
-    return arr;
-  }
-
-  // build rows: exec + its workers
   const order: AgentRole[] = ["ceo", "coo", "cto", "cqo", "cdo", "ops"];
-  const rows: SwimRow[] = [];
-  order.forEach((id) => {
-    const a = s.agents.find((x) => x.id === id);
-    if (!a) return;
-    rows.push({ kind: "exec", id: a.id, label: a.name, hue: a.hue, agent: a.id, status: a.status });
-    s.workers
-      .filter((w) => w.agent === id)
-      .forEach((w) => {
-        rows.push({
-          kind: "worker",
-          id: w.id,
-          label: w.name,
-          hue: a.hue,
-          agent: a.id,
-          status: w.status,
-          progress: w.progress,
-        });
-      });
-  });
 
-  // live marks from recent events (last 6 min) keyed to exec rows
-  const liveByAgent: Record<string, number[]> = {};
-  s.events.forEach((e) => {
-    if (e.at == null || e.agent === "") return;
-    const age = s.now - e.at;
-    if (age < 6 * 60 * 1000) {
-      (liveByAgent[e.agent] = liveByAgent[e.agent] || []).push(age);
+  // Build rows: each exec + the real WORKERS under it. Worker rows come from the
+  // activity sub-lanes ("cxx:worker-name") and the active-mission workers — NOT
+  // from missions — so a CXX lists the workers that actually ran under it.
+  const rows: SwimRow[] = [];
+  order.forEach((role) => {
+    const a = s.agents.find((x) => x.id === role);
+    if (!a) return;
+    rows.push({ kind: "exec", id: role, laneId: role, label: a.name, hue: a.hue, agent: role, status: a.status });
+
+    const lanes = new Map<string, { label: string; worker?: ContractWorker }>();
+    for (const laneId of Object.keys(s.marks)) {
+      if (laneId.startsWith(role + ":")) {
+        lanes.set(laneId, { label: laneId.slice(role.length + 1) });
+      }
+    }
+    // active-mission workers (carry a report + status); key matches the sub-lane id.
+    for (const w of s.workers) {
+      if (w.agent === role) lanes.set(w.id, { label: w.name, worker: w });
+    }
+    for (const [laneId, info] of lanes) {
+      rows.push({
+        kind: "worker",
+        id: laneId,
+        laneId,
+        label: info.label,
+        hue: a.hue,
+        agent: role,
+        status: info.worker?.status ?? "idle",
+        progress: info.worker?.progress ?? null,
+        worker: info.worker,
+      });
     }
   });
 
   const xOf = (ago: number): number => Math.max(0, Math.min(100, (ago / SPAN_MS) * 100));
-
-  // axis ticks
   const ticks: number[] = [];
   for (let h = 0; h <= 12; h += 2) ticks.push(h);
+  const fmtAt = (at: number): string => {
+    const d = new Date(at);
+    return Number.isFinite(d.getTime()) ? d.toTimeString().slice(0, 8) : "?";
+  };
 
+  // Label click → the whole row's report.
   const openRow = (r: SwimRow) => {
     if (!openDoc) return;
-    if (r.kind === "exec") {
-      openDoc({ type: "agent", agent: r.agent });
-      return;
-    }
-    const worker: ContractWorker | undefined = s.workers.find((w) => w.id === r.id);
-    if (worker) openDoc({ type: "worker", agent: r.agent, worker });
+    if (r.worker) openDoc({ type: "worker", agent: r.agent, worker: r.worker });
+    else openDoc({ type: "agent", agent: r.agent });
   };
+  // Block click → detail for that one activity mark (what the lane did at that moment).
+  const openMark = (r: SwimRow, m: TimelineMark, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!openDoc) return;
+    if (r.worker) openDoc({ type: "worker", agent: r.agent, worker: r.worker, at: m.at, mission: m.mission });
+    else openDoc({ type: "agent", agent: r.agent, at: m.at, mission: m.mission });
+  };
+
+  const workerCount = rows.filter((r) => r.kind === "worker").length;
 
   return (
     <div className="timelineview">
       <Cadence cadence={s.cadence} />
       <div className="swim">
-        <Label
-          right={
-            rows.filter((r) => r.kind === "worker").length +
-            " workers · " +
-            order.length +
-            " execs"
-          }
-        >
+        <Label right={workerCount + " workers · " + order.length + " execs"}>
           ORCHESTRATION TIMELINE · now → −12h
         </Label>
         <div className="swim-axis">
           <div className="swim-axis-pad" />
           <div className="swim-axis-track">
             {ticks.map((h) => (
-              <span
-                key={h}
-                className="swim-tick"
-                style={{ left: (h / 12) * 100 + "%" }}
-              >
+              <span key={h} className="swim-tick" style={{ left: (h / 12) * 100 + "%" }}>
                 {h === 0 ? "now" : "−" + h + "h"}
               </span>
             ))}
@@ -171,8 +161,9 @@ export function TimelineView({ s, openDoc }: TimelineViewProps) {
         </div>
         <div className="swim-rows">
           {rows.map((r) => {
-            const marks = seedMarks(r.id, r.kind === "exec" ? 1.4 : 0.8);
-            const live = r.kind === "exec" ? liveByAgent[r.agent] || [] : [];
+            const marks = (s.marks[r.laneId] ?? []).filter(
+              (m) => s.now - m.at >= 0 && s.now - m.at <= SPAN_MS
+            );
             return (
               <div
                 key={r.id}
@@ -205,19 +196,16 @@ export function TimelineView({ s, openDoc }: TimelineViewProps) {
                     <span
                       key={i}
                       className="swim-block"
+                      role="button"
+                      title={fmtAt(m.at) + (m.mission ? " · " + m.mission : "")}
+                      onClick={(e) => openMark(r, m, e)}
                       style={{
-                        left: xOf(m.ago) + "%",
-                        width: Math.max(0.6, (m.dur / SPAN_MS) * 100) + "%",
+                        left: xOf(s.now - m.at) + "%",
+                        width: "9px",
+                        cursor: "pointer",
                         background: r.hue,
-                        opacity: r.kind === "exec" ? 0.85 : 0.55,
+                        opacity: r.kind === "exec" ? 0.85 : 0.6,
                       }}
-                    />
-                  ))}
-                  {live.map((age, i) => (
-                    <span
-                      key={"l" + i}
-                      className="swim-live"
-                      style={{ left: xOf(age) + "%", background: r.hue }}
                     />
                   ))}
                   {r.kind === "worker" && r.progress != null && (
