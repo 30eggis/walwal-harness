@@ -308,19 +308,65 @@ function collectPids(value: unknown, into: Set<number>): void {
   }
 }
 
-/** %cpu for a single pid via `ps -o %cpu= -p <pid>`; null if dead/guarded. */
-function cpuForPid(pid: number): number | null {
+/** One `ps` snapshot: pid -> %cpu, and ppid -> [children]. */
+function readProcTable(): { cpu: Map<number, number>; kids: Map<number, number[]> } {
+  const cpu = new Map<number, number>();
+  const kids = new Map<number, number[]>();
   try {
-    const out = execFileSync("ps", ["-o", "%cpu=", "-p", String(pid)], {
+    const out = execFileSync("ps", ["-axo", "pid=,ppid=,%cpu="], {
       encoding: "utf8",
       timeout: 4000,
       stdio: ["ignore", "pipe", "ignore"],
     });
-    const v = parseFloat(out.trim());
-    return Number.isFinite(v) ? v : null;
+    for (const line of out.split("\n")) {
+      const m = line.trim().match(/^(\d+)\s+(\d+)\s+([\d.]+)$/);
+      if (!m) continue;
+      const pid = Number(m[1]);
+      const ppid = Number(m[2]);
+      const c = parseFloat(m[3]);
+      if (Number.isFinite(c)) cpu.set(pid, c);
+      const arr = kids.get(ppid);
+      if (arr) arr.push(pid);
+      else kids.set(ppid, [pid]);
+    }
   } catch {
-    return null;
+    /* ps absent/guarded */
   }
+  return { cpu, kids };
+}
+
+/** Collect a pid plus ALL its descendants into `into`. tmux/background workers
+ *  run as CHILDREN of the recorded pane/shell pid, so sampling the root pid alone
+ *  reads ~0% (the shell idles while the worker burns cpu in a child). */
+function collectSubtree(
+  root: number,
+  table: { cpu: Map<number, number>; kids: Map<number, number[]> },
+  into: Set<number>
+): void {
+  const stack = [root];
+  while (stack.length) {
+    const pid = stack.pop() as number;
+    if (into.has(pid)) continue;
+    into.add(pid);
+    for (const k of table.kids.get(pid) ?? []) stack.push(k);
+  }
+}
+
+/** Sum %cpu of a set of pids from the table. */
+function sumCpu(
+  pids: Set<number>,
+  table: { cpu: Map<number, number>; kids: Map<number, number[]> }
+): number | null {
+  let total = 0;
+  let any = false;
+  for (const pid of pids) {
+    const c = table.cpu.get(pid);
+    if (c != null) {
+      total += c;
+      any = true;
+    }
+  }
+  return any ? Math.round(total * 10) / 10 : null;
 }
 
 /**
@@ -473,18 +519,14 @@ export async function sampleMetrics(harnessRoot: string): Promise<MetricsSample>
     const panes = tmuxCompanyPanes(projBase);
     for (const p of panes) pidSet.add(p.pid);
 
+    const procTable = readProcTable();
     let cpu: number | null = null;
     if (pidSet.size > 0) {
-      let total = 0;
-      let any = false;
-      for (const pid of pidSet) {
-        const c = cpuForPid(pid);
-        if (c != null) {
-          total += c;
-          any = true;
-        }
-      }
-      cpu = any ? Math.round(total * 10) / 10 : null;
+      // Sum each discovered pid's whole process subtree (deduped), so a busy
+      // worker running as a child of its tmux/background shell is counted.
+      const counted = new Set<number>();
+      for (const pid of pidSet) collectSubtree(pid, procTable, counted);
+      cpu = sumCpu(counted, procTable);
     }
 
     /* ---- 3. perAgent: attribute via tmux session name ---------------- */
@@ -495,7 +537,9 @@ export async function sampleMetrics(harnessRoot: string): Promise<MetricsSample>
       for (const p of panes) {
         // session name: walwal_<projBase>_<stamp> — stamp is the agent tag.
         const tag = p.session.slice(prefix.length) || p.session;
-        const c = cpuForPid(p.pid);
+        const sub = new Set<number>();
+        collectSubtree(p.pid, procTable, sub);
+        const c = sumCpu(sub, procTable);
         const cur = acc[tag] ?? {};
         if (c != null) cur.cpu = Math.round(((cur.cpu ?? 0) + c) * 10) / 10;
         acc[tag] = cur;
