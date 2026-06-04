@@ -62,7 +62,11 @@
   font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--tx-lo); }
 .viewsection-head b{ color:var(--tx-hi); font-weight:600; letter-spacing:.18em; }
 .viewsection-body{ flex:1; min-height:0; overflow:auto; padding:var(--gap); }
-.viewsection-command{ height:76vh; }
+/* Content-driven height so a short agents grid / empty WORK·IN·FLIGHT doesn't
+   leave a tall blank gap. The stream rail is capped so many events scroll
+   instead of stretching the section. */
+.viewsection-command{ height:auto; }
+.viewsection-command .gridview-rail{ max-height:60vh; }
 .viewsection-graph{ height:80vh; }
 .viewsection-graph .viewsection-body{ overflow:hidden; }
 .viewsection-timeline{ height:80vh; }
