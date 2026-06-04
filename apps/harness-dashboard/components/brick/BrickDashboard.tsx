@@ -27,7 +27,7 @@ import type { AgentRole, DocTarget } from "../../lib/brick/contract";
 import type { MetricsSample } from "../../lib/metrics/sampler";
 
 import { Header, Sidebar, type BrickView } from "./ui";
-import { GridView } from "./views-grid";
+import { GridView, AlertRail } from "./views-grid";
 import { GraphView } from "./views-graph";
 import { TimelineView } from "./views-timeline";
 import { DocViewer } from "./reports";
@@ -120,6 +120,11 @@ export function BrickDashboard({
             onToggle={() => setCollapsed((c) => !c)}
             missions={snapshot.missions}
             ownerHistory={snapshot.ownerHistory}
+            footer={
+              s.alerts.length ? (
+                <AlertRail alerts={s.alerts} now={s.now} openDoc={openDoc} />
+              ) : undefined
+            }
           />
           <div className="app-main">
             {/* All three views consolidated on one scrolling screen — no
@@ -132,16 +137,16 @@ export function BrickDashboard({
                   <GridView s={s} layout={t.agentLayout} openDoc={openDoc} />
                 </div>
               </section>
+              <section className="viewsection viewsection-timeline" id="view-timeline">
+                <div className="viewsection-head"><b>Heatmap</b><span>cadence · swimlanes · last 12h</span></div>
+                <div className="viewsection-body">
+                  <TimelineView s={s} openDoc={openDoc} />
+                </div>
+              </section>
               <section className="viewsection viewsection-graph" id="view-orchestration">
                 <div className="viewsection-head"><b>Orchestration</b><span>CEO → CXX → workers</span></div>
                 <div className="viewsection-body">
                   <GraphView s={s} sel={sel} setSel={setSel} openDoc={openDoc} />
-                </div>
-              </section>
-              <section className="viewsection viewsection-timeline" id="view-timeline">
-                <div className="viewsection-head"><b>Timeline</b><span>swimlanes · last 12h</span></div>
-                <div className="viewsection-body">
-                  <TimelineView s={s} openDoc={openDoc} />
                 </div>
               </section>
             </div>

@@ -418,6 +418,8 @@ export interface SidebarProps {
   missions?: MissionDoc[];
   /** Real owner prompt history; used when missions are absent. */
   ownerHistory?: OwnerPromptEntry[];
+  /** Optional bottom-half content (e.g. the ATTENTION rail), split 1:1 under the list. */
+  footer?: React.ReactNode;
 }
 
 export function Sidebar({
@@ -425,6 +427,7 @@ export function Sidebar({
   onToggle,
   missions,
   ownerHistory,
+  footer,
 }: SidebarProps): React.JSX.Element {
   const entries = buildSidebarEntries(missions, ownerHistory);
   const [sel, setSel] = useState<string>(entries[0]?.id ?? "");
@@ -458,6 +461,7 @@ export function Sidebar({
           ))}
         </div>
       )}
+      {!collapsed && footer && <div className="sb-footer">{footer}</div>}
     </aside>
   );
 }

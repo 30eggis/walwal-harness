@@ -62,7 +62,7 @@
   font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--tx-lo); }
 .viewsection-head b{ color:var(--tx-hi); font-weight:600; letter-spacing:.18em; }
 .viewsection-body{ flex:1; min-height:0; overflow:auto; padding:var(--gap); }
-.viewsection-command{ height:96vh; }
+.viewsection-command{ height:76vh; }
 .viewsection-graph{ height:80vh; }
 .viewsection-graph .viewsection-body{ overflow:hidden; }
 .viewsection-timeline{ height:80vh; }
@@ -120,7 +120,9 @@
 .sb-sub{ font-family:var(--mono); font-size:10px; color:var(--tx-lo); }
 .sb-toggle{ color:var(--tx-lo); font-size:15px; padding:2px 6px; border-radius:4px; }
 .sb-toggle:hover{ color:var(--tx-hi); background:var(--bg2); }
-.sb-list{ flex:1; overflow:auto; padding:8px; display:flex; flex-direction:column; gap:1px; }
+.sb-list{ flex:1 1 0; min-height:0; overflow:auto; padding:8px; display:flex; flex-direction:column; gap:1px; }
+.sb-footer{ flex:1 1 0; min-height:0; display:flex; flex-direction:column; border-top:1px solid var(--bd2); overflow:hidden; padding:8px; }
+.sb-footer .alertpanel{ flex:1 1 0; min-height:0; }
 .sb-item{ display:flex; flex-direction:column; gap:3px; text-align:left; padding:7px 9px; border-radius:5px; transition:.12s; border:1px solid transparent; }
 .sb-item:hover{ background:var(--bg2); }
 .sb-item.is-active{ background:var(--bg2); border-color:var(--bd2); }

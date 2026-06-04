@@ -534,7 +534,8 @@ export function GridView({ s, layout = "card", openDoc }: GridViewProps) {
           <TaskRail s={s} openDoc={openDoc} />
         </div>
         <div className="gridview-rail">
-          <AlertRail alerts={s.alerts} now={s.now} openDoc={openDoc} />
+          {/* ATTENTION rail moved to the sidebar footer; the command rail now
+              carries just the live stream (shorter section). */}
           <LiveStream events={s.events} openDoc={openDoc} />
         </div>
       </div>
