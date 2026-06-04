@@ -52,6 +52,21 @@
 .viewscroll{ flex:1; overflow:auto; padding:var(--gap); }
 .viewscroll-graph{ overflow:hidden; }
 
+/* Consolidated single-screen layout: COMMAND + ORCHESTRATION + TIMELINE stacked. */
+.viewstack{ flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; }
+.viewsection{ flex:none; display:flex; flex-direction:column; border-top:1px solid var(--bd2); }
+.viewsection:first-child{ border-top:none; }
+.viewsection-head{ position:sticky; top:0; z-index:6; display:flex; align-items:baseline; gap:10px;
+  padding:7px var(--gap); background:rgba(13,17,24,.92); backdrop-filter:blur(4px);
+  border-bottom:1px solid var(--bd);
+  font-family:var(--mono); font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--tx-lo); }
+.viewsection-head b{ color:var(--tx-hi); font-weight:600; letter-spacing:.18em; }
+.viewsection-body{ flex:1; min-height:0; overflow:auto; padding:var(--gap); }
+.viewsection-command{ height:96vh; }
+.viewsection-graph{ height:80vh; }
+.viewsection-graph .viewsection-body{ overflow:hidden; }
+.viewsection-timeline{ height:80vh; }
+
 /* ===================== HEADER ===================== */
 .hdr{
   height:46px; flex:0 0 auto; display:flex; align-items:center; gap:18px;

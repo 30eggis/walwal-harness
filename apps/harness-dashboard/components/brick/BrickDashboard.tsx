@@ -100,6 +100,13 @@ export function BrickDashboard({
     s.ctrend = metrics.ctrend ?? [];
   }
 
+  // All three views render on one screen; the header buttons jump to a section.
+  useEffect(() => {
+    const id =
+      view === "grid" ? "view-command" : view === "graph" ? "view-orchestration" : "view-timeline";
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [view]);
+
   const openDoc = (target: DocTarget): void => setDoc(target);
   const closeDoc = (): void => setDoc(null);
 
@@ -115,21 +122,29 @@ export function BrickDashboard({
             ownerHistory={snapshot.ownerHistory}
           />
           <div className="app-main">
-            {view === "grid" && (
-              <div className="viewscroll">
-                <GridView s={s} layout={t.agentLayout} openDoc={openDoc} />
-              </div>
-            )}
-            {view === "graph" && (
-              <div className="viewscroll viewscroll-graph">
-                <GraphView s={s} sel={sel} setSel={setSel} openDoc={openDoc} />
-              </div>
-            )}
-            {view === "timeline" && (
-              <div className="viewscroll">
-                <TimelineView s={s} openDoc={openDoc} />
-              </div>
-            )}
+            {/* All three views consolidated on one scrolling screen — no
+                switching. The header COMMAND/ORCHESTRATION/TIMELINE buttons
+                jump to the matching section. */}
+            <div className="viewstack">
+              <section className="viewsection viewsection-command" id="view-command">
+                <div className="viewsection-head"><b>Command</b><span>agents · work in flight · live stream</span></div>
+                <div className="viewsection-body">
+                  <GridView s={s} layout={t.agentLayout} openDoc={openDoc} />
+                </div>
+              </section>
+              <section className="viewsection viewsection-graph" id="view-orchestration">
+                <div className="viewsection-head"><b>Orchestration</b><span>CEO → CXX → workers</span></div>
+                <div className="viewsection-body">
+                  <GraphView s={s} sel={sel} setSel={setSel} openDoc={openDoc} />
+                </div>
+              </section>
+              <section className="viewsection viewsection-timeline" id="view-timeline">
+                <div className="viewsection-head"><b>Timeline</b><span>swimlanes · last 12h</span></div>
+                <div className="viewsection-body">
+                  <TimelineView s={s} openDoc={openDoc} />
+                </div>
+              </section>
+            </div>
           </div>
         </div>
 
