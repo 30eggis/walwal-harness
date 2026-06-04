@@ -53,22 +53,27 @@ fi
 
 ensure_gitignore() {
   local gitignore="${HARNESS_ROOT}/.gitignore"
-  local marker="# walwal-harness dashboard runtime"
-  local block
-  block="$(cat <<'EOF'
-# walwal-harness dashboard runtime
-.harness/dashboard/apps/harness-dashboard/node_modules/
-.harness/dashboard/apps/harness-dashboard/.next/
-.harness/dashboard/apps/harness-dashboard/.turbo/
-.harness/dashboard/apps/harness-dashboard/tsconfig.tsbuildinfo
-.harness/dashboard/.download/
-EOF
-)"
-  if [[ -f "$gitignore" ]] && grep -Fq "$marker" "$gitignore"; then
+  # `walwal-harness init` owns the canonical managed block (covers .harness/dashboard/
+  # plus all other runtime/local state). If it's already present, nothing to add.
+  local managed_marker="# >>> walwal-harness managed"
+  if [[ -f "$gitignore" ]] && grep -Fq "$managed_marker" "$gitignore"; then
     return
   fi
+  # Prefer the package's canonical template (single source of truth shared with init.js);
+  # fall back to a dashboard-only block for older packages that lack the template.
+  local tpl="${PACKAGE_ROOT}/assets/templates/gitignore-append.txt"
+  local block
+  if [[ -f "$tpl" ]]; then
+    block="$(cat "$tpl")"
+  else
+    block="$(cat <<'EOF'
+# walwal-harness dashboard runtime
+.harness/dashboard/
+EOF
+)"
+  fi
   mkdir -p "$(dirname "$gitignore")"
-  if [[ -s "$gitignore" ]] && [[ "$(tail -c 1 "$gitignore" 2>/dev/null || true)" != "" ]]; then
+  if [[ -f "$gitignore" ]] && [[ -s "$gitignore" ]] && [[ "$(tail -c 1 "$gitignore" 2>/dev/null || true)" != "" ]]; then
     printf '\n' >> "$gitignore"
   fi
   printf '%s\n' "$block" >> "$gitignore"

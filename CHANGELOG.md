@@ -4,7 +4,7 @@ docmeta:
   title: walwal-harness CHANGELOG
   type: output
   createdAt: 2026-05-07T00:00:00Z
-  updatedAt: 2026-05-07T00:00:00Z
+  updatedAt: 2026-06-05T00:00:00Z
   source:
     producer: agent
     skillId: harness-release
@@ -30,6 +30,11 @@ docmeta:
 # Changelog
 
 ## Unreleased
+
+## 7.1.48 — Auto-managed `.harness` `.gitignore` + runtime untrack on init (2026-06-05)
+- `walwal-harness init` now writes/refreshes a marked managed block in the project-root `.gitignore` so machine-specific harness runtime/local state is never committed and never pollutes teammates' diffs. Ignored: live conductor `progress.json`/`progress.log`/`handoff.json`/`events.jsonl`, the `todos/` live queue (`state.json` + `events.jsonl`), `actions/`, `ops/`, `activity/`, `logs/`, `archive/` migration backups, and the `dashboard/` visualization tooling. Durable team knowledge stays tracked: `conventions/`, `gotchas/`, `documents/`, `memories/`, `memory.md`, `shared/`, `config.json`, `HARNESS.md`, `.bundle-version`.
+- Init also best-effort `git rm --cached`s any of those runtime paths committed before the ignore block existed (files stay on disk), fixing the "`.gitignore` added but already-tracked files keep showing as changes" case.
+- Canonical ignore list now lives in `assets/templates/gitignore-append.txt` as a single source of truth, consumed by both `bin/init.js` and `scripts/harness-dashboard-up.sh` (the dashboard launcher defers to init's managed block instead of appending its own narrow one).
 
 ## 7.1.38 — CEO approval authority for routine operations (2026-05-31)
 

@@ -853,6 +853,102 @@ function ensureHarnessEnv() {
   log('.env: HARNESS_BASE_PORT placeholder added — CEO/CXX must choose an available value before starting services');
 }
 
+// ── .gitignore management ───────────────────────────────────────────────────
+// Keep the host project's root .gitignore in sync with the harness's local/runtime
+// state so high-churn conductor files, backups, and dashboard tooling never get
+// committed (and pollute teammates' diffs). The canonical entry list ships in
+// assets/templates/gitignore-append.txt — single source of truth, also consumed by
+// scripts/harness-dashboard-up.sh.
+const GITIGNORE_MARKER_BEGIN = '# >>> walwal-harness managed';
+const GITIGNORE_MARKER_END = '# <<< walwal-harness managed';
+
+function readGitignoreBlock() {
+  const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'gitignore-append.txt');
+  if (!fileExists(tplPath)) return null;
+  const block = fs.readFileSync(tplPath, 'utf8').replace(/\s+$/, '');
+  return block || null;
+}
+
+// Non-comment, non-empty lines of the managed block = the local/runtime pathspecs.
+function localPathsFromBlock(block) {
+  return block
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+}
+
+// Write or refresh the marked managed block in the project-root .gitignore.
+// Idempotent: an existing block is replaced in place; everything else is preserved.
+function ensureProjectGitignore() {
+  const block = readGitignoreBlock();
+  if (!block) {
+    log('  → .gitignore: skipped (managed template missing)');
+    return;
+  }
+  const gitignorePath = path.join(PROJECT_ROOT, '.gitignore');
+  const original = fileExists(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+  const lines = original.length ? original.split('\n') : [];
+
+  const beginLine = lines.findIndex((l) => l.startsWith(GITIGNORE_MARKER_BEGIN));
+  let next;
+  if (beginLine !== -1) {
+    let endLine = lines.findIndex((l, i) => i >= beginLine && l.startsWith(GITIGNORE_MARKER_END));
+    if (endLine === -1) endLine = lines.length - 1; // tolerate a truncated block
+    next = [...lines.slice(0, beginLine), ...block.split('\n'), ...lines.slice(endLine + 1)].join('\n');
+  } else {
+    const head = original.replace(/\n*$/, '');
+    next = (head ? head + '\n\n' : '') + block + '\n';
+  }
+  if (!next.endsWith('\n')) next += '\n';
+  if (next !== original) {
+    fs.writeFileSync(gitignorePath, next);
+    log(beginLine !== -1
+      ? '  → .gitignore: refreshed walwal-harness managed block'
+      : '  → .gitignore: added walwal-harness runtime/local ignore block');
+  }
+}
+
+// Best-effort: a project that committed runtime state before the ignore block existed
+// keeps showing churn until those paths leave the index. Drop them from tracking
+// (files stay on disk). Never fail init over git: a non-repo / missing-git / odd state
+// is a quiet no-op.
+function gitUntrackLocalState() {
+  const block = readGitignoreBlock();
+  if (!block) return;
+  try {
+    const inside = execSync('git rev-parse --is-inside-work-tree', {
+      cwd: PROJECT_ROOT, stdio: ['ignore', 'pipe', 'ignore'],
+    }).toString().trim();
+    if (inside !== 'true') return;
+  } catch {
+    return; // not a git repo / git unavailable
+  }
+
+  const removed = [];
+  for (const rel of localPathsFromBlock(block)) {
+    let tracked = '';
+    try {
+      tracked = execSync(`git ls-files -- ${shellQuote(rel)}`, {
+        cwd: PROJECT_ROOT, stdio: ['ignore', 'pipe', 'ignore'],
+      }).toString().trim();
+    } catch {
+      continue;
+    }
+    if (!tracked) continue;
+    try {
+      execSync(`git rm -r --cached --quiet --ignore-unmatch -- ${shellQuote(rel)}`, {
+        cwd: PROJECT_ROOT, stdio: ['ignore', 'ignore', 'ignore'],
+      });
+      removed.push(rel);
+    } catch {
+      // leave it tracked; non-fatal
+    }
+  }
+  if (removed.length) {
+    log(`  → git: untracked ${removed.length} now-ignored runtime path(s), kept on disk (${removed.join(', ')})`);
+  }
+}
+
 function ensureStructuredRuntimeFiles({ dryRun = false } = {}) {
   const todosDir = path.join(HARNESS_DIR, 'todos');
   const statePath = path.join(todosDir, 'state.json');
@@ -2621,6 +2717,8 @@ function main() {
   console.log('');
 
   scaffoldHarness();
+  ensureProjectGitignore();
+  gitUntrackLocalState();
   installSkills();
   installScripts();
   ensureWakeScheduler();

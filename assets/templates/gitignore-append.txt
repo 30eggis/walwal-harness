@@ -1,6 +1,26 @@
-# walwal-harness dashboard runtime
-.harness/dashboard/apps/harness-dashboard/node_modules/
-.harness/dashboard/apps/harness-dashboard/.next/
-.harness/dashboard/apps/harness-dashboard/.turbo/
-.harness/dashboard/apps/harness-dashboard/tsconfig.tsbuildinfo
-.harness/dashboard/.download/
+# >>> walwal-harness managed (local/runtime state — do not edit between markers) >>>
+# Auto-managed by `walwal-harness init` (refreshed on every init).
+# Edit the package template assets/templates/gitignore-append.txt, not this block.
+#
+# SHARED with teammates (kept in git): .harness/{conventions,gotchas,documents,
+#   memories,shared}/  .harness/{memory.md,config.json,HARNESS.md,.bundle-version}
+# Everything listed below is machine-specific runtime or local tooling — never shared.
+#
+# Live conductor todo-queue + transition log (heartbeats churn each tick; embeds local paths)
+.harness/todos/state.json
+.harness/todos/events.jsonl
+# Live conductor / handoff / event state (rewritten every run)
+.harness/progress.json
+.harness/progress.log
+.harness/handoff.json
+.harness/events.jsonl
+# Active-sprint, service-ops, activity heatmap & logs runtime
+.harness/actions/
+.harness/ops/
+.harness/activity/
+.harness/logs/
+# Migration & pre-harness backup snapshots (local-only)
+.harness/archive/
+# Brick Office dashboard — local visualization tool + per-env data & build artifacts
+.harness/dashboard/
+# <<< walwal-harness managed <<<
