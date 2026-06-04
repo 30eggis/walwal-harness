@@ -69,7 +69,10 @@
 .viewsection-command .gridview-rail{ max-height:60vh; }
 .viewsection-graph{ height:80vh; }
 .viewsection-graph .viewsection-body{ overflow:hidden; }
-.viewsection-timeline{ height:80vh; }
+/* Heatmap (timeline) section: content-height like COMMAND, with the swimlane
+   rows capped so many lanes scroll instead of leaving a tall blank gap. */
+.viewsection-timeline{ height:auto; }
+.viewsection-timeline .swim-rows{ max-height:56vh; }
 
 /* ===================== HEADER ===================== */
 .hdr{
