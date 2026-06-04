@@ -221,7 +221,8 @@
 .sl-done{ color:var(--ok); }
 
 /* alerts */
-.alertpanel{ flex:0 0 auto; }
+.alertpanel{ flex:1.3 1 0; min-height:0; }
+.alertpanel .panel-body{ flex:1; min-height:0; }
 .alertlist{ display:flex; flex-direction:column; gap:7px; }
 .alertitem{ position:relative; display:flex; gap:9px; background:var(--bg2); border:1px solid var(--bd); border-radius:5px; padding:8px 10px 8px 9px; overflow:hidden; }
 .alert-bar{ position:absolute; left:0; top:0; bottom:0; width:2px; }
@@ -264,7 +265,7 @@
 @keyframes spawnpop{ from{ opacity:0; transform:translate(-10px,-50%) scale(.8); } to{ opacity:1; transform:translate(0,-50%) scale(1); } }
 .graph-legend{ position:absolute; left:12px; bottom:10px; font-family:var(--mono); font-size:9.5px; color:var(--tx-faint); }
 
-.graph-detail{ flex:0 0 312px; background:var(--bg1); border:1px solid var(--bd); border-radius:var(--radius); padding:var(--pad); overflow:auto; }
+.graph-detail{ flex:0 0 312px; background:var(--bg1); border:1px solid var(--bd); border-radius:var(--radius); padding:var(--pad); overflow:auto; min-height:0; }
 .gd-head{ display:flex; align-items:center; gap:11px; margin-bottom:12px; }
 .gd-role{ font-size:12px; color:var(--tx-mid); }
 .gd-status{ display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10.5px; margin-top:3px; }

@@ -455,7 +455,7 @@ export interface AlertRailProps {
 export function AlertRail({ alerts, now, openDoc }: AlertRailProps) {
   if (!alerts.length) return null;
   return (
-    <Panel title="ATTENTION · IN-LOOP" right={alerts.length} className="alertpanel">
+    <Panel title="ATTENTION · IN-LOOP" right={alerts.length} className="alertpanel" scroll>
       <div className="alertlist">
         {alerts.map((al) => {
           const a = defOf(al.agent);
