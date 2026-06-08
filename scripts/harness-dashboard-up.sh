@@ -130,4 +130,4 @@ echo "║  실시간 (SSE) 시각화합니다. Ctrl+C 로 종료.              �
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
-HARNESS_ROOT="${HARNESS_ROOT}" npm run dev:dashboard -- -p "${PORT}"
+HARNESS_ROOT="${HARNESS_ROOT}" npm run dev:dashboard -- -H 127.0.0.1 -p "${PORT}"

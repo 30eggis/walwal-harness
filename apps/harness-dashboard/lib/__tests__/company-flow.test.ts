@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -266,5 +266,37 @@ describeHarnessShell("company-loop shell flows", () => {
     expect(progress.workflow.stage).toBe("followup-review");
     expect(progress.planner.requested_mode).toBeNull();
     expect(progress.meetings.requested_type).toBe("followup-review");
+  });
+
+  it("company terminal transitions only update the newest current mission state", () => {
+    writeState(dir, {
+      current_agent: "ceo",
+      agent_status: "running",
+      next_agent: "none",
+      owner_prompt: { status: "routing" },
+      company_state: { state: "running", active_workers: 0 },
+      conductor: { state: "running", tracks: [] },
+    });
+    const docs = path.join(dir, ".harness", "documents");
+    const oldMission = path.join(docs, "goal-1-old");
+    const newMission = path.join(docs, "goal-2-new");
+    mkdirSync(oldMission, { recursive: true });
+    mkdirSync(newMission, { recursive: true });
+    const oldState = path.join(oldMission, "mission-state.json");
+    const newState = path.join(newMission, "mission-state.json");
+    writeFileSync(oldState, JSON.stringify({ lifecycle: "active", active: true }));
+    writeFileSync(newState, JSON.stringify({ lifecycle: "active", active: true }));
+    const oldDate = new Date("2026-05-01T00:00:00Z");
+    const newDate = new Date("2026-05-02T00:00:00Z");
+    utimesSync(oldState, oldDate, oldDate);
+    utimesSync(newState, newDate, newDate);
+
+    runBash("scripts/harness-company-block.sh", dir, ["needs-key"]);
+    expect(JSON.parse(readFileSync(oldState, "utf8")).lifecycle).toBe("active");
+    expect(JSON.parse(readFileSync(newState, "utf8")).lifecycle).toBe("blocked");
+
+    runBash("scripts/harness-company-complete.sh", dir, ["provided-key"]);
+    expect(JSON.parse(readFileSync(oldState, "utf8")).lifecycle).toBe("active");
+    expect(JSON.parse(readFileSync(newState, "utf8")).lifecycle).toBe("complete");
   });
 });

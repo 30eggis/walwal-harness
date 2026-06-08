@@ -123,6 +123,61 @@ describe("readHarnessState", () => {
     expect(mission.protocolViolations).toContain("cto:missing-worker-evidence");
   });
 
+  it("does not count roster-only hired workers as CXX evidence without a report file", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");
+    mkdirSync(path.join(harnessDir, "shared", "HR-Resource", "react-ui-worker"), { recursive: true });
+    mkdirSync(missionDir, { recursive: true });
+    writeFileSync(path.join(missionDir, "ceo.md"), "# Dashboard\n");
+    writeFileSync(
+      path.join(missionDir, "cto.md"),
+      "# CTO\n\nWorker Evidence Manifest: cto/workers/react-ui-worker.md\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "shared", "HR-Resource", "react-ui-worker", "SKILL.md"),
+      "# React UI Worker\n"
+    );
+    writeFileSync(
+      path.join(harnessDir, "shared", "hr-roster.json"),
+      JSON.stringify({
+        hired: [
+          {
+            worker: "react-ui-worker",
+            owner: "cto",
+            skillPath: ".harness/shared/HR-Resource/react-ui-worker/SKILL.md",
+          },
+        ],
+      })
+    );
+
+    const mission = readHarnessState(dir).missions[0];
+    expect(mission.workers[0]).toMatchObject({ name: "react-ui-worker", reportPath: null });
+    expect(mission.protocolViolations).toContain("cto:missing-worker-evidence");
+  });
+
+  it("keeps an explicit active mission visible even when it is older than the latest page", () => {
+    const harnessDir = path.join(dir, ".harness");
+    const docsDir = path.join(harnessDir, "documents");
+    const activeDir = path.join(docsDir, "goal-0-operating");
+    mkdirSync(activeDir, { recursive: true });
+    writeFileSync(path.join(activeDir, "ceo.md"), "# Operating\n");
+    writeFileSync(path.join(activeDir, "mission-state.json"), JSON.stringify({ lifecycle: "operating", active: true }));
+    const oldDate = new Date("2026-05-01T00:00:00Z");
+    utimesSync(activeDir, oldDate, oldDate);
+
+    for (let i = 1; i <= 16; i += 1) {
+      const missionDir = path.join(docsDir, `goal-${i}-done`);
+      mkdirSync(missionDir, { recursive: true });
+      writeFileSync(path.join(missionDir, "ceo.md"), `# Done ${i}\n`);
+      writeFileSync(path.join(missionDir, "mission-state.json"), JSON.stringify({ lifecycle: "complete", active: false }));
+      const ts = new Date(`2026-05-${String(i + 1).padStart(2, "0")}T00:00:00Z`);
+      utimesSync(missionDir, ts, ts);
+    }
+
+    const missions = readHarnessState(dir).missions;
+    expect(missions.some((mission) => mission.missionId === "goal-0-operating" && mission.active)).toBe(true);
+  });
+
   it("positions only hired HR-Resource workers and marks active workers", () => {
     const harnessDir = path.join(dir, ".harness");
     const missionDir = path.join(harnessDir, "documents", "goal-1-dashboard");

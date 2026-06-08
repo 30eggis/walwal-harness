@@ -8,7 +8,7 @@
  * the values the live Scene.tsx renders, plus the Stop-hook autonomy behavior.
  *
  * Gated behind WALWAL_E2E=1 so it stays out of the fast unit suite and only
- * runs (and writes to ~/tmp) when explicitly requested:
+ * runs (and writes to the OS temp dir, or WALWAL_E2E_ROOT when set) when explicitly requested:
  *   WALWAL_E2E=1 npx vitest run sandbox-e2e
  */
 import { describe, it, expect, beforeAll } from "vitest";
@@ -111,7 +111,7 @@ function stopTick(sbx: string): { blocked: boolean; raw: string } {
   return { blocked: raw.includes('"decision"') && raw.includes('"block"'), raw };
 }
 
-const SBX_ROOT = path.join(os.homedir(), "tmp");
+const SBX_ROOT = process.env.WALWAL_E2E_ROOT ?? path.join(os.tmpdir(), "walwal-e2e");
 
 gate("walwal-harness sandbox e2e — two usage modes", () => {
   beforeAll(() => {
@@ -133,6 +133,71 @@ gate("walwal-harness sandbox e2e — two usage modes", () => {
     expect(existsSync(path.join(sbx, ".harness", "shared", "HR-Resource"))).toBe(true);
     // CLAUDE.md is a symlink -> AGENTS.md
     expect(lstatSync(path.join(sbx, "CLAUDE.md")).isSymbolicLink()).toBe(true);
+  });
+
+  it("migrate preserves user AGENTS.md and hired roster while refreshing package-owned state", () => {
+    const sbx = path.join(SBX_ROOT, "walwal-sandbox-migrate-preserve");
+    init(sbx);
+    appendFileSync(path.join(sbx, "AGENTS.md"), "\n## User Rule\n\nKeep this project-specific rule.\n");
+    writeFileSync(path.join(sbx, ".harness", ".bundle-version"), "7.1.1\n");
+    mkdirSync(path.join(sbx, ".harness", "shared", "HR-Resource", "react-ui-worker"), { recursive: true });
+    writeFileSync(path.join(sbx, ".harness", "shared", "HR-Resource", "react-ui-worker", "SKILL.md"), "# React UI Worker\n");
+    const rosterPath = path.join(sbx, ".harness", "shared", "hr-roster.json");
+    writeFileSync(
+      rosterPath,
+      JSON.stringify(
+        {
+          hired: [
+            {
+              worker: "react-ui-worker",
+              owner: "cto",
+              skillPath: ".claude/skills/react-ui-worker/SKILL.md",
+            },
+          ],
+        },
+        null,
+        2
+      )
+    );
+
+    execFileSync("node", [path.join(repoRoot, "bin", "init.js"), "migrate", "--dry-run", "--project-root", sbx], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    expect(readFileSync(path.join(sbx, ".harness", ".bundle-version"), "utf8")).toBe("7.1.1\n");
+    expect(JSON.parse(readFileSync(rosterPath, "utf8")).hired[0].skillPaths).toBeUndefined();
+
+    execFileSync("node", [path.join(repoRoot, "bin", "init.js"), "migrate", "--project-root", sbx], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+    const agents = readFileSync(path.join(sbx, "AGENTS.md"), "utf8");
+    expect(agents).toContain("Keep this project-specific rule.");
+    const roster = JSON.parse(readFileSync(rosterPath, "utf8"));
+    expect(roster.hired[0].skillPaths.codex).toContain(".codex/skills/");
+    expect(roster.hired[0].skillPaths.source).toBe(".harness/shared/HR-Resource/react-ui-worker/SKILL.md");
+    expect(readFileSync(path.join(sbx, ".harness", ".bundle-version"), "utf8")).toBe("7.1.48\n");
+  });
+
+  it("gitignore management untracks runtime state without untracking shared harness files", () => {
+    const sbx = path.join(SBX_ROOT, "walwal-sandbox-gitignore");
+    init(sbx);
+    execFileSync("git", ["init"], { cwd: sbx, encoding: "utf8", stdio: "pipe" });
+    execFileSync("git", ["add", "-f", ".harness/progress.json"], { cwd: sbx, encoding: "utf8", stdio: "pipe" });
+    execFileSync("git", ["add", ".harness/memory.md"], { cwd: sbx, encoding: "utf8", stdio: "pipe" });
+    expect(execFileSync("git", ["ls-files", ".harness/progress.json"], { cwd: sbx, encoding: "utf8" }).trim()).toBe(".harness/progress.json");
+    expect(execFileSync("git", ["ls-files", ".harness/memory.md"], { cwd: sbx, encoding: "utf8" }).trim()).toBe(".harness/memory.md");
+
+    execFileSync("node", [path.join(repoRoot, "bin", "init.js"), "init", "--force", "--project-root", sbx], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+
+    expect(execFileSync("git", ["ls-files", ".harness/progress.json"], { cwd: sbx, encoding: "utf8" }).trim()).toBe("");
+    expect(execFileSync("git", ["ls-files", ".harness/memory.md"], { cwd: sbx, encoding: "utf8" }).trim()).toBe(".harness/memory.md");
   });
 
   // ───────────────────────────────────────────────────────────────────────

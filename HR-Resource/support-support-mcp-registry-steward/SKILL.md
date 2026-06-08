@@ -74,4 +74,3 @@ Required sections:
 8. `## Implementation Notes`
 
 Use `None` for empty sections. Include exact evidence paths or tool names for every claim.
-

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Brick Office — walwal-harness 라이브 대시보드 (Phase C)",
   "scripts": {
-    "dev:dashboard": "next dev -p 3001",
+    "dev:dashboard": "next dev",
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",

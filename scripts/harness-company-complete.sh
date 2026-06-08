@@ -25,6 +25,29 @@ command -v jq >/dev/null 2>&1 || {
   exit 1
 }
 
+state_mtime() {
+  stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
+}
+
+pick_transition_mission_state() {
+  local best=""
+  local best_mtime=0
+  local state active lifecycle mtime
+  [ -d "$DOCS" ] || return 0
+  while IFS= read -r -d '' state; do
+    active="$(jq -r '.active // false' "$state" 2>/dev/null || echo false)"
+    lifecycle="$(jq -r '.lifecycle // .status // "unknown"' "$state" 2>/dev/null || echo unknown)"
+    if [ "$active" = "true" ] || [ "$lifecycle" = "blocked" ]; then
+      mtime="$(state_mtime "$state")"
+      if [ "${mtime:-0}" -ge "$best_mtime" ]; then
+        best="$state"
+        best_mtime="${mtime:-0}"
+      fi
+    fi
+  done < <(find "$DOCS" -name mission-state.json -type f -print0)
+  [ -n "$best" ] && printf '%s\n' "$best"
+}
+
 if ! bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
   '.company_state.state = "idle" |
    .company_state.active_workers = 0 |
@@ -64,19 +87,17 @@ fi
 
 DOCS="$PROJECT_ROOT/.harness/documents"
 if [ -d "$DOCS" ]; then
-  find "$DOCS" -name mission-state.json -type f -print0 | while IFS= read -r -d '' state; do
-    active="$(jq -r '.active // false' "$state" 2>/dev/null || echo false)"
-    lifecycle="$(jq -r '.lifecycle // .status // "unknown"' "$state" 2>/dev/null || echo unknown)"
+  target_state="$(pick_transition_mission_state)"
+  if [ -n "$target_state" ]; then
+    lifecycle="$(jq -r '.lifecycle // .status // "unknown"' "$target_state" 2>/dev/null || echo unknown)"
     case "$lifecycle" in
-      closed|cancelled|superseded|complete|completed) continue ;;
+      closed|cancelled|superseded|complete|completed) ;;
+      *)
+        tmp="$(mktemp)"
+        jq '.lifecycle = "complete" | .active = false | .completed_at = (now | todate) | del(.blocked_reason) | del(.blocked_at)' "$target_state" > "$tmp" && mv "$tmp" "$target_state"
+        ;;
     esac
-    # A mission left "blocked" (active=false) is resumed and completed here, so
-    # clear its blocker fields too — block -> complete must leave no stale state.
-    if [ "$active" = "true" ] || [ "$lifecycle" = "blocked" ]; then
-      tmp="$(mktemp)"
-      jq '.lifecycle = "complete" | .active = false | .completed_at = (now | todate) | del(.blocked_reason) | del(.blocked_at)' "$state" > "$tmp" && mv "$tmp" "$state"
-    fi
-  done
+  fi
 fi
 
 if command -v node >/dev/null 2>&1 && [ -f "$SCRIPT_DIR/harness-activity-record.js" ]; then

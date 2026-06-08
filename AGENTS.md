@@ -156,4 +156,4 @@ All Playwright usage must run with a visible real browser window.
 - Do not create `.harness/` or commit runtime state to this repository.
 - HR-Resource conversion uses `scripts/import-agency-agents.js` only.
 - Do not revert user-made changes unless explicitly instructed.
-- The 2-command rule does not change without Owner approval.
+- The 3-command rule does not change without Owner approval.

@@ -186,7 +186,11 @@ export function toContractState(
   // ---- agents --------------------------------------------------------
   const hasRecentSample = (role: AgentRole): boolean =>
     snapshot.activitySamples.some(
-      (s) => (s.laneId === role || s.laneId.startsWith(role + ":")) && s.count > 0
+      (s) => {
+        if ((s.laneId !== role && !s.laneId.startsWith(role + ":")) || s.count <= 0) return false;
+        const t = parseTs(s.ts);
+        return t != null && nowMs - t <= STALE_MS;
+      }
     );
   const runtimeBlocked =
     (rt.agentStatus ?? "").toLowerCase() === "blocked" ||

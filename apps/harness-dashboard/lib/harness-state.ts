@@ -615,7 +615,7 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
       const protocolViolations: string[] = [];
       for (const role of cxxPresent) {
         if (role === "ceo") continue;
-        const roleWorkers = workers.filter((w) => w.owner === role);
+        const roleWorkers = workers.filter((w) => w.owner === role && w.reportPath);
         const roleDoc = readMd(`${role}.md`) ?? "";
         const hasManifest = /Worker Evidence Manifest/i.test(roleDoc);
         const mentionsWorkerReport = new RegExp(`${role}/workers/`, "i").test(roleDoc);
@@ -677,7 +677,17 @@ function readMissions(rootDir: string, progress: RawProgress | null = null, limi
     }
   }
 
-  missions = missions.slice(0, limit);
+  const activePinned = missions.filter((m) => m.active);
+  const limited = missions.slice(0, limit);
+  if (activePinned.length) {
+    const seen = new Set(limited.map((m) => m.missionId));
+    for (const mission of activePinned) {
+      if (!seen.has(mission.missionId)) limited.push(mission);
+    }
+    missions = limited;
+  } else {
+    missions = limited;
+  }
 
   // When the CEO updates a goal directory in-place for a submission or hot-fix
   // (instead of creating a submission-* or hotfix-* subdirectory), the most

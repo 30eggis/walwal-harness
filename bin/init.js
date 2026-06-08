@@ -20,6 +20,7 @@ const subcommandArgs = args.filter(a => !a.startsWith('-') && a !== subcommand);
 const isAuto = args.includes('--auto');
 const isForce = args.includes('--force');
 const isHelp = args.includes('--help') || args.includes('-h');
+const isWakeEnabled = args.includes('--enable-wake') || process.env.WALWAL_ENABLE_WAKE === '1';
 
 function getOptionValue(name) {
   const eqPrefix = `${name}=`;
@@ -1059,7 +1060,10 @@ function refreshScriptsForMigrate({ dryRun = false, backupDir = null } = {}) {
   chmodShellScripts(scriptsDest);
 }
 
-function ensureWakeScheduler({ dryRun = false } = {}) {
+function ensureWakeScheduler({ dryRun = false, enabled = false } = {}) {
+  if (!enabled || process.env.WALWAL_SKIP_WAKE === '1') {
+    return;
+  }
   const wakeInstall = path.join(PROJECT_ROOT, 'scripts', 'harness-wake-install.sh');
   if (!fs.existsSync(wakeInstall)) return;
 
@@ -1589,6 +1593,7 @@ Usage:
 Runtime (always-on company mode):
   - Stop 훅이 매 turn 종료 시 다음 부서로 자동 연쇄.
   - 1시간 안전망 wake (선택): bash scripts/harness-wake-install.sh install .
+    init/migrate 중 자동 등록하려면 --enable-wake 를 명시하세요.
   - 3D 대시보드 (선택): bash scripts/harness-dashboard-up.sh
   - Owner 입력은 GOAL 모호성, submission, hot-fix, escalation, 결과 보고에만 필요합니다.
 
@@ -2150,7 +2155,7 @@ function runMigrate(opts = {}) {
   // Runtime scripts are package-owned. Migrate must refresh them so existing
   // projects receive wake/meeting/OPS fixes without requiring a full init.
   refreshScriptsForMigrate({ dryRun, backupDir });
-  ensureWakeScheduler({ dryRun });
+  ensureWakeScheduler({ dryRun, enabled: opts.enableWake === true });
   migrateActivityHistory({ dryRun });
   updateRuleRegistryLinks(flags.ruleRegistryLinks || [], { dryRun, backupDir });
 
@@ -2685,7 +2690,7 @@ function main() {
   }
 
   if (subcommand === 'migrate') {
-    runMigrate({ dryRun: args.includes('--dry-run') });
+    runMigrate({ dryRun: args.includes('--dry-run'), enableWake: isWakeEnabled });
     return;
   }
 
@@ -2721,7 +2726,7 @@ function main() {
   gitUntrackLocalState();
   installSkills();
   installScripts();
-  ensureWakeScheduler();
+  ensureWakeScheduler({ enabled: isWakeEnabled });
   installCommands();
   installSessionHook();
   installStatusline();
@@ -2782,7 +2787,7 @@ function main() {
   console.log('');
 
   if (subcommand === 'init' && subcommandArgs.includes('migrate')) {
-    runMigrate({ dryRun: args.includes('--dry-run') });
+    runMigrate({ dryRun: args.includes('--dry-run'), enableWake: isWakeEnabled });
   }
 }
 

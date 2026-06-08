@@ -243,6 +243,7 @@ Features:
 
 Hourly autonomous wake:
 
+- Init/migrate does not auto-register launchd wake by default. Use `--enable-wake` or `WALWAL_ENABLE_WAKE=1` when you want installation/migration to register it; otherwise run `bash scripts/harness-wake-install.sh install .` from the target project.
 - `HARNESS_WAKE_EXECUTOR=claude|codex` selects `claude -p` or `codex exec`.
 - `HARNESS_WAKE_MODEL=<model>` optionally pins the Claude model for wake ticks.
 - Each wake tick prompts CEO to convene CXX + OPS, collect progress and decisions, dispatch the next action without asking Owner, and require CQO/OPS verification until the active goal works.
@@ -286,7 +287,7 @@ harness-hiring           → register and onboard worker
 | Version | Summary |
 |---|---|
 | 7.1.38 | CEO can approve reversible routine operations without Owner confirmation, including monitoring cadence, local scheduler activation, Telegram briefing formats with existing credentials, dashboard refresh, and consolidation/supersede cleanup |
-| 7.1.37 | Project-local dashboard runtime under `.harness/dashboard/`, unfiltered all-mission heatmap, worker telemetry parsing, and more reliable hourly wake registration/status |
+| 7.1.37 | Project-local dashboard runtime under `.harness/dashboard/`, unfiltered all-mission heatmap, worker telemetry parsing, and opt-in hourly wake registration/status |
 | 7.1.36 | Stop hook only validates worker evidence while chaining the active loop, scopes validation to the newest active mission, and makes the 24h heatmap visible at 10-minute resolution |
 | 7.1.35 | Fix dashboard heatmap mission scoping, choose the newest active mission for activity recording, and normalize duplicate active child mission states during init/migrate |
 | 7.1.34 | Fix dashboard 500 when `company_state.workers` is recorded as a keyed worker map instead of an array |

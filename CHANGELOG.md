@@ -47,7 +47,7 @@ docmeta:
 - Dashboard runtime now lives under each project’s `.harness/dashboard/` instead of the shared `~/.walwal-harness/dashboard/` cache, with generated dependencies/build output ignored via `.gitignore`.
 - Dashboard heatmap is no longer filtered by the selected goal/submission/hot-fix; it shows all recorded activity while still preserving mission IDs on active cells.
 - Dashboard worker parsing now accepts `name`, `progress`, `eta`, and `report_path` telemetry and no longer treats docmeta-only report drafts as proof of live worker activity.
-- Init/migrate now best-effort registers the project with the hourly wake scheduler, and wake status now uses the macOS `launchctl print gui/$UID/...` state to avoid false `NOT loaded` reports.
+- Hourly wake registration is opt-in during init/migrate (`--enable-wake` or `WALWAL_ENABLE_WAKE=1`), and wake status now uses the macOS `launchctl print gui/$UID/...` state to avoid false `NOT loaded` reports.
 
 ## 7.1.36 — Stop hook active-loop guard + visible heatmap (2026-05-29)
 
