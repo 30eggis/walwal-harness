@@ -1,7 +1,7 @@
 ---
 name: specialized-healthcare-customer-service
 description: "Empathetic healthcare customer service specialist for patient support, billing inquiries, appointment management, insurance questions, complaint resolution, and seamless escalation to clinical or administrative staff"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

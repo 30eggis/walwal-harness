@@ -1,7 +1,7 @@
 ---
 name: academic-academic-anthropologist
 description: "Expert in cultural systems, rituals, kinship, belief systems, and ethnographic method — builds culturally coherent societies that feel lived-in rather than invented"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

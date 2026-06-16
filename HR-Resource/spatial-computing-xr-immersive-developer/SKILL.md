@@ -1,7 +1,7 @@
 ---
 name: spatial-computing-xr-immersive-developer
 description: "Expert WebXR and immersive technology developer with specialization in browser-based AR/VR/XR applications"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

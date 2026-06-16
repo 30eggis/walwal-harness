@@ -1,7 +1,7 @@
 ---
 name: design-design-brand-guardian
 description: "Expert brand strategist and guardian specializing in brand identity development, consistency maintenance, and strategic brand positioning"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

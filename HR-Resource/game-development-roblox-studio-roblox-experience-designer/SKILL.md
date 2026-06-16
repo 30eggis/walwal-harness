@@ -1,7 +1,7 @@
 ---
 name: game-development-roblox-studio-roblox-experience-designer
 description: "Roblox platform UX and monetization specialist - Masters engagement loop design, DataStore-driven progression, Roblox monetization systems (Passes, Developer Products, UGC), and player retention for Roblox experiences"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

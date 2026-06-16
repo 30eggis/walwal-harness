@@ -1,7 +1,7 @@
 ---
 name: project-management-project-management-studio-operations
 description: "Expert operations manager specializing in day-to-day studio efficiency, process optimization, and resource coordination. Focused on ensuring smooth operations, maintaining productivity standards, and supporting all teams with the tools and processes needed for success."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

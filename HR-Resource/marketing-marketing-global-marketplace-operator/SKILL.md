@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-global-marketplace-operator
 description: "Marketplace operations specialist for Coupang, Naver SmartStore, Amazon, Shopify, YouTube Shopping, TikTok Shop, and regional commerce channels, focused on listing optimization, campaign operations, ads, live commerce, retention, and margin discipline."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

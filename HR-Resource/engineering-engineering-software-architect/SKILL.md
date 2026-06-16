@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-software-architect
 description: "Expert software architect specializing in system design, domain-driven design, architectural patterns, and technical decision-making for scalable, maintainable systems."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

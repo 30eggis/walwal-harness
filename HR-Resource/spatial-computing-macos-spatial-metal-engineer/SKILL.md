@@ -1,7 +1,7 @@
 ---
 name: spatial-computing-macos-spatial-metal-engineer
 description: "Native Swift and Metal specialist building high-performance 3D rendering systems and spatial computing experiences for macOS and Vision Pro"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

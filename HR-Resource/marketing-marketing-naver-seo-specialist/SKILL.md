@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-naver-seo-specialist
 description: "Expert Naver SEO and Korean search ecosystem specialist focused on Naver Blog, Cafe, Knowledge iN, Smart Store, Place, Shopping search, Korean keyword intent, and Korea-market organic visibility."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

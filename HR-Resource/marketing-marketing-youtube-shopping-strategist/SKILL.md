@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-youtube-shopping-strategist
 description: "YouTube commerce strategist focused on YouTube Shopping, product tagging, Shorts-to-store funnels, creator commerce, video SEO, live shopping, and conversion-oriented channel operations."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: paid-media-paid-media-search-query-analyst
 description: "Specialist in search term analysis, negative keyword architecture, and query-to-intent mapping. Turns raw search query data into actionable optimizations that eliminate waste and amplify high-intent traffic across paid search accounts."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

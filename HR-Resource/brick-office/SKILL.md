@@ -1,7 +1,7 @@
 ---
 name: harness-brick-office
 description: "Internal dashboard worker for the browser-based Brick Office view over .harness runtime state. Hire/call from CEO, CTO, CDO, CQO, or OPS; never as an Owner slash command."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

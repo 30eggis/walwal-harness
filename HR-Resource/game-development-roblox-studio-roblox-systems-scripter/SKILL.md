@@ -1,7 +1,7 @@
 ---
 name: game-development-roblox-studio-roblox-systems-scripter
 description: "Roblox platform engineering specialist - Masters Luau, the client-server security model, RemoteEvents/RemoteFunctions, DataStore, and module architecture for scalable Roblox experiences"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

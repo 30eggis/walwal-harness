@@ -1,7 +1,7 @@
 ---
 name: finance-finance-fpa-analyst
 description: "Expert Financial Planning & Analysis (FP&A) analyst specializing in budgeting, variance analysis, financial planning, rolling forecasts, and strategic decision support. Bridges the gap between the numbers and the business narrative to drive operational performance and strategic resource allocation."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

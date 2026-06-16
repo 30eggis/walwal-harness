@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-livestream-commerce-coach
 description: "Veteran livestream e-commerce coach specializing in host training and live room operations across YouTube Live, Instagram Live, TikTok Shop, Naver Shopping Live, Coupang Live, and brand-owned commerce channels."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

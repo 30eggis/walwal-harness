@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-agentic-search-optimizer
 description: "Expert in WebMCP readiness and agentic task completion — audits whether AI agents can actually accomplish tasks on your site (book, buy, register, subscribe), implements WebMCP declarative and imperative patterns, and measures task completion rates across AI browsing agents"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

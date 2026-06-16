@@ -1,7 +1,7 @@
 ---
 name: harness-resource-manager
 description: "Resource manager. Maintains hired-worker wording, aliases, keyword mapping, and hire recommendations."
-model: haiku
+model: opus
 disable-model-invocation: false
 ---
 

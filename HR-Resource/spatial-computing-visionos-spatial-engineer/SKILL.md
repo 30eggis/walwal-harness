@@ -1,7 +1,7 @@
 ---
 name: spatial-computing-visionos-spatial-engineer
 description: "Native visionOS spatial computing, SwiftUI volumetric interfaces, and Liquid Glass design implementation"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

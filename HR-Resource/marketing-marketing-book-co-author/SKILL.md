@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-book-co-author
 description: "Strategic thought-leadership book collaborator for founders, experts, and operators turning voice notes, fragments, and positioning into structured first-person chapters."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

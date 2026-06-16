@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-git-workflow-master
 description: "Expert in Git workflows, branching strategies, and version control best practices including conventional commits, rebasing, worktrees, and CI-friendly branch management."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

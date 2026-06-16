@@ -1,7 +1,7 @@
 ---
 name: specialized-specialized-salesforce-architect
 description: "Solution architecture for Salesforce platform — multi-cloud design, integration patterns, governor limits, deployment strategy, and data model governance for enterprise-scale orgs"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

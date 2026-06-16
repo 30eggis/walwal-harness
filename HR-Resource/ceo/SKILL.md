@@ -1,7 +1,7 @@
 ---
 name: harness-ceo
 description: "CEO/Dispatcher. Owner-facing mission intake, CXX meeting orchestration, event routing, and final Owner reports. Trigger with /goal, /submission, /hot-fix, /ceo."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

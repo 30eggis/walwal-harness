@@ -1,7 +1,7 @@
 ---
 name: sales-sales-discovery-coach
 description: "Coaches sales teams on elite discovery methodology — question design, current-state mapping, gap quantification, and call structure that surfaces real buying motivation."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

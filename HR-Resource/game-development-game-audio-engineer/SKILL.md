@@ -1,7 +1,7 @@
 ---
 name: game-development-game-audio-engineer
 description: "Interactive audio specialist - Masters FMOD/Wwise integration, adaptive music systems, spatial audio, and audio performance budgeting across all game engines"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

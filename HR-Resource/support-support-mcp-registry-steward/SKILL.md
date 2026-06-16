@@ -1,7 +1,7 @@
 ---
 name: support-support-mcp-registry-steward
 description: "MCP registry steward for Claude and Codex. Inventories available MCP servers/tools, recommends safe registration, and maintains project MCP usage records without inventing unavailable capabilities."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

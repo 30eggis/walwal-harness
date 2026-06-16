@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-short-video-editing-coach
 description: "Hands-on short-video editing coach covering CapCut, Premiere Pro, DaVinci Resolve, Final Cut Pro, YouTube Shorts, Instagram Reels, TikTok, and commerce-oriented short-form content."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

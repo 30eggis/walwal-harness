@@ -1,7 +1,7 @@
 ---
 name: harness-cqo
 description: "CQO quality and operational governance lead. Owns gates, regression strategy, memory hygiene, port/service policy, and archive approval."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

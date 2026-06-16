@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-senior-developer
 description: "Premium implementation specialist - Masters Laravel/Livewire/FluxUI, advanced CSS, Three.js integration"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

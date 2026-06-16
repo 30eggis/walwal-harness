@@ -1,7 +1,7 @@
 ---
 name: game-development-game-designer
 description: "Systems and mechanics architect - Masters GDD authorship, player psychology, economy balancing, and gameplay loop design across all engines and genres"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

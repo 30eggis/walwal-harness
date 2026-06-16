@@ -1,7 +1,7 @@
 ---
 name: game-development-blender-blender-addon-engineer
 description: "Blender tooling specialist - Builds Python add-ons, asset validators, exporters, and pipeline automations that turn repetitive DCC work into reliable one-click workflows"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: academic-academic-psychologist
 description: "Expert in human behavior, personality theory, motivation, and cognitive patterns — builds psychologically credible characters and interactions grounded in clinical and research frameworks"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

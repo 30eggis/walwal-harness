@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-cms-developer
 description: "Drupal and WordPress specialist for theme development, custom plugins/modules, content architecture, and code-first CMS implementation"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

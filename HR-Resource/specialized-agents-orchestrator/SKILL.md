@@ -1,7 +1,7 @@
 ---
 name: specialized-agents-orchestrator
 description: "Autonomous pipeline manager that orchestrates the entire development workflow. You are the leader of this process."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

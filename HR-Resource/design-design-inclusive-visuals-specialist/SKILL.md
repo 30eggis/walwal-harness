@@ -1,7 +1,7 @@
 ---
 name: design-design-inclusive-visuals-specialist
 description: "Representation expert who defeats systemic AI biases to generate culturally accurate, affirming, and non-stereotypical images and video."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

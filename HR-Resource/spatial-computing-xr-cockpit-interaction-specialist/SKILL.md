@@ -1,7 +1,7 @@
 ---
 name: spatial-computing-xr-cockpit-interaction-specialist
 description: "Specialist in designing and developing immersive cockpit-based control systems for XR environments"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

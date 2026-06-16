@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-cross-border-ecommerce
 description: "Full-funnel cross-border e-commerce strategist covering Amazon, Shopify, Shopee, Lazada, TikTok Shop, YouTube Shopping, and regional marketplaces, with expertise in logistics, compliance, localization, marketplace search, paid acquisition, and DTC growth."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

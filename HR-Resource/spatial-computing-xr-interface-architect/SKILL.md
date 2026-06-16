@@ -1,7 +1,7 @@
 ---
 name: spatial-computing-xr-interface-architect
 description: "Spatial interaction designer and interface strategist for immersive AR/VR/XR environments"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

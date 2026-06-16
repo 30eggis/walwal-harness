@@ -1,7 +1,7 @@
 ---
 name: harness-hiring
 description: "HR hiring. Searches .harness/shared/HR-Resource candidates, installs selected worker skills into .claude and .codex, and records roster wiring."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

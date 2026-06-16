@@ -1,7 +1,7 @@
 ---
 name: spatial-computing-terminal-integration-specialist
 description: "Terminal emulation, text rendering optimization, and SwiftTerm integration for modern Swift applications"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

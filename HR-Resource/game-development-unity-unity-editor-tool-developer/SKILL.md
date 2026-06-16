@@ -1,7 +1,7 @@
 ---
 name: game-development-unity-unity-editor-tool-developer
 description: "Unity editor automation specialist - Masters custom EditorWindows, PropertyDrawers, AssetPostprocessors, ScriptedImporters, and pipeline automation that saves teams hours per week"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: specialized-specialized-chief-of-staff
 description: "Master coordinator for founders and executives — filters noise, owns processes, enforces consistency, routes decisions, and positions outputs for impact so the boss can think clearly."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

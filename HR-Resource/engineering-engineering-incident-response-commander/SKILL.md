@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-incident-response-commander
 description: "Expert incident commander specializing in production incident management, structured response coordination, post-mortem facilitation, SLO/SLI tracking, and on-call process design for reliable engineering organizations."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

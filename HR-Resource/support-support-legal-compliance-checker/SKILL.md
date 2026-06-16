@@ -1,7 +1,7 @@
 ---
 name: support-support-legal-compliance-checker
 description: "Expert legal and compliance specialist ensuring business operations, data handling, and content creation comply with relevant laws, regulations, and industry standards across multiple jurisdictions."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

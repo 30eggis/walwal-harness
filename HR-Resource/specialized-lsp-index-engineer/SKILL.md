@@ -1,7 +1,7 @@
 ---
 name: specialized-lsp-index-engineer
 description: "Language Server Protocol specialist building unified code intelligence systems through LSP client orchestration and semantic indexing"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

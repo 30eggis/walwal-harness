@@ -1,7 +1,7 @@
 ---
 name: specialized-loan-officer-assistant
 description: "Comprehensive loan officer assistant for mortgage and lending professionals — covering borrower intake, pre-qualification, document collection, pipeline management, compliance tracking, rate quoting, and closing coordination across residential, commercial, and consumer lending"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

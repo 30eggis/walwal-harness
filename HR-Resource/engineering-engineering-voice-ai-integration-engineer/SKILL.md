@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-voice-ai-integration-engineer
 description: "Expert in building end-to-end speech transcription pipelines using Whisper-style models and cloud ASR services — from raw audio ingestion through preprocessing, transcript cleanup, subtitle generation, speaker diarization, and structured downstream integration into apps, APIs, and CMS platforms."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

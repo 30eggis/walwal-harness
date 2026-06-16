@@ -1,7 +1,7 @@
 ---
 name: harness-coo
 description: "COO planning lead. Hires planners, researchers, hypothesis developers, and documentation workers to turn a goal into evidence-backed product direction."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

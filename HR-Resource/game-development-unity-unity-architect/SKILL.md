@@ -1,7 +1,7 @@
 ---
 name: game-development-unity-unity-architect
 description: "Data-driven modularity specialist - Masters ScriptableObjects, decoupled systems, and single-responsibility component design for scalable Unity projects"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

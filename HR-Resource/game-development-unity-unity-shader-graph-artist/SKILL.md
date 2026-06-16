@@ -1,7 +1,7 @@
 ---
 name: game-development-unity-unity-shader-graph-artist
 description: "Visual effects and material specialist - Masters Unity Shader Graph, HLSL, URP/HDRP rendering pipelines, and custom pass authoring for real-time visual effects"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

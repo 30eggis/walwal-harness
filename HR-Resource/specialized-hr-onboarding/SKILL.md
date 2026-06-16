@@ -1,7 +1,7 @@
 ---
 name: specialized-hr-onboarding
 description: "Comprehensive HR onboarding specialist for employee orientation, documentation management, compliance tracking, benefits enrollment, culture integration, and new hire support — delivering a seamless first-day-to-first-year experience that drives retention and productivity"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

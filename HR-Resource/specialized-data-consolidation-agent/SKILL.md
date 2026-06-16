@@ -1,7 +1,7 @@
 ---
 name: specialized-data-consolidation-agent
 description: "AI agent that consolidates extracted sales data into live reporting dashboards with territory, rep, and pipeline summaries"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

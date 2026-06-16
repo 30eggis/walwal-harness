@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-google-seo-specialist
 description: "Expert Google SEO specialist focused on technical SEO, search intent, content architecture, structured data, Core Web Vitals, Search Console diagnostics, and global organic growth."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: sales-sales-outbound-strategist
 description: "Signal-based outbound specialist who designs multi-channel prospecting sequences, defines ICPs, and builds pipeline through research-driven personalization — not volume."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: specialized-report-distribution-agent
 description: "AI agent that automates distribution of consolidated sales reports to representatives based on territorial parameters"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-korea-global-market-localization-strategist
 description: "Korea and global market localization strategist who converts trend, search, social, review, and commerce signals into executable go-to-market plans across Google, YouTube, Instagram, Naver, Coupang, TikTok, Amazon, and Shopify."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

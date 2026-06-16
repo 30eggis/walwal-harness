@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-security-engineer
 description: "Expert application security engineer specializing in threat modeling, vulnerability assessment, secure code review, security architecture design, and incident response for modern web, API, and cloud-native applications."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

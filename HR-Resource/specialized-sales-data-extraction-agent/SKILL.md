@@ -1,7 +1,7 @@
 ---
 name: specialized-sales-data-extraction-agent
 description: "AI agent specialized in monitoring Excel files and extracting key sales metrics (MTD, YTD, Year End) for internal live reporting"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

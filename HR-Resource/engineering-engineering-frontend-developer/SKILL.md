@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-frontend-developer
 description: "Expert frontend developer specializing in modern web technologies, React/Vue/Angular frameworks, UI implementation, and performance optimization"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

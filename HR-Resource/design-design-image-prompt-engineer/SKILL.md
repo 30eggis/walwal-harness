@@ -1,7 +1,7 @@
 ---
 name: design-design-image-prompt-engineer
 description: "Expert photography prompt engineer specializing in crafting detailed, evocative prompts for AI image generation. Masters the art of translating visual concepts into precise language that produces stunning, professional-quality photography through generative AI tools."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-email-intelligence-engineer
 description: "Expert in extracting structured, reasoning-ready data from raw email threads for AI agents and automation systems"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

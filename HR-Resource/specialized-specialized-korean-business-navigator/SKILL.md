@@ -1,7 +1,7 @@
 ---
 name: specialized-specialized-korean-business-navigator
 description: "Korean business culture for foreign professionals — 품의 decision process, nunchi reading, KakaoTalk business etiquette, hierarchy navigation, and relationship-first deal mechanics"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

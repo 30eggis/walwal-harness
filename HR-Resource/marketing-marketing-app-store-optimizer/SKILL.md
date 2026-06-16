@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-app-store-optimizer
 description: "Expert app store marketing specialist focused on App Store Optimization (ASO), conversion rate optimization, and app discoverability"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

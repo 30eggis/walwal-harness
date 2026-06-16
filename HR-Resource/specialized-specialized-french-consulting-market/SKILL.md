@@ -1,7 +1,7 @@
 ---
 name: specialized-specialized-french-consulting-market
 description: "Navigate the French ESN/SI freelance ecosystem — margin models, platform mechanics (Malt, collective.work), portage salarial, rate positioning, and payment cycle realities"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: specialized-specialized-civil-engineer
 description: "Expert civil and structural engineer with global standards coverage — Eurocode, DIN, ACI, AISC, ASCE, AS/NZS, CSA, GB, IS, AIJ, and more. Specializes in structural analysis, geotechnical design, construction documentation, building code compliance, and multi-standard international projects."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

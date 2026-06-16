@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-code-reviewer
 description: "Expert code reviewer who provides constructive, actionable feedback focused on correctness, maintainability, security, and performance — not style preferences."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

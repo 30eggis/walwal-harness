@@ -1,7 +1,7 @@
 ---
 name: project-management-project-manager-senior
 description: "Converts specs to tasks and remembers previous projects. Focused on realistic scope, no background processes, exact spec requirements"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

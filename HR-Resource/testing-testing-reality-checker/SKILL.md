@@ -1,7 +1,7 @@
 ---
 name: testing-testing-reality-checker
 description: "Stops fantasy approvals, evidence-based certification - Default to \"NEEDS WORK\", requires overwhelming proof for production readiness"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

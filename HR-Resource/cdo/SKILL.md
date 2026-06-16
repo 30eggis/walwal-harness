@@ -1,7 +1,7 @@
 ---
 name: harness-cdo
 description: "CDO design lead. Owns brand system, UI/UX direction, references, mockups, and design-review hiring."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

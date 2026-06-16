@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-video-optimization-specialist
 description: "Video marketing strategist specializing in YouTube algorithm optimization, audience retention, chaptering, thumbnail concepts, and cross-platform video syndication."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

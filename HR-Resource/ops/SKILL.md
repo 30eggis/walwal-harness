@@ -1,7 +1,7 @@
 ---
 name: harness-ops
 description: "OPS environment monitor. Tracks build commands, mapped service servers, ports, logs, and emergency events."
-model: haiku
+model: opus
 disable-model-invocation: false
 ---
 

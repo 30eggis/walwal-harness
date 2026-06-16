@@ -1,7 +1,7 @@
 ---
 name: game-development-godot-godot-gameplay-scripter
 description: "Composition and signal integrity specialist - Masters GDScript 2.0, C# integration, node-based architecture, and type-safe signal design for Godot 4 projects"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

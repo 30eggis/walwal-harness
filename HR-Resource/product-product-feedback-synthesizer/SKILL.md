@@ -1,7 +1,7 @@
 ---
 name: product-product-feedback-synthesizer
 description: "Expert in collecting, analyzing, and synthesizing user feedback from multiple channels to extract actionable product insights. Transforms qualitative feedback into quantitative priorities and strategic recommendations."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

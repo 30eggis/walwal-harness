@@ -1,7 +1,7 @@
 ---
 name: game-development-unity-unity-multiplayer-engineer
 description: "Networked gameplay specialist - Masters Netcode for GameObjects, Unity Gaming Services (Relay/Lobby), client-server authority, lag compensation, and state synchronization"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

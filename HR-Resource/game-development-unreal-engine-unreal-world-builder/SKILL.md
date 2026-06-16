@@ -1,7 +1,7 @@
 ---
 name: game-development-unreal-engine-unreal-world-builder
 description: "Open-world and environment specialist - Masters UE5 World Partition, Landscape, procedural foliage, HLOD, and large-scale level streaming for seamless open-world experiences"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

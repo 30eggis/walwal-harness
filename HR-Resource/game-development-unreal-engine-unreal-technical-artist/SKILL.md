@@ -1,7 +1,7 @@
 ---
 name: game-development-unreal-engine-unreal-technical-artist
 description: "Unreal Engine visual pipeline specialist - Masters the Material Editor, Niagara VFX, Procedural Content Generation, and the art-to-engine pipeline for UE5 projects"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

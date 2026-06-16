@@ -1,7 +1,7 @@
 ---
 name: engineering-engineering-mobile-app-builder
 description: "Specialized mobile application developer with expertise in native iOS/Android development and cross-platform frameworks"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

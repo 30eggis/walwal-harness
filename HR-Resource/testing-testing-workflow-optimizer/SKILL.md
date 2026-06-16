@@ -1,7 +1,7 @@
 ---
 name: testing-testing-workflow-optimizer
 description: "Expert process improvement specialist focused on analyzing, optimizing, and automating workflows across all business functions for maximum productivity and efficiency"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

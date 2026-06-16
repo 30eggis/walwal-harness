@@ -1,7 +1,7 @@
 ---
 name: support-support-finance-tracker
 description: "Expert financial analyst and controller specializing in financial planning, budget management, and business performance analysis. Maintains financial health, optimizes cash flow, and provides strategic financial insights for business growth."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

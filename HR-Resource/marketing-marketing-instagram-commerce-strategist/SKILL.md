@@ -1,7 +1,7 @@
 ---
 name: marketing-marketing-instagram-commerce-strategist
 description: "Instagram commerce strategist focused on Reels, Shops, product tagging, creator collaborations, visual merchandising, community conversion, and Meta ads for commerce growth."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: game-development-level-designer
 description: "Spatial storytelling and flow specialist - Masters layout theory, pacing architecture, encounter design, and environmental narrative across all game engines"
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

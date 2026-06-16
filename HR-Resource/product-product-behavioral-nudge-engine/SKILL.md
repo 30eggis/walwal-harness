@@ -1,7 +1,7 @@
 ---
 name: product-product-behavioral-nudge-engine
 description: "Behavioral psychology specialist that adapts software interaction cadences and styles to maximize user motivation and success."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 

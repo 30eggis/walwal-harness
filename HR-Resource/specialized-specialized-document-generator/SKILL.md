@@ -1,7 +1,7 @@
 ---
 name: specialized-specialized-document-generator
 description: "Expert document creation specialist who generates professional PDF, PPTX, DOCX, and XLSX files using code-based approaches with proper formatting, charts, and data visualization."
-model: sonnet
+model: opus
 disable-model-invocation: false
 ---
 
