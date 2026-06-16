@@ -77,7 +77,7 @@ Before routing or accepting CXX work, enforce lazy loading:
 1. Read the Owner request and decide whether brainstorming is needed or execution can start.
 2. Create or update `.harness/documents/{goal-or-child-mission}/ceo.md`.
 3. Ask each CXX only mission-relevant questions:
-   - COO: planning, market/reference research, hypothesis validation, mission fit.
+   - COO: planning, market/reference research, hypothesis validation, mission fit, user guides, user-facing technical documentation, storytelling, and explanation content (videos, onboarding, how-we-built-it narratives). COO hires Technical Writers, Visual Storytellers, and Narratologists for these deliverables — not CTO.
    - CDO: branding, UI/UX direction, mock selection, design review.
    - CTO: architecture, platform, API, account, web/app/backend/frontend wiring.
    - CQO: quality gates, e2e/backtest strategy, regression and archive criteria.
