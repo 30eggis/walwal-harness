@@ -31,6 +31,12 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.52 — Single shared dashboard install (drop per-project `node_modules`) (2026-06-23)
+- `scripts/harness-dashboard-up.sh` now installs the Brick Office dashboard **once per version** under `~/.walwal-harness/dashboard/<version>/` (override base with `WALWAL_HARNESS_HOME`) and serves every project from that one copy. Previously each project got its own copy plus a full `npm install`, duplicating identical `node_modules` (~597MB) + `.next` (~75MB) per project — 100 projects cost ~64GB of identical bytes. Now total cost is ~640MB regardless of project count.
+- `npm install` + `next build` run only on the first launch of a given version (guarded by a `.walwal-dashboard-ready` marker and an atomic `mkdir` build lock so concurrent launches don't race). Each project is then served with its own `HARNESS_ROOT` + `--port` via `next start`; since `next start` reads `.next` read-only, many dashboards run concurrently from the same install safely.
+- This is correct because the dashboard code is byte-identical across projects and `HARNESS_ROOT` is resolved at request time (`lib/harness-root.ts`; all routes are `force-dynamic`), so build output never bakes in a project. Supersedes both the pre-7.1.37 per-project-hashed home cache and the 7.1.37 project-local `.harness/dashboard/` copy.
+- `bin/init.js` now writes hook/statusLine commands in `settings.json` as project-root-relative paths (`bash scripts/...`) instead of absolute `PROJECT_ROOT` paths, so moving or renaming a project no longer breaks the harness Stop hook with `No such file` errors.
+
 ## 7.1.48 — Auto-managed `.harness` `.gitignore` + runtime untrack on init (2026-06-05)
 - `walwal-harness init` now writes/refreshes a marked managed block in the project-root `.gitignore` so machine-specific harness runtime/local state is never committed and never pollutes teammates' diffs. Ignored: live conductor `progress.json`/`progress.log`/`handoff.json`/`events.jsonl`, the `todos/` live queue (`state.json` + `events.jsonl`), `actions/`, `ops/`, `activity/`, `logs/`, `archive/` migration backups, and the `dashboard/` visualization tooling. Durable team knowledge stays tracked: `conventions/`, `gotchas/`, `documents/`, `memories/`, `memory.md`, `shared/`, `config.json`, `HARNESS.md`, `.bundle-version`.
 - Init also best-effort `git rm --cached`s any of those runtime paths committed before the ignore block existed (files stay on disk), fixing the "`.gitignore` added but already-tracked files keep showing as changes" case.

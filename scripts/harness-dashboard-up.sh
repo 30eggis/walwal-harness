@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
-# walwal-harness — Brick Office dashboard launcher
+# walwal-harness — Brick Office dashboard launcher (shared single-install)
 #
-# 처음 쓰는 사용자도 한 줄로 대시보드를 띄워볼 수 있게 만든 helper.
-# npm 패키지에 포함된 apps/harness-dashboard 를 프로젝트별 runtime 영역
-# (.harness/dashboard/) 에 복사 후 dev 실행한다.
-# 구버전 호환을 위해 패키지에 dashboard 가 없으면 git sparse-checkout 으로 fallback 한다.
+# 대시보드 코드는 모든 프로젝트에서 byte 단위로 동일하다 (패키지가 버전 고정으로
+# 배포). 프로젝트마다 다른 것은 HARNESS_ROOT(어느 .harness/ 를 볼지)와 PORT 뿐이고,
+# HARNESS_ROOT 는 lib/harness-root.ts 가 *런타임*에 읽는다. 따라서 설치본은 하나면
+# 충분하다.
+#
+# 이 런처는 버전별 단일 설치본을 ~/.walwal-harness/dashboard/<version>/ 에 두고
+# (npm install + next build 를 버전당 딱 한 번), 각 프로젝트는 HARNESS_ROOT+PORT 만
+# 바꿔 `next start` 로 띄운다. next start 는 .next 를 읽기전용으로 쓰므로 같은 폴더에서
+# 여러 프로젝트를 동시에 서빙해도 안전하다. 프로젝트가 100개여도 node_modules/.next 는
+# 단 1벌(~640MB).
+#
+# 구버전 호환: 패키지에 dashboard 가 없으면 git sparse-checkout 으로 fallback 한다.
 #
 # Usage:
-#   bash scripts/harness-dashboard-up.sh                 # install + dev (port 3001)
+#   bash scripts/harness-dashboard-up.sh                 # build(최초 1회) + serve (port 3001)
 #   bash scripts/harness-dashboard-up.sh --port 3050     # override port
+#   bash scripts/harness-dashboard-up.sh --reinstall     # 공유 설치본 폐기 후 재빌드
 #   HARNESS_ROOT=/path/to/project bash ...               # explicit harness root
 set -euo pipefail
 
@@ -23,12 +32,13 @@ while [[ $# -gt 0 ]]; do
     --port) PORT="$2"; shift 2 ;;
     --reinstall) REINSTALL=true; shift ;;
     --help|-h)
-      sed -n '2,16p' "$0"
+      sed -n '2,28p' "$0"
       exit 0 ;;
     *) echo "[brick-office] unknown arg: $1" >&2; exit 2 ;;
   esac
 done
 
+# --- target project (the one whose .harness/ we visualize) ---
 if [[ -z "${HARNESS_ROOT:-}" ]]; then
   HARNESS_ROOT="$(pwd)"
 fi
@@ -38,87 +48,91 @@ if [[ ! -d "${HARNESS_ROOT}/.harness" ]]; then
   exit 3
 fi
 
-LOCAL_DIR="${HARNESS_ROOT}/.harness/dashboard"
-VERSION_FILE="${LOCAL_DIR}/.walwal-dashboard-version"
-
+# --- locate the packaged dashboard source + its version ---
 PACKAGE_ROOT="${HARNESS_ROOT}/node_modules/@walwal-harness/cli"
 PACKAGED_DASHBOARD="${PACKAGE_ROOT}/${DASHBOARD_PATH}"
 if [[ -f "${PACKAGE_ROOT}/package.json" ]]; then
   PACKAGE_VERSION="$(node -p "require('${PACKAGE_ROOT}/package.json').version" 2>/dev/null || echo unknown)"
 fi
 
+# --- shared, version-keyed install (the whole point: one copy for ALL projects) ---
+SHARED_BASE="${WALWAL_HARNESS_HOME:-$HOME/.walwal-harness}/dashboard"
+VERSION_KEY="${PACKAGE_VERSION}"
+[[ "$VERSION_KEY" == "unknown" || -z "$VERSION_KEY" ]] && VERSION_KEY="edge"
+SHARED_DIR="${SHARED_BASE}/${VERSION_KEY}"           # node_modules + .next + source live here
+READY_MARKER="${SHARED_DIR}/.walwal-dashboard-ready" # written only after a successful build
+LOCK_DIR="${SHARED_BASE}/.build-lock-${VERSION_KEY}" # mkdir-based build mutex (atomic)
+
 if [[ "$REINSTALL" == "true" ]]; then
-  rm -rf "$LOCAL_DIR"
+  rm -rf "$SHARED_DIR"
 fi
 
-ensure_gitignore() {
-  local gitignore="${HARNESS_ROOT}/.gitignore"
-  # `walwal-harness init` owns the canonical managed block (covers .harness/dashboard/
-  # plus all other runtime/local state). If it's already present, nothing to add.
-  local managed_marker="# >>> walwal-harness managed"
-  if [[ -f "$gitignore" ]] && grep -Fq "$managed_marker" "$gitignore"; then
-    return
-  fi
-  # Prefer the package's canonical template (single source of truth shared with init.js);
-  # fall back to a dashboard-only block for older packages that lack the template.
-  local tpl="${PACKAGE_ROOT}/assets/templates/gitignore-append.txt"
-  local block
-  if [[ -f "$tpl" ]]; then
-    block="$(cat "$tpl")"
+echo "[brick-office] HARNESS_ROOT   = ${HARNESS_ROOT}"
+echo "[brick-office] shared install = ${SHARED_DIR}  (version ${VERSION_KEY})"
+
+# Copy the dashboard source into the shared dir. Leaves any existing node_modules
+# in place (the package tarball ships no node_modules), so a re-entry after a failed
+# build keeps the installed deps.
+populate_source() {
+  mkdir -p "$SHARED_DIR"
+  if [[ -d "${PACKAGED_DASHBOARD}" ]]; then
+    cp -R "${PACKAGED_DASHBOARD}/." "${SHARED_DIR}/"
   else
-    block="$(cat <<'EOF'
-# walwal-harness dashboard runtime
-.harness/dashboard/
-EOF
-)"
+    echo "[brick-office] 패키지에 dashboard 없음 — git sparse-checkout fallback (~5MB)."
+    local dl="${SHARED_BASE}/.download-${VERSION_KEY}"
+    rm -rf "$dl"; mkdir -p "$dl"
+    (
+      cd "$dl"
+      git init -q
+      git remote add origin "${REPO_URL}" 2>/dev/null || true
+      git config core.sparseCheckout true
+      echo "${DASHBOARD_PATH}/" > .git/info/sparse-checkout
+      git fetch --depth=1 origin main -q
+      git checkout main -q
+    )
+    cp -R "${dl}/${DASHBOARD_PATH}/." "${SHARED_DIR}/"
+    rm -rf "$dl"
   fi
-  mkdir -p "$(dirname "$gitignore")"
-  if [[ -f "$gitignore" ]] && [[ -s "$gitignore" ]] && [[ "$(tail -c 1 "$gitignore" 2>/dev/null || true)" != "" ]]; then
-    printf '\n' >> "$gitignore"
-  fi
-  printf '%s\n' "$block" >> "$gitignore"
 }
 
-ensure_gitignore
+# build = install deps + production build, guarded by a single-writer lock so two
+# projects launching at once don't race on the same shared dir. The EXIT trap is a
+# safety net: under `set -e` a failed npm install / next build aborts the script, and
+# the trap then frees the lock (and leaves no READY_MARKER → next launch rebuilds).
+build_shared() {
+  local waited=0
+  mkdir -p "$SHARED_BASE"   # lock dir is created with plain mkdir, so its parent must exist
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    # someone else finished the build while we were waiting → done, nothing to own.
+    [[ -f "$READY_MARKER" ]] && return 0
+    sleep 1; waited=$((waited + 1))
+    if (( waited > 600 )); then
+      echo "[brick-office] stale build lock (>10m) — 강제 해제." >&2
+      rm -rf "$LOCK_DIR"
+    fi
+  done
+  trap 'rm -rf "$LOCK_DIR"' EXIT
 
-echo "[brick-office] HARNESS_ROOT = ${HARNESS_ROOT}"
-echo "[brick-office] dashboard runtime path = ${LOCAL_DIR}"
-
-if [[ -d "${PACKAGED_DASHBOARD}" ]]; then
-  INSTALLED_VERSION=""
-  if [[ -f "${VERSION_FILE}" ]]; then
-    INSTALLED_VERSION="$(cat "${VERSION_FILE}" 2>/dev/null || true)"
+  # double-checked: another waiter may have built it just before we got the lock.
+  if [[ -f "$READY_MARKER" && "$(cat "$READY_MARKER" 2>/dev/null || true)" == "$VERSION_KEY" ]]; then
+    rm -rf "$LOCK_DIR"; trap - EXIT; return 0
   fi
-  if [[ ! -d "${LOCAL_DIR}/${DASHBOARD_PATH}" || "${INSTALLED_VERSION}" != "${PACKAGE_VERSION}" ]]; then
-    echo "[brick-office] dashboard sync from npm package @walwal-harness/cli@${PACKAGE_VERSION}"
-    rm -rf "${LOCAL_DIR:?}/${DASHBOARD_PATH}"
-    mkdir -p "${LOCAL_DIR}/apps"
-    cp -R "${PACKAGED_DASHBOARD}" "${LOCAL_DIR}/apps/"
-    printf '%s\n' "${PACKAGE_VERSION}" > "${VERSION_FILE}"
-  fi
-elif [[ ! -d "${LOCAL_DIR}/${DASHBOARD_PATH}" ]]; then
-  echo "[brick-office] 첫 실행 — git sparse-checkout 으로 dashboard 만 가져옵니다 (~5MB)."
-  rm -rf "${LOCAL_DIR}/.download"
-  mkdir -p "${LOCAL_DIR}/.download"
-  cd "${LOCAL_DIR}/.download"
-  git init -q
-  git remote add origin "${REPO_URL}" 2>/dev/null || true
-  git config core.sparseCheckout true
-  echo "${DASHBOARD_PATH}/" > .git/info/sparse-checkout
-  git fetch --depth=1 origin main -q
-  git checkout main -q
-  mkdir -p "${LOCAL_DIR}/apps"
-  rm -rf "${LOCAL_DIR:?}/${DASHBOARD_PATH}"
-  cp -R "${DASHBOARD_PATH}" "${LOCAL_DIR}/apps/"
-  rm -rf "${LOCAL_DIR}/.download"
-  echo "[brick-office] 다운로드 완료."
-fi
 
-cd "${LOCAL_DIR}/${DASHBOARD_PATH}"
+  [[ -f "${SHARED_DIR}/package.json" ]] || populate_source
 
-if [[ ! -d node_modules ]]; then
-  echo "[brick-office] npm install (한 번만 실행, ~30s)..."
-  npm install --no-audit --no-fund --loglevel=error
+  echo "[brick-office] npm install (버전당 1회, ~30s)..."
+  ( cd "$SHARED_DIR" && npm install --no-audit --no-fund --loglevel=error )
+
+  echo "[brick-office] next build (버전당 1회)..."
+  ( cd "$SHARED_DIR" && ./node_modules/.bin/next build )
+
+  printf '%s\n' "$VERSION_KEY" > "$READY_MARKER"
+  echo "[brick-office] 빌드 완료 — 이후 모든 프로젝트가 이 설치본을 공유합니다."
+  rm -rf "$LOCK_DIR"; trap - EXIT
+}
+
+if [[ ! -f "$READY_MARKER" || "$(cat "$READY_MARKER" 2>/dev/null || true)" != "$VERSION_KEY" ]]; then
+  build_shared
 fi
 
 echo ""
@@ -130,4 +144,5 @@ echo "║  실시간 (SSE) 시각화합니다. Ctrl+C 로 종료.              �
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
-HARNESS_ROOT="${HARNESS_ROOT}" npm run dev:dashboard -- -H 127.0.0.1 -p "${PORT}"
+cd "$SHARED_DIR"
+HARNESS_ROOT="${HARNESS_ROOT}" exec ./node_modules/.bin/next start -H 127.0.0.1 -p "${PORT}"

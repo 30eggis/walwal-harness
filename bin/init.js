@@ -190,7 +190,11 @@ function shellQuote(value) {
 }
 
 function harnessScriptCommand(scriptName) {
-  return `bash ${shellQuote(path.join(PROJECT_ROOT, 'scripts', scriptName))}`;
+  // Relative path (resolved from the project root — where Claude Code runs hooks
+  // and the statusLine). A relative path survives the project being moved or
+  // renamed; an absolute PROJECT_ROOT path bakes in the install-time location
+  // and breaks the moment the directory is relocated.
+  return `bash ${shellQuote(path.join('scripts', scriptName))}`;
 }
 
 function replaceHarnessHookCommand(entries, marker, command) {

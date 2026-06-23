@@ -164,7 +164,7 @@ Run on a different port:
 bash scripts/harness-dashboard-up.sh --port 3002
 ```
 
-Force-refresh the project-local dashboard runtime when an older dashboard is still shown:
+Force-rebuild the shared dashboard install when an older dashboard is still shown:
 
 ```bash
 bash scripts/harness-dashboard-up.sh --port 3002 --reinstall
@@ -175,9 +175,9 @@ Dashboard options:
 | Option | Role |
 |---|---|
 | `--port <port>` | Run Brick Office on a custom port, e.g. `3002` |
-| `--reinstall` | Delete and rebuild the project-local dashboard runtime under `.harness/dashboard/` |
+| `--reinstall` | Discard and rebuild the shared dashboard install for this version |
 
-The dashboard app copy lives under `.harness/dashboard/` for the current project. Generated dependencies and build output are ignored via `.gitignore`; the runtime files the dashboard reads remain the normal `.harness/` files.
+The dashboard code is identical across all projects, so it is installed **once per version** under `~/.walwal-harness/dashboard/<version>/` and shared by every project — a single `node_modules` plus one production build (`npm install` + `next build`) the first time, then reused. Each project is served with its own `HARNESS_ROOT` and port via `next start`, so you can run many dashboards at once without duplicating dependencies (100 projects still cost ~640MB, not 100×). Override the base directory with `WALWAL_HARNESS_HOME`.
 
 ### Company Auto-Chain State
 
