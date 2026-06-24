@@ -286,7 +286,9 @@ function extractMarkdownEntryBlocks(md, prefix) {
 function migrateLegacyRoleEntries(dir, files, kind) {
   const prefix = kind === 'gotchas' ? 'G' : 'C';
   const migrated = [];
-  const backupDir = path.join(HARNESS_DIR, 'archive', 'pre-v7-role-migration');
+  // Backup snapshots live under .harness/backups/, never .harness/archive/ —
+  // archive/ is reserved for completed-mission outputs (goal+submission+hot-fix).
+  const backupDir = path.join(HARNESS_DIR, 'backups', 'pre-v7-role-migration');
   for (const file of files) {
     const sourcePath = path.join(dir, file);
     if (!fs.existsSync(sourcePath)) continue;
@@ -386,8 +388,9 @@ function migrateExistingDocs() {
       continue;
     }
 
-    // Backup
-    const backupPath = path.join(HARNESS_DIR, 'archive', `pre-harness-${path.basename(docPath)}.bak`);
+    // Backup (under .harness/backups/, not archive/ — archive holds completed missions)
+    const backupPath = path.join(HARNESS_DIR, 'backups', `pre-harness-${path.basename(docPath)}.bak`);
+    ensureDir(path.dirname(backupPath));
     fs.writeFileSync(backupPath, content);
     report.push(`Backed up: ${docPath} → ${backupPath}`);
 
@@ -464,7 +467,7 @@ function migrateExistingDocs() {
     ``,
     `## Backups`,
     ``,
-    `Original documents were preserved in \`.harness/archive/pre-harness-*.md.bak\`.`,
+    `Original documents were preserved in \`.harness/backups/pre-harness-*.md.bak\`.`,
     ``
   ].join('\n');
   fs.writeFileSync(reportPath, reportContent);
@@ -1425,7 +1428,7 @@ function normalizeDocBody(body) {
 
 function ensureProjectAgentDocs(opts = {}) {
   const dryRun = opts.dryRun || false;
-  const backupDir = opts.backupDir || path.join(HARNESS_DIR, 'archive', 'pre-harness-backup');
+  const backupDir = opts.backupDir || path.join(HARNESS_DIR, 'backups', 'pre-harness-backup');
   const agentsMd = path.join(PROJECT_ROOT, 'AGENTS.md');
   const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md');
 
@@ -1485,7 +1488,7 @@ function ensureProjectAgentDocs(opts = {}) {
 function setupAgentsMd() {
   const agentsMd = path.join(PROJECT_ROOT, 'AGENTS.md');
   const claudeMd = path.join(PROJECT_ROOT, 'CLAUDE.md');
-  ensureProjectAgentDocs({ backupDir: path.join(HARNESS_DIR, 'archive', 'pre-harness-backup') });
+  ensureProjectAgentDocs({ backupDir: path.join(HARNESS_DIR, 'backups', 'pre-harness-backup') });
 }
 
 // ─────────────────────────────────────────
@@ -1642,6 +1645,7 @@ function detectMigrationNeeded() {
     configLegacyRouting: false,
     configRuntimeVerificationMissing: false,
     configWakeModelMissing: false,
+    configWriteOnSignalMissing: false,
     coreSkillsStale: false,
     hrResourcePoolStale: false,
     harnessMdStale: false,
@@ -1750,6 +1754,9 @@ function detectMigrationNeeded() {
       }
       if (c.company_mode && c.company_mode.hourly_wake_model === undefined) {
         flags.configWakeModelMissing = true;
+      }
+      if (c.company_mode && c.company_mode.write_on_signal === undefined) {
+        flags.configWriteOnSignalMissing = true;
       }
       if (
         c.behavior?.auto_route_dispatcher !== undefined ||
@@ -2035,6 +2042,10 @@ function showMigrationProposal(flags) {
     console.log('  • config.json: company_mode.hourly_wake_model 추가 가능');
     console.log('    Claude wake tick 에서 --model 을 환경변수/설정으로 지정할 수 있습니다.');
   }
+  if (flags.configWriteOnSignalMissing) {
+    console.log('  • config.json: company_mode.write_on_signal 추가 가능');
+    console.log('    무신호(델타 부재) 틱은 meeting 문서 대신 heartbeat 만 남겨 문서 폭증을 막습니다.');
+  }
   if (flags.configLegacyRouting) {
     console.log('  • config.json: legacy dispatcher/conductor wording → v7 CEO/CXX wording');
   }
@@ -2091,7 +2102,7 @@ function showMigrationProposal(flags) {
   console.log('  미리보기:  npx walwal-harness migrate --dry-run');
   console.log('');
   console.log('  ※ 자동 강제 X — 사용자가 명령을 실행할 때만 변경됩니다.');
-  console.log('  ※ 변경 전 .harness/archive/migration-<ts>/ 에 자동 백업.');
+  console.log('  ※ 변경 전 .harness/backups/migration-<ts>/ 에 자동 백업 (archive/ 는 완료 미션 전용).');
   console.log('');
 }
 
@@ -2118,6 +2129,7 @@ function runMigrate(opts = {}) {
     !flags.configLegacyRouting &&
     !flags.configRuntimeVerificationMissing &&
     !flags.configWakeModelMissing &&
+    !flags.configWriteOnSignalMissing &&
     !flags.coreSkillsStale &&
     !flags.hrResourcePoolStale &&
     !flags.harnessMdStale &&
@@ -2144,9 +2156,20 @@ function runMigrate(opts = {}) {
   log(dryRun ? '=== DRY RUN — 실제 변경 없음 ===' : '=== Migration 적용 ===');
 
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupDir = path.join(HARNESS_DIR, 'archive', `migration-${ts}`);
+  // Migration backups go to .harness/backups/, not .harness/archive/. archive/ is
+  // the completed-mission namespace (goal+submission+hot-fix); it must not collect
+  // migrate snapshots. (Owner agreement: "archive/ 네임스페이스 탈환".)
+  const backupDir = path.join(HARNESS_DIR, 'backups', `migration-${ts}`);
   if (!dryRun) ensureDir(backupDir);
   ensureStructuredRuntimeFiles({ dryRun });
+  // Keep the host .gitignore in sync so migrating projects also ignore the new
+  // .harness/backups/ snapshot root (and drop any previously-tracked runtime noise).
+  if (!dryRun) {
+    ensureProjectGitignore();
+    gitUntrackLocalState();
+  } else {
+    log('  (dry-run) .gitignore: walwal-harness managed block refresh 예정 (.harness/backups/ 포함)');
+  }
   ensureProjectAgentDocs({ dryRun, backupDir });
   flags.agentsMissingOpsVerificationRules = false;
   flags.agentsMissingCodexAdapterRules = false;
@@ -2194,7 +2217,7 @@ function runMigrate(opts = {}) {
   // 2. config.json — inject company_mode/runtime verification from template if missing
   const configPath = path.join(HARNESS_DIR, 'config.json');
   const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
-  if ((flags.configMissingCompanyMode || flags.configLegacyRouting || flags.configRuntimeVerificationMissing || flags.configWakeModelMissing) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
+  if ((flags.configMissingCompanyMode || flags.configLegacyRouting || flags.configRuntimeVerificationMissing || flags.configWakeModelMissing || flags.configWriteOnSignalMissing) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
     const original = fs.readFileSync(configPath, 'utf8');
     const c = JSON.parse(original);
     const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
@@ -2224,6 +2247,13 @@ function runMigrate(opts = {}) {
         c.company_mode.hourly_wake_model_description = tpl.company_mode.hourly_wake_model_description;
         configChanged = true;
         log('  config.json: hourly_wake_model 섹션 동기화');
+      }
+      if (flags.configWriteOnSignalMissing) {
+        c.company_mode = c.company_mode || {};
+        c.company_mode.write_on_signal = tpl.company_mode.write_on_signal ?? true;
+        c.company_mode.write_on_signal_description = tpl.company_mode.write_on_signal_description;
+        configChanged = true;
+        log('  config.json: write_on_signal (무신호 틱 문서 억제) 섹션 동기화');
       }
       if (flags.configRuntimeVerificationMissing && tpl.runtime?.verification) {
         c.runtime = c.runtime || {};

@@ -190,6 +190,8 @@
     "hourly_wake_model_description": "Claude executor 에서 특정 모델을 강제하려면 HARNESS_WAKE_MODEL 또는 이 값을 사용한다. 비워두면 CLI 기본 모델을 사용한다.",
     "hourly_wake_mode": "headless",
     "hourly_wake_mode_description": "headless 는 백그라운드 실행, tmux 는 매시간 별도 tmux 세션, record 는 prompt/log만 생성한다.",
+    "write_on_signal": true,
+    "write_on_signal_description": "true 이면 hourly-review 가 델타(인시던트/목표드리프트/실행계약/판정 변화)가 있는 틱에서만 meeting 문서를 생성하고, 무신호 틱은 .meetings.heartbeat_count 만 증가시킨다. 문서≠텔레메트리·write-on-signal 합의에 따라 동일 boilerplate 문서 폭증을 막는다. false 로 두면 매 틱 문서를 남기는 레거시 동작.",
     "autonomous": true,
     "parallel_by_default": true
   },

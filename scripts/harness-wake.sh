@@ -130,7 +130,7 @@ start_headless_tick() {
   local idle="$2"
   local force="$3"
   local review_path="$4"
-  local mode executor wake_model agent_bin stamp wake_dir ops_dir prompt_rel log_rel prompt_path log_path pid_file old_pid pid status tmux_session session_name session_safe
+  local mode executor wake_model agent_bin stamp ops_dir activity_dir prompt_scratch log_rel log_path pid_file old_pid pid status tmux_session session_name session_safe wake_prompt log_note
 
   if command -v jq >/dev/null 2>&1 && [ -f "$project_root/.harness/config.json" ]; then
     mode="${HARNESS_WAKE_MODE:-$(jq -r '.company_mode.hourly_wake_mode // "headless"' "$project_root/.harness/config.json" 2>/dev/null || echo headless)}"
@@ -142,13 +142,17 @@ start_headless_tick() {
     wake_model="${HARNESS_WAKE_MODEL:-}"
   fi
   stamp="$(date -u "+%Y%m%dT%H%M%SZ")"
-  wake_dir="$project_root/.harness/actions/wake"
   ops_dir="$project_root/.harness/ops/wake"
-  mkdir -p "$wake_dir" "$ops_dir"
+  activity_dir="$project_root/.harness/activity"
+  mkdir -p "$ops_dir" "$activity_dir"
 
-  prompt_rel=".harness/actions/wake/wake-${stamp}.prompt.md"
+  # The wake prompt is a static template parameterized only by project/idle/force/
+  # review-path. Per the write-on-signal agreement we assemble it in memory rather
+  # than persisting a fresh wake-<ts>.prompt.md every tick (those 100+ identical
+  # templates were pure noise). tmux mode, which feeds the prompt over stdin, reuses
+  # one overwritten scratch file instead of N timestamped ones.
+  prompt_scratch="$ops_dir/current.prompt.md"
   log_rel=".harness/ops/wake/wake-${stamp}.log"
-  prompt_path="$project_root/$prompt_rel"
   log_path="$project_root/$log_rel"
   pid_file="$ops_dir/wake.pid"
 
@@ -160,7 +164,7 @@ start_headless_tick() {
     fi
   fi
 
-  cat > "$prompt_path" <<EOF
+  wake_prompt="$(cat <<EOF
 You are harness-ceo waking for the walwal-harness hourly executive loop.
 
 Project root: $project_root
@@ -219,7 +223,11 @@ Required final shape for this tick:
 - NEXT checkpoint:
 - Evidence paths:
 EOF
+)"
 
+  # log_note tracks the on-disk artifact for this tick. record mode and
+  # BLOCKED_RUNTIME never spawn an agent, so they leave no (previously empty) log.
+  log_note="(none)"
   case "$mode" in
     record)
       status="recorded"
@@ -229,18 +237,19 @@ EOF
         (
           cd "$project_root" || exit 1
           if [ "$executor" = "codex" ]; then
-            "$agent_bin" exec -C "$project_root" "$(cat "$prompt_path")" > "$log_path" 2>&1
+            "$agent_bin" exec -C "$project_root" "$wake_prompt" > "$log_path" 2>&1
           else
             if [ -n "$wake_model" ]; then
-              "$agent_bin" -p "$(cat "$prompt_path")" --model "$wake_model" > "$log_path" 2>&1
+              "$agent_bin" -p "$wake_prompt" --model "$wake_model" > "$log_path" 2>&1
             else
-              "$agent_bin" -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+              "$agent_bin" -p "$wake_prompt" > "$log_path" 2>&1
             fi
           fi
         ) &
         pid=$!
         echo "$pid" > "$pid_file"
         status="spawned executor=$executor pid=$pid"
+        log_note="$log_rel"
       else
         status="BLOCKED_RUNTIME ${executor}-not-found"
       fi
@@ -249,18 +258,20 @@ EOF
       if ! command -v tmux >/dev/null 2>&1; then
         status="BLOCKED_RUNTIME tmux-not-found"
       elif agent_bin="$(resolve_agent_bin "$executor")"; then
+        printf '%s\n' "$wake_prompt" > "$prompt_scratch"
         session_safe="$(basename "$project_root" | tr -c '[:alnum:]_' '_')"
         session_name="walwal_${session_safe}_${stamp}"
         if [ "$executor" = "codex" ]; then
-          tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' exec -C '$project_root' - < '$prompt_path' 2>&1 | tee '$log_path'"
+          tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' exec -C '$project_root' - < '$prompt_scratch' 2>&1 | tee '$log_path'"
         else
           if [ -n "$wake_model" ]; then
-            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_path')\" --model '$wake_model' 2>&1 | tee '$log_path'"
+            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_scratch')\" --model '$wake_model' 2>&1 | tee '$log_path'"
           else
-            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_path')\" 2>&1 | tee '$log_path'"
+            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_scratch')\" 2>&1 | tee '$log_path'"
           fi
         fi
         status="spawned-tmux executor=$executor session=$session_name"
+        log_note="$log_rel"
       else
         status="BLOCKED_RUNTIME ${executor}-not-found"
       fi
@@ -270,13 +281,41 @@ EOF
       ;;
   esac
 
-  echo "$(date -u "+%Y-%m-%dT%H:%M:%SZ") | wake | agent-tick | $status | idle=${idle}s | force=${force} | mode=${mode} | prompt=$prompt_rel | log=$log_rel" >> "$project_root/.harness/progress.log"
-  say "wake-agent: $project_root (idle ${idle}s, force=${force}, mode=${mode}, executor=${executor}) → $status $log_rel"
+  # Per-tick wake telemetry = one params-only line, not a full prompt copy. This
+  # is the "if you must keep something, keep one line in activity.jsonl" path from
+  # the wake-template agreement, with rotation so it never grows unbounded.
+  if command -v jq >/dev/null 2>&1; then
+    jq -nc \
+      --arg ts "$(date -u "+%Y-%m-%dT%H:%M:%SZ")" \
+      --arg stamp "$stamp" \
+      --argjson idle "${idle:-0}" \
+      --arg force "$force" \
+      --arg mode "$mode" \
+      --arg executor "$executor" \
+      --arg status "$status" \
+      --arg review "${review_path:-}" \
+      --arg log "$log_note" \
+      '{ts:$ts,stamp:$stamp,idle:$idle,force:$force,mode:$mode,executor:$executor,status:$status,review:$review,log:$log}' \
+      >> "$activity_dir/wake.jsonl" 2>/dev/null || true
+    if [ -f "$activity_dir/wake.jsonl" ] && tail -n 2000 "$activity_dir/wake.jsonl" > "$activity_dir/wake.jsonl.tmp" 2>/dev/null; then
+      mv "$activity_dir/wake.jsonl.tmp" "$activity_dir/wake.jsonl"
+    else
+      rm -f "$activity_dir/wake.jsonl.tmp" 2>/dev/null || true
+    fi
+  fi
+
+  # Rotate per-tick agent logs: keep only the most recent 48 (~2 days hourly).
+  ls -1t "$ops_dir"/wake-*.log 2>/dev/null | tail -n +49 | while IFS= read -r old_log; do
+    rm -f "$old_log"
+  done
+
+  echo "$(date -u "+%Y-%m-%dT%H:%M:%SZ") | wake | agent-tick | $status | idle=${idle}s | force=${force} | mode=${mode} | log=$log_note" >> "$project_root/.harness/progress.log"
+  say "wake-agent: $project_root (idle ${idle}s, force=${force}, mode=${mode}, executor=${executor}) → $status $log_note"
 
   run_conductor_fallback "$project_root" "$status"
 
   if tmux_session="$(find_tmux_session "$project_root" 2>/dev/null)"; then
-    tmux display-message -t "$tmux_session" "walwal wake headless tick: $status ($log_rel)" 2>/dev/null || true
+    tmux display-message -t "$tmux_session" "walwal wake headless tick: $status ($log_note)" 2>/dev/null || true
   fi
 }
 

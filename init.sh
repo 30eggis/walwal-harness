@@ -181,13 +181,15 @@ run_refresh_ref() {
   fi
 
   local ref_path="${project_root}/.harness/ref/${role}-${stack}.md"
-  local archive_dir="${project_root}/.harness/archive"
-  mkdir -p "$archive_dir"
+  # Ref backups go to .harness/backups/, not .harness/archive/. archive/ is the
+  # completed-mission namespace and must not collect tooling backups.
+  local backups_dir="${project_root}/.harness/backups/refs"
+  mkdir -p "$backups_dir"
 
   if [ -f "$ref_path" ]; then
-    local backup="${archive_dir}/ref-${role}-${stack}-$(date +%Y%m%d%H%M%S).md"
+    local backup="${backups_dir}/ref-${role}-${stack}-$(date +%Y%m%d%H%M%S).md"
     mv "$ref_path" "$backup"
-    echo "archive: $backup"
+    echo "backup: $backup"
   fi
 
   echo ""

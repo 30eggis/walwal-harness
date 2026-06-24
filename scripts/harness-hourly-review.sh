@@ -40,7 +40,9 @@ meeting_rel=".harness/actions/meetings/$id/meeting-$id.md"
 meeting_path="$PROJECT_ROOT/$meeting_rel"
 log_path="$PROJECT_ROOT/.harness/progress.log"
 
-mkdir -p "$meeting_dir"
+# meeting_dir is created lazily, only when this tick actually has a signal worth a
+# meeting doc (see the write-on-signal gate below). No-signal ticks must not even
+# leave an empty M-*-hourly directory behind.
 
 ops_report=""
 if [ -x "$SCRIPT_DIR/harness-service-ops-monitor.sh" ]; then
@@ -299,6 +301,49 @@ if [ "$verdict" = "working" ] && [ "$handoff_requires_execution" = "true" ]; the
       success_condition:$success
     }')"
 fi
+
+# ── Write-on-signal gate ────────────────────────────────────────────────────
+# Agreement: 문서 ≠ 텔레메트리. A no-delta hourly tick must not emit yet another
+# identical meeting doc — it bumps a heartbeat counter instead. A "signal" is an
+# incident, goal drift, owner escalation, a required-execution contract, a handoff
+# that needs execution, or a change in verdict since the last recorded review.
+# Control flow (conductor-tick.sh) routes off progress.json state, not this file,
+# so suppressing the markdown on quiet ticks is safe.
+write_on_signal="$(jq -r '.company_mode.write_on_signal // true' "$CONFIG" 2>/dev/null || echo true)"
+last_verdict="$(jq -r '.meetings.last_reason // ""' "$PROGRESS" 2>/dev/null || echo "")"
+has_signal=true
+if [ "$write_on_signal" = "true" ]; then
+  has_signal=false
+  case "$verdict" in
+    incident|goal_drift|owner_needed) has_signal=true ;;
+  esac
+  [ "$required_execution_json" != "null" ] && has_signal=true
+  [ "$handoff_requires_execution" = "true" ] && has_signal=true
+  # A change in verdict since the last recorded review is a state transition worth a
+  # minute (this also makes the first-ever review a signal, since last_verdict is "").
+  [ "$verdict" != "$last_verdict" ] && has_signal=true
+fi
+
+if [ "$has_signal" != "true" ]; then
+  # No delta — heartbeat only. Keep service-ops health fresh, leave the last real
+  # meeting pointer intact (read-decision fallback still resolves), and record that
+  # this tick was a quiet checkpoint rather than a meeting.
+  jq --arg ts "$ts" --arg verdict "$verdict" '
+    .meetings.last_reason = $verdict |
+    .meetings.last_review_at = $ts |
+    .meetings.heartbeat_count = ((.meetings.heartbeat_count // 0) + 1) |
+    .meetings.last_heartbeat_at = $ts |
+    .meetings.last_heartbeat_verdict = $verdict |
+    .service_ops.monitor.last_hourly_review = $ts
+  ' "$PROGRESS" > "${PROGRESS}.tmp" && mv "${PROGRESS}.tmp" "$PROGRESS" || { rm -f "${PROGRESS}.tmp"; exit 1; }
+  hb="$(jq -r '.meetings.heartbeat_count // 0' "$PROGRESS" 2>/dev/null || echo '?')"
+  echo "$ts | meeting-manager | hourly-heartbeat | $verdict | no-signal (heartbeat #$hb, no meeting doc)" >> "$log_path"
+  # stdout: last real meeting path so the wake prompt keeps context (empty if none).
+  jq -r '.meetings.last_review_path // empty' "$PROGRESS" 2>/dev/null || true
+  exit 0
+fi
+
+mkdir -p "$meeting_dir"
 
 decision_json="$(jq -n \
   --arg owner "$decision_owner" \

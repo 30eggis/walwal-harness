@@ -8,7 +8,8 @@ SCAN_RESULT="${PROJECT_ROOT}/.harness/actions/scan-result.json"
 export SCAN_RESULT PROJECT_ROOT
 AGENTS_FILE="${PROJECT_ROOT}/AGENTS.md"
 CLAUDE_FILE="${PROJECT_ROOT}/CLAUDE.md"
-BACKUP_DIR="${PROJECT_ROOT}/.harness/archive/pre-harness-backup"
+# Backups live under .harness/backups/, not archive/ (archive = completed missions).
+BACKUP_DIR="${PROJECT_ROOT}/.harness/backups/pre-harness-backup"
 
 if [ ! -f "$SCAN_RESULT" ]; then
   echo "ERROR: scan-result.json not found. Run scan-project.sh first."

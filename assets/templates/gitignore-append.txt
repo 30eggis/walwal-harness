@@ -19,7 +19,9 @@
 .harness/ops/
 .harness/activity/
 .harness/logs/
-# Migration & pre-harness backup snapshots (local-only)
+# Migration / init / refresh backup snapshots (local-only — never shared)
+.harness/backups/
+# Completed-mission archive + sprint outputs (local runtime; goal+submission+hot-fix)
 .harness/archive/
 # Brick Office dashboard — local visualization tool + per-env data & build artifacts
 .harness/dashboard/

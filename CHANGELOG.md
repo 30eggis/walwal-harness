@@ -4,7 +4,7 @@ docmeta:
   title: walwal-harness CHANGELOG
   type: output
   createdAt: 2026-05-07T00:00:00Z
-  updatedAt: 2026-06-05T00:00:00Z
+  updatedAt: 2026-06-24T00:00:00Z
   source:
     producer: agent
     skillId: harness-release
@@ -30,6 +30,13 @@ docmeta:
 # Changelog
 
 ## Unreleased
+
+## 7.1.53 — Write-on-signal documents + `archive/` namespace reclaim (2026-06-24)
+- **`archive/` is now reserved for completed missions, never migrate/init backups.** Every backup snapshot moved out of `.harness/archive/` into a new `.harness/backups/` root: `bin/init.js` (migration snapshot dir, legacy-role migration, pre-harness doc extraction backup, AGENTS/CLAUDE doc backup), `init.sh refresh-ref`, `scripts/init-agents-md.sh`, and `scripts/init-ref-docs.sh`. The Owner expected `archive/` to hold a completed `goal + submission + hot-fix` per goal folder; the harness using it as a migrate backup dump conflicted with that meaning. Files are moved (not deleted), so recovery data is preserved. (Agreement: "archive/ 네임스페이스 탈환".)
+- `.harness/backups/` is added to the managed `.gitignore` block (`assets/templates/gitignore-append.txt`), and **`migrate` now refreshes the host `.gitignore` and best-effort untracks newly-ignored runtime paths** (previously only `init` did this), so migrating projects also stop committing backup/runtime noise.
+- **Hourly review is now write-on-signal.** `scripts/harness-hourly-review.sh` emits a meeting markdown only when the tick carries a real delta — an incident, goal drift, owner escalation, a required-execution contract, a handoff that needs execution, or a change in verdict since the last review. No-delta ticks increment `.meetings.heartbeat_count` instead of writing yet another byte-similar `M-*-hourly` doc (the source of hundreds of boilerplate meeting files). This is safe because the conductor routes off `progress.json` state, not this evidence file, and the no-signal path leaves the last real meeting pointer intact for the `read-decision` fallback. Gated by `company_mode.write_on_signal` (default `true`; `false` restores legacy always-write). (Agreement: 문서 ≠ 텔레메트리 · write-on-signal.)
+- **Wake stops persisting the static prompt.** `scripts/harness-wake.sh` assembles the hourly wake prompt in memory instead of writing a fresh `.harness/actions/wake/wake-<ts>.prompt.md` every tick — those were 100+ byte-identical templates differing only by timestamp/idle/force/review-path. `tmux` mode reuses one overwritten scratch file; each tick appends a single params-only line to `.harness/activity/wake.jsonl` (capped to the last 2000 lines). Per-tick agent logs are written only when an agent actually runs (record mode previously left empty `ops/wake/wake-*.log` files) and are rotated to the most recent 48. (Agreements: 정적 wake.prompt 비영속 · 보존정책 TTL/rotation.)
+- `migrate` injects `company_mode.write_on_signal` into existing `config.json` via a new `configWriteOnSignalMissing` detection, so upgraded projects adopt document suppression automatically.
 
 ## 7.1.52 — Single shared dashboard install (drop per-project `node_modules`) (2026-06-23)
 - `scripts/harness-dashboard-up.sh` now installs the Brick Office dashboard **once per version** under `~/.walwal-harness/dashboard/<version>/` (override base with `WALWAL_HARNESS_HOME`) and serves every project from that one copy. Previously each project got its own copy plus a full `npm install`, duplicating identical `node_modules` (~597MB) + `.next` (~75MB) per project — 100 projects cost ~64GB of identical bytes. Now total cost is ~640MB regardless of project count.

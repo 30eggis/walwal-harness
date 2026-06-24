@@ -44,8 +44,9 @@ done
 SCAN="${PROJECT_ROOT}/.harness/actions/scan-result.json"
 REF_DIR="${PROJECT_ROOT}/.harness/ref"
 META="${REF_DIR}/.generated.json"
-ARCHIVE_DIR="${PROJECT_ROOT}/.harness/archive"
-mkdir -p "$REF_DIR" "$ARCHIVE_DIR"
+# Ref backups go to .harness/backups/refs, not archive/ (archive = completed missions).
+BACKUP_DIR="${PROJECT_ROOT}/.harness/backups/refs"
+mkdir -p "$REF_DIR" "$BACKUP_DIR"
 [ -f "$META" ] || echo "{}" > "$META"
 
 # ───── 감지된 스택 목록 ─────
@@ -192,9 +193,9 @@ process_one() {
     return 0
   fi
   if [ -f "$path" ] && $REFRESH; then
-    local backup="${ARCHIVE_DIR}/ref-${role}-${stack}-$(date +%Y%m%d%H%M%S).md"
+    local backup="${BACKUP_DIR}/ref-${role}-${stack}-$(date +%Y%m%d%H%M%S).md"
     cp "$path" "$backup"
-    echo "archived: $backup"
+    echo "backup: $backup"
   fi
 
   local answer="y"
