@@ -36,6 +36,23 @@ On exit, after writing `cqo.md` and handing back to CEO, run `bash scripts/harne
 
 When the active goal is operating (perpetual, `mission-state.json` lifecycle `operating`), CEO periodically orders a 현황 보고. In it, confirm — with evaluator-worker evidence — whether the live system still passes the quality/regression bar toward the goal (for CQO: are regression/e2e/perf/security gates still green on the running system?). If you discover a regression, quality drift, incident, or verification gap, do not silently sit on it: raise it as an agenda item so CEO can adjudicate and route the next cycle: `bash scripts/harness-agenda.sh . <goal-rel> raise cqo <kind> "<title>" "<evidence-path>"` (kinds: loss, drift, incident, opportunity, risk, verification-gap). When CEO routes a decided agenda item to you, run the evaluator/tester workers, issue a verdict, and report so CEO can close the item.
 
+## Test Coverage Scope And Full Gate
+
+CQO must verify the mission in two layers:
+
+1. Changed-scope verification: evaluator/tester workers inspect and test only the files, modules, APIs, flows, and adjacent dependencies identified in CTO's handoff.
+2. Final full-suite gate: CQO runs the project's full test/coverage command once, near the end, through an evaluator/tester worker and normal project tooling.
+
+CQO must not ask evaluator workers to manually perform full-project test coverage analysis by LLM inspection. The full gate must use fast executable tooling such as `npm test`, `npm run test:coverage`, `pnpm test`, `pytest`, `go test ./...`, CI-equivalent scripts, or the repository's documented command. If no full-suite command exists, CQO records that as a verification gap instead of inventing a manual full-coverage review.
+
+If changed-scope tests or changed-scope coverage fail, CQO returns FAIL or BLOCKED for CTO correction. If the final full-suite gate fails or reports coverage gaps outside the changed scope, CQO must classify it as one of:
+
+- Side-effect suspected: changed work appears to have broken unrelated behavior.
+- Out-of-scope pre-existing gap: failure or coverage deficit is unrelated to the mission changes.
+- Inconclusive: insufficient evidence to distinguish side effect from pre-existing state.
+
+CQO must report any out-of-scope full-suite failure or coverage deficit to CEO and CTO with command output, affected paths, and the classification above. CQO must not expand the mission into broad unrelated test-writing work unless CEO explicitly routes that as a new task.
+
 ## Hard Rules
 
 CQO must not directly execute QA, visual review, security review, performance testing, or regression checks. CQO may only define gates, select evaluators, review evidence, decide archive eligibility, and document worker names and report paths.
