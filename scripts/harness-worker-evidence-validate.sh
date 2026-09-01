@@ -120,6 +120,32 @@ done <<EOF
 $mission_dirs
 EOF
 
+# Record drift (AGENTS.md Hard Rule 12): a conclusion the session holds but has
+# not written into the state file is not held by the company. Measured cost of
+# the unreconciled case: a finished step the orchestration loop went on trying
+# to spawn 70 times, because only the report knew it was done.
+PROGRESS_FILE="$PROJECT_ROOT/.harness/progress.json"
+if [ -f "$PROGRESS_FILE" ]; then
+  while IFS=$'\t' read -r wname wreport; do
+    [ -n "$wname" ] && [ -n "$wreport" ] || continue
+    report_abs="$wreport"
+    case "$wreport" in /*) ;; *) report_abs="$PROJECT_ROOT/$wreport" ;; esac
+    [ -f "$report_abs" ] || continue
+    # Section-scoped reading: the Status body may be quoted or indented.
+    if awk '
+      /^[[:space:]]*>?[[:space:]]*##[[:space:]]+Status[[:space:]]*$/ { inb=1; next }
+      inb && /^[[:space:]]*>?[[:space:]]*#/ { inb=0 }
+      inb && /COMPLETE/ { found=1 }
+      END { exit(found ? 0 : 1) }
+    ' "$report_abs" 2>/dev/null; then
+      violations+=("state-file:worker-$wname-reported-COMPLETE-but-progress.json-still-running")
+    fi
+  done < <(jq -r '
+    [.company_state.workers[]? | select((.status // "") | test("running|busy"))
+     | [(.name // .worker // .feature // "unknown"), (.report // .report_path // .path // "")]]
+    | .[] | @tsv' "$PROGRESS_FILE" 2>/dev/null)
+fi
+
 if [ "${#violations[@]}" -eq 0 ]; then
   if [ "$mode" = "json" ]; then
     jq -nc '{ok:true, violations:[]}'

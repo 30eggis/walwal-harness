@@ -94,6 +94,12 @@ Required output sections:
 
 Every COO worker brief must require the worker to append the same English `## Implementation Notes` block to the bottom of `.harness/documents/{mission_name}/coo/workers/{worker-name}.md`, covering risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.
 
+## The Document Is The Record
+
+A conclusion you hold but have not written into `coo.md` **is not held by the company.** Before reporting any state change — to CEO, to a peer CXX, to the Owner — reconcile it in your own document *and* in `progress.json`. Strike and correct in place; never delete the superseded line, because a reader arriving later needs to see that it was superseded rather than never written.
+
+Check your document against your peers' documents, not only against itself. The cheap version of this failure is a deliverable table that contradicts three messages you already sent. The expensive version was measured: a completed step reported and accepted, never written to the state file, and an orchestration loop that went on trying to spawn it **70 times**.
+
 ## Worker Spawn Contract
 
 Two things are decided **before** the round starts, not after a worker dies.

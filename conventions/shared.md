@@ -24,6 +24,16 @@
 - CXX decisions use `{cxx}.md`.
 - Worker reports use `{owning-cxx}/workers/{worker-name}.md`.
 
+## Declared Audience
+
+Every convention and gotcha declares which roles must be able to **find** it, and is linked from each of those roles' index files.
+
+- Topic file: `<!-- roles: cto, cqo -->` near the top.
+- Entry inside an index file: `- **Roles**: cto, cqo`.
+- Registration is complete only when `bash scripts/harness-corpus-reachability.sh . text` passes. `--fix` adds the missing links.
+
+Lazy loading tells a reader to consult `{shared, own-role}` and nothing else. That is a **promise about reachability**: where the promise is not kept, the rule stops narrowing the search and starts hiding the entry. An agent following the reading rule exactly will never see an item filed only under someone else's index.
+
 ## Section-Scoped Reading
 
 Any reader that scans a role document, worker report, or mission record for sections — a script, a hook, an agent following a protocol — matches:

@@ -11,7 +11,8 @@
 #        --right "올바른 행동" \
 #        --why "근거" \
 #        --scope "적용 범위" \
-#        --source "evaluator-functional:F-003"
+#        --source "evaluator-functional:F-003" \\
+#        --roles "cqo, cto"
 #
 #   2) 일괄 등록 (JSON stdin/파일):
 #      bash harness-gotcha-register.sh <project-root> --from-json <path>
@@ -69,6 +70,7 @@ TODAY="$(date +%Y-%m-%d)"
 # ─────────────────────────────────────────
 register_one() {
   local target="$1" rule_id="$2" title="$3" wrong="$4" right="$5" why="$6" scope="$7" source="$8"
+  local roles="${9:-$target}"
   local file="$GOTCHAS_DIR/${target}.md"
   mkdir -p "$(dirname "$file")"
 
@@ -118,6 +120,7 @@ EOF
   {
     echo ""
     echo "### [$g_id] $title  <!-- rule_id: $rule_id -->"
+    echo "- **Roles**: $roles"
     echo "- **Status**: unverified"
     echo "- **Date**: $TODAY"
     echo "- **Source**: $source"
@@ -132,6 +135,13 @@ EOF
 
   echo "[gotcha-register] $target: registered $g_id ($rule_id) — unverified"
 
+  # Hard Rule 11: an entry filed only under its author is indexed but unreachable
+  # to the other roles it names. Link it now, while the audience is still known.
+  local reach="$(dirname "$0")/harness-corpus-reachability.sh"
+  if [ -x "$reach" ] && [ "$roles" != "$target" ]; then
+    bash "$reach" "$PROJECT_ROOT" text --fix >/dev/null 2>&1 || true
+  fi
+
   # Log to progress.log if present
   local progress_log="$PROJECT_ROOT/.harness/progress.log"
   if [ -f "$progress_log" ]; then
@@ -141,7 +151,9 @@ EOF
 
 # ─────────────────────────────────────────
 # JSON 배열에서 일괄 등록
-#   schema: [{ target, rule_id, title, wrong, right, why, scope, source }]
+#   schema: [{ target, rule_id, title, wrong, right, why, scope, source, roles }]
+#   `roles` is the comma-separated list of every role that must be able to FIND
+#   this entry — not only the one that wrote it (Hard Rule 11). Defaults to target.
 # ─────────────────────────────────────────
 register_from_json() {
   local json="$1"
@@ -153,7 +165,7 @@ register_from_json() {
 
   local i
   for ((i=0; i<count; i++)); do
-    local t r ti w ri wh sc so
+    local t r ti w ri wh sc so rl
     t=$(echo "$json"  | jq -r ".[$i].target // empty")
     r=$(echo "$json"  | jq -r ".[$i].rule_id // empty")
     ti=$(echo "$json" | jq -r ".[$i].title // empty")
@@ -162,12 +174,13 @@ register_from_json() {
     wh=$(echo "$json" | jq -r ".[$i].why // empty")
     sc=$(echo "$json" | jq -r ".[$i].scope // \"항상\"")
     so=$(echo "$json" | jq -r ".[$i].source // \"evaluator:auto\"")
+    rl=$(echo "$json" | jq -r ".[$i].roles // empty")
 
     if [ -z "$t" ] || [ -z "$r" ] || [ -z "$ti" ]; then
       echo "[gotcha-register] skip: missing target/rule_id/title at index $i" >&2
       continue
     fi
-    register_one "$t" "$r" "$ti" "$w" "$ri" "$wh" "$sc" "$so"
+    register_one "$t" "$r" "$ti" "$w" "$ri" "$wh" "$sc" "$so" "${rl:-$t}"
   done
 }
 
@@ -354,6 +367,7 @@ RIGHT=""
 WHY=""
 SCOPE="항상"
 SOURCE="evaluator:auto"
+ROLES_DECL=""
 MODE="single"
 FROM_JSON=""
 
@@ -367,6 +381,7 @@ while [ $# -gt 0 ]; do
     --why)      WHY="$2"; shift 2 ;;
     --scope)    SCOPE="$2"; shift 2 ;;
     --source)   SOURCE="$2"; shift 2 ;;
+    --roles)    ROLES_DECL="$2"; shift 2 ;;
     --from-json) MODE="json"; FROM_JSON="$2"; shift 2 ;;
     --scan-evaluations) MODE="scan"; shift ;;
     --scan-all) MODE="scan-all"; shift ;;
@@ -380,7 +395,7 @@ case "$MODE" in
       echo "[gotcha-register] usage: --target X --rule-id Y --title Z [...]" >&2
       exit 1
     fi
-    register_one "$TARGET" "$RULE_ID" "$TITLE" "$WRONG" "$RIGHT" "$WHY" "$SCOPE" "$SOURCE"
+    register_one "$TARGET" "$RULE_ID" "$TITLE" "$WRONG" "$RIGHT" "$WHY" "$SCOPE" "$SOURCE" "${ROLES_DECL:-$TARGET}"
     ;;
   json)
     if [ ! -f "$FROM_JSON" ]; then echo "[gotcha-register] file not found: $FROM_JSON" >&2; exit 1; fi

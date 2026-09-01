@@ -57,6 +57,28 @@ Every CTO worker brief that may use Playwright, browser automation, browser-base
 
 CTO must not accept worker plans or reports that omit this requirement when browser automation is in scope.
 
+## Reachability, Not Just Reading
+
+Lazy loading is a **promise about reachability**. When you register a convention or gotcha, declare every role that should be able to find it — `<!-- roles: cto, cqo -->` at the top of a topic file, or `- **Roles**: cto, cqo` inside an index entry — and link it from **each** of those roles' index files, not only your own.
+
+**The failure is filing under yourself.** Registration feels complete because the entry is indexed; it just is not where its declared readers are told to look. Measured on a live corpus: 69 items, **10 unreachable role-routings, 7 of them invisible to a role the entry itself named.** An agent that follows the reading rule exactly still never sees them — the rule stops narrowing the search and starts hiding the entry.
+
+Verify with `bash scripts/harness-corpus-reachability.sh . text` (add `--fix` to link what is missing). This runs at the completion gate, so an unreachable corpus blocks the mission from closing.
+
+## Spec Version Pins
+
+Nothing is complete in the abstract. **A category is complete against a spec version.**
+
+When the mission builds against any external spec — an API contract, a schema, a partner document, a standard — record it before implementation starts:
+
+```
+bash scripts/harness-spec-pin.sh . {goal-or-child-mission} add <name> <path> <version>
+```
+
+This stores the version **and a content hash** in `{mission}/spec-pins.json`. Re-run `... verify` before handing off to CQO and before declaring any category done. The completion gate re-checks the pins, so drift blocks the mission from closing.
+
+Measured: a spec moved `v0.7 → v0.9`, changing a response contract, while the category built against `v0.7` sat marked **complete**. Two later revisions had landed silently. The symptom was not an error — a lookup key stopped matching, and three overlays were dropped as `null`. **No error, no log, just an absence.** Nothing in the harness recorded which version the work had been for.
+
 ## Test Coverage Scope
 
 CTO must optimize engineering verification around the work actually changed in the mission. CTO worker briefs must require targeted tests, coverage checks, and regression commands for the changed files, modules, APIs, flows, and directly affected dependencies only.
@@ -115,6 +137,12 @@ Every CTO worker brief must require the worker to append this English block to t
 ```
 
 The worker notes must cover risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries. CTO must not accept worker output that omits this block.
+
+## The Document Is The Record
+
+A conclusion you hold but have not written into `cto.md` **is not held by the company.** Before reporting any state change — to CEO, to a peer CXX, to the Owner — reconcile it in your own document *and* in `progress.json`. Strike and correct in place; never delete the superseded line, because a reader arriving later needs to see that it was superseded rather than never written.
+
+Check your document against your peers' documents, not only against itself. The cheap version of this failure is a deliverable table that contradicts three messages you already sent. The expensive version was measured: a completed step reported and accepted, never written to the state file, and an orchestration loop that went on trying to spawn it **70 times**.
 
 ## Worker Spawn Contract
 

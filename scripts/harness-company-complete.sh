@@ -16,6 +16,7 @@ REASON="${2:-mission-complete}"
 
 PROGRESS="$PROJECT_ROOT/.harness/progress.json"
 TODOS="$PROJECT_ROOT/.harness/todos/state.json"
+DOCS="$PROJECT_ROOT/.harness/documents"
 [ -f "$PROGRESS" ] || {
   echo "[company-complete] not found: $PROGRESS" >&2
   exit 1
@@ -49,6 +50,20 @@ if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-les
   fi
 fi
 
+# Corpus reachability (Hard Rule 11) and spec pins (Hard Rule 4) are re-checked
+# at the same point, for the same reason: both are promises that decay silently
+# between when they are made and when the mission claims to be done.
+if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-corpus-reachability.sh" ]; then
+  if ! reach_out="$(bash "$SCRIPT_DIR/harness-corpus-reachability.sh" "$PROJECT_ROOT" text 2>/dev/null)"; then
+    {
+      echo "[company-complete] REFUSED: corpus entries are unreachable by roles they name as an audience."
+      echo "$reach_out"
+    } >&2
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | refused | corpus-reachability (Hard Rule 11)" >> "$PROJECT_ROOT/.harness/progress.log" 2>/dev/null || true
+    exit 1
+  fi
+fi
+
 state_mtime() {
   stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
 }
@@ -71,6 +86,24 @@ pick_transition_mission_state() {
   done < <(find "$DOCS" -name mission-state.json -type f -print0)
   [ -n "$best" ] && printf '%s\n' "$best"
 }
+
+# Spec pins are verified against the mission this transition would close. This
+# sits BEFORE the runtime transition on purpose: a refusal that runs after
+# progress.json is already `completed` has refused nothing.
+if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-spec-pin.sh" ] && [ -d "$DOCS" ]; then
+  pin_target="$(pick_transition_mission_state)"
+  if [ -n "$pin_target" ]; then
+    mission_rel="${pin_target#"$DOCS"/}"; mission_rel="${mission_rel%/mission-state.json}"
+    if ! pin_out="$(bash "$SCRIPT_DIR/harness-spec-pin.sh" "$PROJECT_ROOT" "$mission_rel" verify text 2>/dev/null)"; then
+      {
+        echo "[company-complete] REFUSED: this mission was built against a spec that has since moved."
+        echo "$pin_out"
+      } >&2
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | refused | spec-pin drift (Hard Rule 4)" >> "$PROJECT_ROOT/.harness/progress.log" 2>/dev/null || true
+      exit 1
+    fi
+  fi
+fi
 
 if ! bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
   '.company_state.state = "idle" |
@@ -109,7 +142,6 @@ if [ -f "$TODOS" ]; then
   ' "$TODOS" > "$tmp" && mv "$tmp" "$TODOS"
 fi
 
-DOCS="$PROJECT_ROOT/.harness/documents"
 if [ -d "$DOCS" ]; then
   target_state="$(pick_transition_mission_state)"
   if [ -n "$target_state" ]; then

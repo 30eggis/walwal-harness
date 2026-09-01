@@ -18,3 +18,5 @@ Only company-level roles are provided by default:
 Topic-specific convention files may use descriptive names such as `i18n-locale.md`.
 
 CXX files such as `cto.md` and `cqo.md` act as lazy-loading indexes. Add links there when a topic file applies to that CXX.
+
+**Declare the audience.** Every convention names each role that must be able to *find* it — `<!-- roles: cto, cqo -->` at the top of a topic file, or `- **Roles**: cto, cqo` inside an index entry — and is linked from each of those roles' index files, not only its author's. Lazy loading is a promise about reachability: an entry filed only under its author is indexed but invisible to the readers it names. Verify with `bash scripts/harness-corpus-reachability.sh . text` (`--fix` adds the missing links). Entries in `shared.md` need no cross-linking; every role reads it.

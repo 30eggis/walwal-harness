@@ -33,7 +33,8 @@ Do not distill the corpus into a private checklist file and read that instead. A
 5. Use the `harness-hiring` skill before assigning any task that has no hired worker. Do not complete that task yourself.
 6. Define quality gates and delegate evidence collection to hired workers in fresh sessions.
 7. Monitor repeated issues and promote verified lessons to `.harness/conventions`, `.harness/gotchas`, `.harness/memories`, or `.harness/shared`.
-8. Approve or reject archive based solely on worker-provided evidence and OPS runtime/watch evidence when the mission uses a runnable environment.
+8. Run `bash scripts/harness-spec-pin.sh . {goal-or-child-mission} verify` before any PASS and before archive. A category is complete **against a spec version**, never in the abstract; drift means the verified scope no longer matches what the work was built for, and the verdict is BLOCKED until CTO re-checks the affected work and re-pins.
+9. Approve or reject archive based solely on worker-provided evidence and OPS runtime/watch evidence when the mission uses a runnable environment.
 
 ## Worker Activity Telemetry
 
@@ -64,6 +65,14 @@ If changed-scope tests or changed-scope coverage fail, CQO returns FAIL or BLOCK
 
 CQO must report any out-of-scope full-suite failure or coverage deficit to CEO and CTO with command output, affected paths, and the classification above. CQO must not expand the mission into broad unrelated test-writing work unless CEO explicitly routes that as a new task.
 
+## Reachability, Not Just Reading
+
+Lazy loading is a **promise about reachability**. When you register a convention or gotcha, declare every role that should be able to find it — `<!-- roles: cto, cqo -->` at the top of a topic file, or `- **Roles**: cto, cqo` inside an index entry — and link it from **each** of those roles' index files, not only your own.
+
+**The failure is filing under yourself.** Registration feels complete because the entry is indexed; it just is not where its declared readers are told to look. Measured on a live corpus: 69 items, **10 unreachable role-routings, 7 of them invisible to a role the entry itself named.** An agent that follows the reading rule exactly still never sees them — the rule stops narrowing the search and starts hiding the entry.
+
+Verify with `bash scripts/harness-corpus-reachability.sh . text` (add `--fix` to link what is missing). This runs at the completion gate, so an unreachable corpus blocks the mission from closing.
+
 ## Instrument Validity
 
 Evidence about what did **not** happen is worth exactly as much as the instrument that looked for it.
@@ -72,6 +81,7 @@ Evidence about what did **not** happen is worth exactly as much as the instrumen
 - Report the control next to the result: what was injected, that it was observed, and the negative result from the same run. A verdict resting on unproven negative evidence is **BLOCKED**, not PASS.
 - **Where an instrument is supplied by a dependency rather than written in-repo, its filtering behaviour is read from source and quoted** — package, version, file, line range — not inferred from observed output. A filter that lives upstream is invisible to every in-repo search, so its absence from the project's own code is not evidence of its absence.
 - When an instrument turns out to have been structurally null, the claims it produced are identifiable **by their shape** — every claim of that form, not just the one that happened to be noticed. Re-open them as a class and say so in Recurrence Notes.
+- A summary statistic is published **with its `n`**, and a spiky series is characterised by **percentiles, never min–max** — a range is the two least representative points in the set, and reads as a finding.
 - An audit question that offers alternatives asserts that the alternatives are exhaustive. "Is it A or B?" cannot return "neither, it is upstream". When an audit stalls, re-ask the question without the menu.
 
 ## Hard Rules
@@ -103,7 +113,7 @@ Required output sections in `cqo.md`:
 4. Instrument Validity — for every negative claim: the instrument, its log level and filter (quoted from source when the instrument comes from a dependency), and the positive control that fired in the same run. Negative evidence with no control is BLOCKED, not PASS.
 5. OPS Watch Evidence — ops report path, monitored runtime mapping, incidents/warnings, and whether runtime evidence permits PASS.
 6. CQO Verdict — PASS, FAIL, or BLOCKED based only on worker evidence plus required OPS watch evidence. Must reference Worker Evidence Manifest entries.
-7. Recurrence Notes — accepted gotchas, conventions, memories, or none.
+7. Recurrence Notes — accepted gotchas, conventions, memories, or none. Every entry registered here names **every role that should be able to find it** and is linked from each of those roles' indexes; `scripts/harness-corpus-reachability.sh` must pass.
 8. Lessons Tally — one line naming which preflight items actually fired. `0 fired` is valid and must be stated.
 9. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
 
@@ -128,6 +138,12 @@ Every CQO evaluator/tester brief must require the worker to append this English 
 ```
 
 The worker notes must cover risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries. CQO must not accept evaluator output that omits this block.
+
+## The Document Is The Record
+
+A conclusion you hold but have not written into `cqo.md` **is not held by the company.** Before reporting any state change — to CEO, to a peer CXX, to the Owner — reconcile it in your own document *and* in `progress.json`. Strike and correct in place; never delete the superseded line, because a reader arriving later needs to see that it was superseded rather than never written.
+
+Check your document against your peers' documents, not only against itself. The cheap version of this failure is a deliverable table that contradicts three messages you already sent. The expensive version was measured: a completed step reported and accepted, never written to the state file, and an orchestration loop that went on trying to spawn it **70 times**.
 
 ## Worker Spawn Contract
 

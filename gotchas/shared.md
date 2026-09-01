@@ -29,3 +29,19 @@ A reader anchored on `^#` misses the same heading written as `> ## …`, which i
 ## Rules Stated One Layer Above The Executing Layer
 
 A requirement placed on a CXX that its workers must also satisfy does not reach the workers unless it is inserted **verbatim** into the worker brief. A rule stated one layer above the layer that executes it does not apply, and the layer below cannot infer a rule it was never given.
+
+## The Author Files Under Itself
+<!-- roles: ceo, coo, cdo, cto, cqo, ops -->
+
+The recurring way an indexed entry becomes unreachable: whoever wrote it filed it under their own role index and nowhere else. Registration *feels* complete — the entry exists, it is indexed, it is linked. It is just not where its declared readers are told to look.
+
+Measured on a live corpus: 69 items, **10 unreachable role-routings, 7 of them invisible to a role the entry itself named**. The clearest case was an entry whose own text called two others "the same family" — both siblings were already reachable from the index it was missing from. An inconsistency, not a decision.
+
+Declare the audience at registration and let `scripts/harness-corpus-reachability.sh` link it. Reading is not reaching.
+
+## A Conclusion Not Written Is Not Held
+<!-- roles: ceo, coo, cdo, cto, cqo, ops -->
+
+A conclusion a session holds but has not written into its role document and the runtime state file is not held by the company. Reconcile before reporting; strike and correct in place, never delete.
+
+The cheap version: a deliverable table that contradicts three messages already sent, and a line still requesting work a peer has already delivered. The expensive version was measured — a required step completed, reported, and accepted, that never reached the state file, so the orchestration loop went on trying to spawn the finished step **70 times**. "Write your conclusions down" reads as tidiness until it reads as seventy.

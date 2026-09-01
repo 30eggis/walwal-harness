@@ -19,3 +19,9 @@ Do not let CXX agents choose arbitrary ports. CEO must set `HARNESS_BASE_PORT` a
 ## Clean Log From An Unproven Instrument
 
 "Nothing bad appeared in the log" is worth nothing until a positive control proves the log could have shown it. Dev servers, log middleware, proxies, and test runners routinely drop successful or sub-threshold requests at a log level nobody chose deliberately, and that rule appears nowhere in the project's own code. Record the instrument — tool, log level, filter, control — in Environment Evidence, or report the observation as unverified rather than clean.
+
+## Cross-role Links
+
+Entries written under another role that name OPS as an audience.
+
+- [A Range Is The Two Least Representative Points](./cqo.md) — publish `n`, use percentiles, not min–max.

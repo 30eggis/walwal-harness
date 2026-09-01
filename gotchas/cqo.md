@@ -19,3 +19,14 @@ An instrument's filtering behaviour is read from source and quoted — package, 
 ## Audit Questions That Offer Alternatives
 
 An audit question that offers alternatives asserts that the alternatives are exhaustive. "Is it a skip rule **or** a status-conditional format?" cannot return "neither, it is upstream" — both branches locate the rule inside our own code, so the true answer is unreachable from the question's grammar. When an audit stalls, re-ask the question without the menu.
+
+## A Range Is The Two Least Representative Points
+<!-- roles: cqo, ops -->
+
+Publish a summary statistic **with its `n`**, and characterise a spiky series by **percentiles, never min–max**. A range reports the two most extreme observations in the set and reads as a finding; on a spiky series it is almost always noise wearing the shape of a result.
+
+## Cross-role Links
+
+Entries written under another role that name CQO as an audience.
+
+- [Complete Against A Spec Version, Never In The Abstract](./cto.md) — verify `spec-pins.json` before PASS and before archive.

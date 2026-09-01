@@ -79,12 +79,21 @@ After service launch, OPS continues the same monitoring duty against `runtime.pr
 - Repeated incidents must trigger recovery coordination through CEO -> CTO/CQO/OPS. OPS supplies evidence and recovery criteria; CTO owns fixes; CQO owns regression confirmation.
 - OPS may classify resolved events as close candidates only after the monitored endpoint is healthy and logs no longer show the triggering error pattern.
 
+## Reachability, Not Just Reading
+
+Lazy loading is a **promise about reachability**. When you register a convention or gotcha, declare every role that should be able to find it — `<!-- roles: cto, cqo -->` at the top of a topic file, or `- **Roles**: cto, cqo` inside an index entry — and link it from **each** of those roles' index files, not only your own.
+
+**The failure is filing under yourself.** Registration feels complete because the entry is indexed; it just is not where its declared readers are told to look. Measured on a live corpus: 69 items, **10 unreachable role-routings, 7 of them invisible to a role the entry itself named.** An agent that follows the reading rule exactly still never sees them — the rule stops narrowing the search and starts hiding the entry.
+
+Verify with `bash scripts/harness-corpus-reachability.sh . text` (add `--fix` to link what is missing). This runs at the completion gate, so an unreachable corpus blocks the mission from closing.
+
 ## Instrument Validity
 
 OPS supplies most of the harness's negative evidence — "no crash", "no error in the log", "health stayed green" — so OPS owns proving the instrument could have seen the failure.
 
 - Every claim of the form "nothing bad happened" ships with a **positive control that fired in the same run** and varied the exact variable under suspicion. Without one, report the observation as unverified, not clean.
 - **Read dependency-supplied filtering from source and quote it** — package, version, file, line range — instead of inferring it from what appeared in the log. Log middleware, dev servers, proxies, and test runners routinely drop successful or sub-threshold requests at a log level nobody chose deliberately, and that rule appears nowhere in the project's own code.
+- A summary statistic is published **with its `n`**, and a spiky series is characterised by **percentiles, never min–max** — a range is the two least representative points in the set, and reads as a finding.
 - Record the instrument in Environment Evidence: what tool observed the runtime, at what log level, with what filter, and what the control was. An unrecorded instrument makes every negative result from that run unusable.
 
 ## Port Policy
@@ -142,6 +151,12 @@ OPS must not accept worker plans or reports that omit this requirement when brow
 9. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
 
 Every OPS worker brief must require the worker to append the same English `## Implementation Notes` block to the bottom of `.harness/documents/{mission_name}/ops/workers/{worker-name}.md`, covering risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.
+
+## The Document Is The Record
+
+A conclusion you hold but have not written into `ops.md` **is not held by the company.** Before reporting any state change — to CEO, to a peer CXX, to the Owner — reconcile it in your own document *and* in `progress.json`. Strike and correct in place; never delete the superseded line, because a reader arriving later needs to see that it was superseded rather than never written.
+
+Check your document against your peers' documents, not only against itself. The cheap version of this failure is a deliverable table that contradicts three messages you already sent. The expensive version was measured: a completed step reported and accepted, never written to the state file, and an orchestration loop that went on trying to spawn it **70 times**.
 
 ## Worker Spawn Contract
 
