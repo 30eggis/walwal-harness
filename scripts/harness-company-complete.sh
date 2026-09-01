@@ -25,6 +25,30 @@ command -v jq >/dev/null 2>&1 || {
   exit 1
 }
 
+# Lessons-before-plan gate (AGENTS.md Hard Rule 20). The Stop hook cannot see
+# this path: once this script sets conductor.state=completed, harness-stop.sh
+# short-circuits at the top, so a mission could complete having never read the
+# corpus simply by firing the transition. Refuse the terminal transition here —
+# this is the transition P6 names, and it is the last point at which refusing
+# still means anything.
+#
+# Safe against deadlock: the gate is scoped to the latest ACTIVE mission, so the
+# stop-hook backstop (which fires only when no mission is active) always passes.
+# Opt out per project with .harness/config.json behavior.lessons_gate=false, or
+# override a single call with HARNESS_SKIP_LESSONS_GATE=1.
+if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-lessons-gate.sh" ]; then
+  if ! gate_out="$(bash "$SCRIPT_DIR/harness-lessons-gate.sh" "$PROJECT_ROOT" text latest-active 2>/dev/null)"; then
+    {
+      echo "[company-complete] REFUSED: the active mission has not recorded what it read before planning."
+      echo "$gate_out"
+      echo "  Add the two sections to each role document, then re-run this transition."
+      echo "  (override: HARNESS_SKIP_LESSONS_GATE=1, or behavior.lessons_gate=false in .harness/config.json)"
+    } >&2
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | refused | lessons-gate (Hard Rule 20)" >> "$PROJECT_ROOT/.harness/progress.log" 2>/dev/null || true
+    exit 1
+  fi
+fi
+
 state_mtime() {
   stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
 }
