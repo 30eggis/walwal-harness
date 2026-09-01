@@ -25,7 +25,9 @@ CONFIG="$CWD/.harness/config.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Opt-out
-AUTO_CHAIN=$(jq -r '.behavior.auto_chain_on_stop // true' "$CONFIG" 2>/dev/null || echo "true")
+# `.x // true` would collapse an explicit `false` back to `true` (jq treats
+# false as empty), which silently disabled this documented opt-out.
+AUTO_CHAIN=$(jq -r 'if .behavior.auto_chain_on_stop == null then true else .behavior.auto_chain_on_stop end' "$CONFIG" 2>/dev/null || echo "true")
 if [ "$AUTO_CHAIN" != "true" ]; then exit 0; fi
 
 # 무한루프 방지: 한 sprint 안에서 stop_chain_count 가 상한을 넘으면 중단
@@ -162,6 +164,28 @@ if [ -x "$SCRIPT_DIR/harness-worker-evidence-validate.sh" ]; then
       ([.violations[] | "\(.mission) has CXX docs without worker reports: \(.docs | join(","))"] | join("; ")) +
       ". harness-hiring/resource-manager로 전문 worker를 고용 또는 배정하고 .harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/{worker-name}.md 를 남긴 뒤 계속하라."
     ' 2>/dev/null || echo "CXX 직접 실행 차단: worker report가 없는 active mission이 있습니다. hired worker 보고서를 먼저 생성하세요.")
+    jq -nc --arg reason "$REASON" '{decision:"block", reason:$reason}'
+    exit 0
+  fi
+fi
+
+# Lessons-before-plan gate (AGENTS.md Hard Rule 20):
+# 코퍼스를 읽고 계획을 세운 흔적이 role 문서에 없으면 턴을 끝내지 못하게 막는다.
+# 산문으로만 존재하는 규칙은 편할 때만 지켜진다 — 이미 동작하는 정지 메커니즘에
+# 검사를 붙인다. 활성 미션 1개로 스코프를 좁혀 legacy/archive 문서가 영구히
+# Stop 을 막지 않게 한다. .harness/config.json 의 behavior.lessons_gate=false 로
+# 아직 채택하지 않은 프로젝트는 opt-out 할 수 있다.
+if [ -x "$SCRIPT_DIR/harness-lessons-gate.sh" ]; then
+  LESSONS_JSON=$("$SCRIPT_DIR/harness-lessons-gate.sh" "$CWD" json latest-active 2>/dev/null || true)
+  LESSONS_OK=$(echo "$LESSONS_JSON" | jq -r 'if has("ok") then .ok else true end' 2>/dev/null || echo true)
+  if [ "$LESSONS_OK" != "true" ]; then
+    REASON=$(echo "$LESSONS_JSON" | jq -r '
+      "교훈 선행 게이트(Hard Rule 20): " +
+      ([.violations[] | "\(.mission) → \(.docs | join(","))"] | join("; ")) +
+      ". 각 role 문서에 `## Lessons Preflight`(이 미션에 적용되는 conventions/gotchas 항목과 이유)와 " +
+      "그 아래 `## Implementation Notes` 바로 앞에 한 줄짜리 `## Lessons Tally`(실제로 발동한 항목; `0 fired` 도 유효하며 생략은 불가)를 " +
+      "추가한 뒤 계속하라. 코퍼스를 다시 요약한 별도 체크리스트 파일을 만들지 말 것 — 읽는 순서를 고치는 규칙이다."
+    ' 2>/dev/null || echo "교훈 선행 게이트(Hard Rule 20): active mission 의 role 문서에 ## Lessons Preflight / ## Lessons Tally 가 없습니다. 먼저 추가하세요.")
     jq -nc --arg reason "$REASON" '{decision:"block", reason:$reason}'
     exit 0
   fi

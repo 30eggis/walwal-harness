@@ -130,7 +130,7 @@ start_headless_tick() {
   local idle="$2"
   local force="$3"
   local review_path="$4"
-  local mode executor wake_model agent_bin stamp ops_dir activity_dir prompt_scratch log_rel log_path pid_file old_pid pid status tmux_session session_name session_safe wake_prompt log_note
+  local mode executor wake_model agent_bin auto_approve_flag stamp ops_dir activity_dir prompt_scratch log_rel log_path pid_file old_pid pid status tmux_session session_name session_safe wake_prompt log_note
 
   if command -v jq >/dev/null 2>&1 && [ -f "$project_root/.harness/config.json" ]; then
     mode="${HARNESS_WAKE_MODE:-$(jq -r '.company_mode.hourly_wake_mode // "headless"' "$project_root/.harness/config.json" 2>/dev/null || echo headless)}"
@@ -140,6 +140,13 @@ start_headless_tick() {
     mode="${HARNESS_WAKE_MODE:-headless}"
     executor="${HARNESS_WAKE_EXECUTOR:-claude}"
     wake_model="${HARNESS_WAKE_MODEL:-}"
+  fi
+  # Autonomous wake agents run unattended: accept all tool/MCP usage so the tick
+  # never blocks on a permission prompt nobody is there to answer (default = accept all).
+  if [ "$executor" = "codex" ]; then
+    auto_approve_flag="--dangerously-bypass-approvals-and-sandbox"
+  else
+    auto_approve_flag="--dangerously-skip-permissions"
   fi
   stamp="$(date -u "+%Y%m%dT%H%M%SZ")"
   ops_dir="$project_root/.harness/ops/wake"
@@ -237,12 +244,12 @@ EOF
         (
           cd "$project_root" || exit 1
           if [ "$executor" = "codex" ]; then
-            "$agent_bin" exec -C "$project_root" "$wake_prompt" > "$log_path" 2>&1
+            "$agent_bin" exec $auto_approve_flag -C "$project_root" "$wake_prompt" > "$log_path" 2>&1
           else
             if [ -n "$wake_model" ]; then
-              "$agent_bin" -p "$wake_prompt" --model "$wake_model" > "$log_path" 2>&1
+              "$agent_bin" $auto_approve_flag -p "$wake_prompt" --model "$wake_model" > "$log_path" 2>&1
             else
-              "$agent_bin" -p "$wake_prompt" > "$log_path" 2>&1
+              "$agent_bin" $auto_approve_flag -p "$wake_prompt" > "$log_path" 2>&1
             fi
           fi
         ) &
@@ -262,12 +269,12 @@ EOF
         session_safe="$(basename "$project_root" | tr -c '[:alnum:]_' '_')"
         session_name="walwal_${session_safe}_${stamp}"
         if [ "$executor" = "codex" ]; then
-          tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' exec -C '$project_root' - < '$prompt_scratch' 2>&1 | tee '$log_path'"
+          tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' exec $auto_approve_flag -C '$project_root' - < '$prompt_scratch' 2>&1 | tee '$log_path'"
         else
           if [ -n "$wake_model" ]; then
-            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_scratch')\" --model '$wake_model' 2>&1 | tee '$log_path'"
+            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' $auto_approve_flag -p \"\$(cat '$prompt_scratch')\" --model '$wake_model' 2>&1 | tee '$log_path'"
           else
-            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' -p \"\$(cat '$prompt_scratch')\" 2>&1 | tee '$log_path'"
+            tmux new-session -d -s "$session_name" "cd '$project_root' && '$agent_bin' $auto_approve_flag -p \"\$(cat '$prompt_scratch')\" 2>&1 | tee '$log_path'"
           fi
         fi
         status="spawned-tmux executor=$executor session=$session_name"

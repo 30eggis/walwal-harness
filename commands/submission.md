@@ -28,6 +28,8 @@ Required flow:
 13. Do not invoke internal roles through slash commands; commands are Owner entrypoints only.
 14. Do not ask the Owner whether to continue, hire workers, choose internal options, or start the next step. If CEO cannot decide alone, convene the relevant CXX agents and decide from their written recommendations. CEO may approve reversible routine operations such as local cron/launchd/wake automation, dashboard refresh, monitoring cadence, Telegram briefing format using existing credentials, and mission consolidation/supersede cleanup. Stop only for external authority such as new credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or direct conflict with stated Owner direction.
 
+Lessons before plan (AGENTS.md Hard Rule 20): CEO and every CXX read `.harness/conventions/{shared,role}.md` and `.harness/gotchas/{shared,role}.md`, follow only the topic links those files name, and write `## Lessons Preflight` **before** the first edit, the first measurement, and the first worker brief. Every role document and worker report closes with a one-line `## Lessons Tally` immediately above `## Implementation Notes` — `0 fired` is a valid tally and must be stated, not omitted. Requirements a CXX must satisfy that its workers must also satisfy go into the worker brief **verbatim**. The Stop hook enforces this; it is not advisory.
+
 Note: `/submission` is not a new company goal and not an emergency fix. It is an additional requirement while pursuing the active goal. It belongs under that goal in history.
 
 Submission request:

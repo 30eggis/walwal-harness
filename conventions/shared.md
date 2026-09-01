@@ -24,6 +24,21 @@
 - CXX decisions use `{cxx}.md`.
 - Worker reports use `{owning-cxx}/workers/{worker-name}.md`.
 
+## Section-Scoped Reading
+
+Any reader that scans a role document, worker report, or mission record for sections — a script, a hook, an agent following a protocol — matches:
+
+```
+^>?\s*#{1,6}
+```
+
+and returns **every** hit. Blockquoted or plain, at any depth, with **no content filter of any kind**.
+
+- **Do not filter headings by what they appear to say.** A filter encodes the reader's guess about which headings matter, and a document is free to put anything in a heading: verdicts, in-place retractions, standing rules, continuation lines.
+- A verdict-token filter and a retraction-marker filter, measured against real CXX documents, caught 3/11 and 4/11 blockquoted headings; their union still missed 4 — including the second line of a verdict, whose first line was caught. **A filter that catches half a verdict is worse than one that catches none, because it reports success.**
+- A reader anchored on `^#` reads a claim and never reaches the in-place retraction posted below it as `> ## …`. That is worse than missing a section: it returns superseded content as current.
+- **The reader that decides what is important before reading is the failure.**
+
 ## DDD
 
 - Keep domain, application, interface, and infrastructure decisions distinct.

@@ -309,7 +309,7 @@ fi
 # that needs execution, or a change in verdict since the last recorded review.
 # Control flow (conductor-tick.sh) routes off progress.json state, not this file,
 # so suppressing the markdown on quiet ticks is safe.
-write_on_signal="$(jq -r '.company_mode.write_on_signal // true' "$CONFIG" 2>/dev/null || echo true)"
+write_on_signal="$(jq -r 'if .company_mode.write_on_signal == null then true else .company_mode.write_on_signal end' "$CONFIG" 2>/dev/null || echo true)"
 last_verdict="$(jq -r '.meetings.last_reason // ""' "$PROGRESS" 2>/dev/null || echo "")"
 has_signal=true
 if [ "$write_on_signal" = "true" ]; then

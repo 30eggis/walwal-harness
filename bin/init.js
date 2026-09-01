@@ -167,6 +167,50 @@ function writeClaudeSettings(settings) {
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
 }
 
+// Pre-accept the workspace-trust gate + MCP auto-approval in the user-level
+// ~/.claude.json so unattended Agent Teams teammates don't block on the trust
+// dialog ("this workspace has not been trusted" → settings.json ignored) or the
+// per-project MCP-server prompt. These two flags live ONLY here — no project
+// file can clear them, and --dangerously-skip-permissions does not touch them.
+// Writes are atomic (temp + rename) with a one-time backup so a malformed write
+// can never corrupt the user's global config; any failure is non-fatal to init.
+function acceptWorkspaceTrust() {
+  const claudeJsonPath = path.join(require('os').homedir(), '.claude.json');
+  if (!fileExists(claudeJsonPath)) {
+    log('Skipped workspace-trust pre-accept: ~/.claude.json not found (run Claude here once)');
+    return;
+  }
+  let raw, cfg;
+  try {
+    raw = fs.readFileSync(claudeJsonPath, 'utf8');
+    cfg = JSON.parse(raw);
+  } catch (e) {
+    log('Skipped workspace-trust pre-accept: ~/.claude.json did not parse (left untouched)');
+    return;
+  }
+  if (!cfg.projects || typeof cfg.projects !== 'object') cfg.projects = {};
+  if (!cfg.projects[PROJECT_ROOT] || typeof cfg.projects[PROJECT_ROOT] !== 'object') {
+    cfg.projects[PROJECT_ROOT] = {};
+  }
+  const p = cfg.projects[PROJECT_ROOT];
+  if (p.hasTrustDialogAccepted === true && p.enableAllProjectMcpServers === true) {
+    log('Workspace already trusted + project MCP servers auto-approved');
+    return;
+  }
+  try {
+    const bak = `${claudeJsonPath}.walwal-bak`;
+    if (!fileExists(bak)) fs.writeFileSync(bak, raw);
+    p.hasTrustDialogAccepted = true;
+    p.enableAllProjectMcpServers = true;
+    const tmp = `${claudeJsonPath}.walwal.tmp.${process.pid}`;
+    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2) + '\n');
+    fs.renameSync(tmp, claudeJsonPath);
+    log('Workspace trust pre-accepted + project MCP auto-approved in ~/.claude.json');
+  } catch (e) {
+    log(`WARNING: could not update ~/.claude.json trust state: ${e.message}`);
+  }
+}
+
 function mergeClaudePermissionAllow(settings, entries) {
   if (!settings.permissions || typeof settings.permissions !== 'object') {
     settings.permissions = {};
@@ -812,6 +856,17 @@ function scaffoldHarness() {
     copyFile(harnessMdSrc, harnessMdDest);
   }
 
+  // Worker report skeleton — ALWAYS update. CXX agents seed a worker report
+  // from this file BEFORE the worker starts, so a worker killed mid-round
+  // leaves a valid partial report instead of a stub. (Hard Rule 20 tally +
+  // Hard Rule 12 notes are already present in the skeleton.)
+  const workerTplSrc = path.join(PKG_ROOT, 'assets', 'templates', 'worker-report.md.template');
+  const workerTplDest = path.join(HARNESS_DIR, 'shared', 'templates', 'worker-report.md');
+  if (fs.existsSync(workerTplSrc)) {
+    ensureDir(path.dirname(workerTplDest));
+    copyFile(workerTplSrc, workerTplDest);
+  }
+
   // Copy memory.md (shared learnings)
   const memorySrc = path.join(PKG_ROOT, 'assets', 'templates', 'memory.md');
   const memoryDest = path.join(HARNESS_DIR, 'memory.md');
@@ -1347,6 +1402,17 @@ function installAgentTeamsEnv() {
     log('Agent Teams already enabled');
   }
 
+  // Auto-approve project .mcp.json servers. Each Agent Teams teammate is a fresh
+  // `claude` process that otherwise blocks on the interactive "New MCP server
+  // found in this project" prompt (the launch command uses --permission-mode
+  // auto, which --dangerously-skip-permissions cannot influence). This is the
+  // persisted equivalent of choosing "Use this and all future MCP servers".
+  if (settings.enableAllProjectMcpServers !== true) {
+    settings.enableAllProjectMcpServers = true;
+    changed = true;
+    log('All project MCP servers auto-approved (enableAllProjectMcpServers=true)');
+  }
+
   // Add Claude Code permissions required for harness-driven edits, scripts,
   // and parallel worker isolation. Existing permissions are preserved.
   const harnessPerms = [
@@ -1366,6 +1432,10 @@ function installAgentTeamsEnv() {
     writeClaudeSettings(settings);
     log('Claude settings merged: harness permissions/env preserved with existing settings');
   }
+
+  // Clear the user-level gates that the above settings.json cannot satisfy on
+  // their own (workspace trust + per-project MCP approval).
+  acceptWorkspaceTrust();
 }
 
 const HARNESS_HEADER_MARKER = '<!-- walwal-harness:managed-header -->';
@@ -1646,6 +1716,7 @@ function detectMigrationNeeded() {
     configRuntimeVerificationMissing: false,
     configWakeModelMissing: false,
     configWriteOnSignalMissing: false,
+    configLessonsGateMissing: false,
     coreSkillsStale: false,
     hrResourcePoolStale: false,
     harnessMdStale: false,
@@ -1757,6 +1828,12 @@ function detectMigrationNeeded() {
       }
       if (c.company_mode && c.company_mode.write_on_signal === undefined) {
         flags.configWriteOnSignalMissing = true;
+      }
+      if (
+        (c.behavior && c.behavior.lessons_gate === undefined) ||
+        (c.company_mode && c.company_mode.worker_model === undefined)
+      ) {
+        flags.configLessonsGateMissing = true;
       }
       if (
         c.behavior?.auto_route_dispatcher !== undefined ||
@@ -2044,6 +2121,9 @@ function showMigrationProposal(flags) {
   }
   if (flags.configWriteOnSignalMissing) {
     console.log('  • config.json: company_mode.write_on_signal 추가 가능');
+  }
+  if (flags.configLessonsGateMissing) {
+    console.log('  • config.json: behavior.lessons_gate + company_mode.worker_model 추가 가능');
     console.log('    무신호(델타 부재) 틱은 meeting 문서 대신 heartbeat 만 남겨 문서 폭증을 막습니다.');
   }
   if (flags.configLegacyRouting) {
@@ -2130,6 +2210,7 @@ function runMigrate(opts = {}) {
     !flags.configRuntimeVerificationMissing &&
     !flags.configWakeModelMissing &&
     !flags.configWriteOnSignalMissing &&
+    !flags.configLessonsGateMissing &&
     !flags.coreSkillsStale &&
     !flags.hrResourcePoolStale &&
     !flags.harnessMdStale &&
@@ -2217,7 +2298,7 @@ function runMigrate(opts = {}) {
   // 2. config.json — inject company_mode/runtime verification from template if missing
   const configPath = path.join(HARNESS_DIR, 'config.json');
   const tplPath = path.join(PKG_ROOT, 'assets', 'templates', 'config.json');
-  if ((flags.configMissingCompanyMode || flags.configLegacyRouting || flags.configRuntimeVerificationMissing || flags.configWakeModelMissing || flags.configWriteOnSignalMissing) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
+  if ((flags.configMissingCompanyMode || flags.configLegacyRouting || flags.configRuntimeVerificationMissing || flags.configWakeModelMissing || flags.configWriteOnSignalMissing || flags.configLessonsGateMissing) && fs.existsSync(configPath) && fs.existsSync(tplPath)) {
     const original = fs.readFileSync(configPath, 'utf8');
     const c = JSON.parse(original);
     const tpl = JSON.parse(fs.readFileSync(tplPath, 'utf8'));
@@ -2254,6 +2335,22 @@ function runMigrate(opts = {}) {
         c.company_mode.write_on_signal_description = tpl.company_mode.write_on_signal_description;
         configChanged = true;
         log('  config.json: write_on_signal (무신호 틱 문서 억제) 섹션 동기화');
+      }
+      if (flags.configLessonsGateMissing) {
+        // Hard Rule 20/21: the Stop-hook lessons gate and the explicit worker
+        // model. Both default on; a project can opt out of the gate later.
+        c.behavior = c.behavior || {};
+        if (c.behavior.lessons_gate === undefined) {
+          c.behavior.lessons_gate = tpl.behavior?.lessons_gate ?? true;
+          c.behavior.lessons_gate_description = tpl.behavior?.lessons_gate_description;
+        }
+        c.company_mode = c.company_mode || {};
+        if (c.company_mode.worker_model === undefined) {
+          c.company_mode.worker_model = tpl.company_mode?.worker_model ?? '';
+          c.company_mode.worker_model_description = tpl.company_mode?.worker_model_description;
+        }
+        configChanged = true;
+        log('  config.json: lessons_gate + worker_model (Hard Rule 20/21) 섹션 동기화');
       }
       if (flags.configRuntimeVerificationMissing && tpl.runtime?.verification) {
         c.runtime = c.runtime || {};

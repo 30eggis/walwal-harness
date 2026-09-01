@@ -1,5 +1,13 @@
 # {{WORKER_TITLE}} — Worker Report
 
+<!--
+Seeding contract: the owning CXX creates this file WITH EVERY SECTION ALREADY
+PRESENT before the worker starts, and the worker fills it in incrementally as
+the work happens. Do not assemble the report at the end. A worker that dies
+mid-round (rate limit, crash, cancelled session) must leave a valid partial
+report, never a stub.
+-->
+
 ## Status
 IN_PROGRESS
 
@@ -22,6 +30,14 @@ The dashboard uses this line (not file timestamps) to show whether the worker is
 
 ## Result
 - Outcome and how it meets the acceptance criteria.
+
+## Lessons Tally
+- Corpus items that actually fired during this task: {{LESSONS_FIRED}}
+<!--
+One line. Name the convention/gotcha items from the brief that actually changed
+what you did. `0 fired` is a valid tally and must be stated, not omitted — a
+tally that only ever reports hits trains workers to manufacture them.
+-->
 
 ## Implementation Notes
 

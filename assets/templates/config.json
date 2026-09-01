@@ -168,7 +168,9 @@
   "behavior": {
     "comment": "하네스 동작 플래그. UserPromptSubmit 훅이 이 값을 읽어 v7 CEO/CXX 라우팅 안내를 결정한다.",
     "auto_route_ceo": true,
-    "auto_route_ceo_description": "true 이면 /goal 또는 /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다. 사용자가 'harness skip' 등을 말하면 단일 메시지 한정으로 건너뛴다."
+    "auto_route_ceo_description": "true 이면 /goal 또는 /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다. 사용자가 'harness skip' 등을 말하면 단일 메시지 한정으로 건너뛴다.",
+    "lessons_gate": true,
+    "lessons_gate_description": "true 이면 Stop 훅(scripts/harness-lessons-gate.sh)이 활성 미션의 role 문서에 '## Lessons Preflight'(적용 conventions/gotchas 항목과 이유)와 '## Lessons Tally'(실제 발동 항목, '0 fired' 도 유효)가 없으면 턴 종료를 막는다. AGENTS.md Hard Rule 20 — 교훈은 계획보다 먼저 읽는다. 아직 채택하지 않은 프로젝트는 false 로 opt-out."
   },
   "token_limit": {
     "comment": "모델 토큰 제한으로 작업이 중단됐을 때의 저비용 재개 정책. 별도 probe 호출 없이 시간 기반으로만 재개 알림을 계산한다.",
@@ -184,6 +186,8 @@
     "worker_concurrency": 3,
     "worker_spawn": "claude",
     "worker_spawn_description": "claude 이면 idle worker 배정 시 `claude -p` 백그라운드 프로세스를 띄운다. record 로 두면 prompt/log만 생성한다.",
+    "worker_model": "opus",
+    "worker_model_description": "worker spawn 이 명시적으로 선언하는 모델. AGENTS.md Hard Rule 21 — CLI 기본 모델 상속 금지. 사용량 한도로 종료된 worker 는 밖에서 보면 정상 완료와 구별되지 않으므로, 조용한 루프는 반증 전까지 rate limit 으로 취급한다. 비우면 CLI 기본값을 쓰지만 그 선택 자체를 기록해야 한다.",
     "hourly_wake_executor": "claude",
     "hourly_wake_executor_description": "claude 이면 `claude -p`, codex 이면 `codex exec` 로 매시간 autonomous tick 을 실행한다.",
     "hourly_wake_model": "",

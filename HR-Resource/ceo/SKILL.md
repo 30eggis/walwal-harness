@@ -72,6 +72,16 @@ Before routing or accepting CXX work, enforce lazy loading:
 - Topic files such as `.harness/gotchas/i18n-locale-hotfix.md` remain separate. CXX index files carry links to them; they are not merged into one large file.
 - Workers receive the relevant CXX link set in their brief instead of scanning every convention/gotcha file.
 
+### Lessons Before Plan
+
+The read is an **ordering constraint**, not a reading list. It happens before the first source edit, the first measurement, and the first brief — not alongside them, and not after. A lesson that is written, indexed, and reachable still arrives too late if it is read after the mistake.
+
+- `ceo.md` opens with `## Lessons Preflight`: which convention/gotcha items apply to this mission and why. Write it before routing to the first CXX.
+- `ceo.md` closes with a one-line `## Lessons Tally` immediately before `## Implementation Notes`: which of those items actually fired. **`0 fired` is a valid tally and must be stated, not omitted.**
+- CEO requires the same two sections from every `{cxx}.md` and every worker report, and **rejects** any report that omits them.
+- **Propagate verbatim.** Any requirement CEO places on a CXX that its workers must also satisfy is copied word for word into the worker brief by that CXX. *A rule stated one layer above the layer that executes it does not apply.* CEO checks the worker briefs recorded in `{cxx}.md` for this, not just the CXX document.
+- **Do not commission a distilled preflight checklist.** A derived corpus must be re-synced whenever any source file changes, goes stale silently, and becomes a second thing nobody reads before planning. Fix the ordering, not the corpus.
+
 ## Mission Protocol
 
 1. Read the Owner request and decide whether brainstorming is needed or execution can start.
@@ -103,6 +113,9 @@ Before routing or accepting CXX work, enforce lazy loading:
 - CEO must not accept CQO PASS for a runnable product unless OPS has supplied clean verification-watch evidence or an explicit not-applicable reason. Open OPS incidents, missing runtime mapping, missing required logs, service down, or health mismatch block Owner acceptance.
 - After launch, CEO treats OPS production incidents as company events. CEO convenes CTO/CQO/OPS when user-impacting production signals appear; CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence and close criteria.
 - Every CEO and CXX mission document must include an English `## Implementation Notes` section with the required subsections below. CEO must reject CXX reports that omit it.
+- Every CEO and CXX mission document and every worker report must carry `## Lessons Preflight` and a one-line `## Lessons Tally` (tally immediately before `## Implementation Notes`). `0 fired` is a valid tally; an omitted tally is not. CEO must reject reports that omit either section.
+- Every worker spawn declares its model explicitly — never the inherited CLI default. CEO requires the model in each CXX's Worker Task Briefs and Worker Evidence Manifest. **A silent or truncated worker is a rate limit until proven otherwise**: before treating a stalled round as a CXX failure, CEO asks for the usage-limit status and reset time, because a rate-limited worker looks exactly like a finished one from the outside.
+- Every worker report file is created **before the worker starts**, already carrying its required sections (seeded from `.harness/shared/templates/worker-report.md`). A worker killed mid-round must leave a valid partial report, never a stub. CEO treats a stub report as a seeding failure by the owning CXX, not as a worker failure.
 - Owner is the final acceptance reviewer, not a tester, QA substitute, debugger, or deployment verifier. CEO must not send "done, please check" reports while core functionality, regression, account setup, browser flows, logs, or runtime health remain unverified by workers.
 - Before requesting Owner acceptance, CEO must collect and summarize CXX-backed completion evidence: CTO implementation evidence, CQO evaluator/tester evidence, and OPS verification-watch/runtime evidence when runnable environments are involved. The final Owner report may request acceptance review or business/product judgment, but must not ask the Owner to discover whether the software works.
 
@@ -124,6 +137,13 @@ Every `ceo.md` and CXX document (`coo.md`, `cdo.md`, `cto.md`, `cqo.md`, `ops.md
 
 ### Open Questions
 - ...
+```
+
+Immediately above it, every document carries the one-line tally:
+
+```
+## Lessons Tally
+- Fired: <items from Lessons Preflight that actually changed a decision, or `0 fired`>
 ```
 
 Use `None` when a subsection has no entries. These notes are mandatory even for small or emergency work. They must summarize how the role interpreted the Owner request, where the role intentionally diverged from the request, what alternatives were considered, and any true external-authority blocker. Do not list routine CEO-approved operations as "needs Owner confirmation."

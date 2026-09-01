@@ -16,7 +16,7 @@ STRUCTURED_LIB="$SCRIPT_DIR/lib/harness-structured-log.sh"
 # 조건 2: opt-out 플래그 확인
 AUTO_ROUTE="true"
 if command -v jq >/dev/null 2>&1; then
-  AUTO_ROUTE=$(jq -r '.behavior.auto_route_ceo // .behavior.auto_route_dispatcher // true' "$CWD/.harness/config.json" 2>/dev/null || echo "true")
+  AUTO_ROUTE=$(jq -r 'if .behavior.auto_route_ceo != null then .behavior.auto_route_ceo elif .behavior.auto_route_dispatcher != null then .behavior.auto_route_dispatcher else true end' "$CWD/.harness/config.json" 2>/dev/null || echo "true")
 fi
 if [ "$AUTO_ROUTE" != "true" ]; then exit 0; fi
 

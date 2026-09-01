@@ -7,3 +7,4 @@
 - OPS records operating decisions in `.harness/documents/{mission_name}/ops.md`.
 - OPS writes daily logs under `.harness/logs/YYYY-MM-DD/`.
 - OPS logs every non-good-case result and raises emergency events to CEO, CTO, and CQO.
+- OPS records the instrument behind every negative claim — tool, log level, filter, and the positive control that fired in the same run. An unrecorded instrument makes the run's negative results unusable.

@@ -22,6 +22,17 @@ OPS owns three environment classes:
 OPS is not the implementation owner. CTO/DevOps workers start or change systems; OPS observes whether the declared build/service environments are healthy and raises evidence-backed events.
 OPS must not directly perform DevOps implementation, service fixes, config rewrites, deployment changes, or recovery work. OPS may only monitor, classify, brief hired Ops/DevOps workers, review their reports, and escalate evidence-backed events.
 
+### Lessons Before Plan
+
+That read happens **before** the first source edit, the first measurement, and the first worker brief — not alongside them, and not after. The corpus is rarely the problem; the ordering is. Then, in `ops.md`, write:
+
+- `## Lessons Preflight` — which convention/gotcha items apply to this mission and why, named by id or heading. Written before any worker is dispatched. If the corpus genuinely has nothing for this topic, say so explicitly.
+- `## Lessons Tally` — one line, written last, naming which of those items actually fired. **`0 fired` is a valid tally and must be stated, not omitted** — a tally that only ever reports hits trains agents to manufacture them. Place it immediately before `## Implementation Notes`.
+
+**Propagate verbatim.** Any requirement this skill places on OPS that its workers must also satisfy — the linked corpus items, the browser-automation clause, the seeded report skeleton, the `## Lessons Tally` line, the `## Implementation Notes` block — is copied **word for word** into every worker brief. *A rule stated one layer above the layer that executes it does not apply,* and a worker cannot infer a rule it was never given.
+
+Do not distill the corpus into a private checklist file and read that instead. A derived corpus must be re-synced whenever any source file changes, goes stale quietly, and becomes one more thing nobody reads before planning.
+
 ## CEO-Approved Operations
 
 OPS must not ask the Owner to approve routine monitoring operations. OPS proposes a default to CEO, and CEO decides.
@@ -68,6 +79,14 @@ After service launch, OPS continues the same monitoring duty against `runtime.pr
 - Repeated incidents must trigger recovery coordination through CEO -> CTO/CQO/OPS. OPS supplies evidence and recovery criteria; CTO owns fixes; CQO owns regression confirmation.
 - OPS may classify resolved events as close candidates only after the monitored endpoint is healthy and logs no longer show the triggering error pattern.
 
+## Instrument Validity
+
+OPS supplies most of the harness's negative evidence — "no crash", "no error in the log", "health stayed green" — so OPS owns proving the instrument could have seen the failure.
+
+- Every claim of the form "nothing bad happened" ships with a **positive control that fired in the same run** and varied the exact variable under suspicion. Without one, report the observation as unverified, not clean.
+- **Read dependency-supplied filtering from source and quote it** — package, version, file, line range — instead of inferring it from what appeared in the log. Log middleware, dev servers, proxies, and test runners routinely drop successful or sub-threshold requests at a log level nobody chose deliberately, and that rule appears nowhere in the project's own code.
+- Record the instrument in Environment Evidence: what tool observed the runtime, at what log level, with what filter, and what the control was. An unrecorded instrument makes every negative result from that run unusable.
+
 ## Port Policy
 
 - CEO/CTO/OPS must choose an available `{xx}000` base port before CXX services are allocated, unless the Owner already specified one.
@@ -94,7 +113,7 @@ After service launch, OPS continues the same monitoring duty against `runtime.pr
 
 When CEO routes this mission to you, set yourself as the live agent on entry so the dashboard shows the handoff: `bash scripts/harness-progress-set.sh . '.current_agent="ops" | .agent_status="running"'`.
 
-Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running. Require every worker report to open with a `## Status` line whose body is `IN_PROGRESS` while the worker runs and `COMPLETE` once the report is final, so the dashboard shows true worker liveness instead of guessing from file timestamps.
+Before launching any fresh worker session, update `.harness/progress.json` with `scripts/harness-progress-set.sh` so dashboards can show the worker as active. Record the worker name, owning CXX, report path, **the model the worker was spawned with**, and `status:"running"` under `company_state.workers`, increment `company_state.active_workers`, and set `conductor.current_action` to `spawn:{worker-name}`. After the worker report is accepted, update that worker to `status:"complete"` and decrement `active_workers`. Do not leave `active_workers:0` while a worker session is running. Require every worker report to open with a `## Status` line whose body is `IN_PROGRESS` while the worker runs and `COMPLETE` once the report is final, so the dashboard shows true worker liveness instead of guessing from file timestamps.
 
 On exit, after writing `ops.md` and handing back to CEO, run `bash scripts/harness-progress-set.sh . '.agent_status="completed"'` so the loop advances and the dashboard reflects the finished step. Do not clear `conductor.state`; only the CEO's Company Loop Termination step ends the loop.
 
@@ -112,12 +131,24 @@ OPS must not accept worker plans or reports that omit this requirement when brow
 
 ## Required Output Sections
 
-1. Worker Task Briefs — monitoring/recovery task, capability needed, selected worker or hiring request, acceptance criteria.
-2. Environment Evidence — config path, command/service checked, observed status.
-3. Worker Evidence Manifest — worker name, report path, status for delegated monitoring or recovery tasks.
-4. OPS Event Decision — good-case silence, warning, incident, or emergency escalation.
-5. CQO Verification Watch — whether CQO testing was monitored, runtime mapping used, open incidents, and PASS/BLOCKED implication.
-6. Post-Launch Watch — production services monitored, open incidents, recovery status, or not applicable.
-7. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
+1. Lessons Preflight — convention/gotcha items that apply to this mission, why each applies, and the topic links passed into worker briefs. Written before the first worker is dispatched.
+2. Worker Task Briefs — monitoring/recovery task, capability needed, selected worker or hiring request, declared model, acceptance criteria.
+3. Environment Evidence — config path, command/service checked, observed status, **and the instrument**: what tool observed it, at what log level, with what filter, and the positive control that fired in the same run.
+4. Worker Evidence Manifest — worker name, declared model, report path, status for delegated monitoring or recovery tasks.
+5. OPS Event Decision — good-case silence, warning, incident, or emergency escalation.
+6. CQO Verification Watch — whether CQO testing was monitored, runtime mapping used, open incidents, and PASS/BLOCKED implication.
+7. Post-Launch Watch — production services monitored, open incidents, recovery status, or not applicable.
+8. Lessons Tally — one line naming which preflight items actually fired. `0 fired` is valid and must be stated.
+9. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
 
 Every OPS worker brief must require the worker to append the same English `## Implementation Notes` block to the bottom of `.harness/documents/{mission_name}/ops/workers/{worker-name}.md`, covering risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.
+
+## Worker Spawn Contract
+
+Two things are decided **before** the round starts, not after a worker dies.
+
+**1. Declare the model.** Every worker spawn names its model explicitly — never inherit the CLI or session default. Record that model in the brief, in the Worker Evidence Manifest, and in `company_state.workers[]`. A worker terminated by a usage limit is indistinguishable, from the outside, from a worker that finished, so **a silent or truncated worker is a rate limit until proven otherwise**: check the limit and its reset time before re-briefing, re-hiring, or rewriting the task. Spreading a round across model families is only a decision you can make if the model was declared.
+
+**2. Seed the report.** Create `.harness/documents/{goal-or-child-mission}/ops/workers/{worker-name}.md` **before the worker starts**, already carrying every required section — `## Status` (`IN_PROGRESS`), `## Task`, `## Evidence`, `## Result`, `## Lessons Tally`, and the terminal `## Implementation Notes` block with all four subsections stubbed. Copy `.harness/shared/templates/worker-report.md` when it is installed; otherwise write the skeleton by hand. Brief the worker to fill it in **incrementally as the work happens**, never to assemble the report at the end.
+
+A worker that dies mid-round — rate limit, crash, cancelled session — must leave a **valid partial report, never a stub**. Same failure, opposite outcome, one variable: unseeded workers killed mid-round left stubs and halted the company; a seeded worker killed by the same limit left its report intact and cost nothing. The variable was a decision taken before the round.

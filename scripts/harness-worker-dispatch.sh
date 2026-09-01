@@ -62,12 +62,28 @@ acquire_dispatch_lock() {
 acquire_dispatch_lock
 
 spawn_mode="$(jq -r '.company_mode.worker_spawn // "claude"' "$CONFIG" 2>/dev/null || echo claude)"
+
+# AGENTS.md Hard Rule 21 — every worker spawn declares its model explicitly.
+# Never inherit the CLI default: a worker terminated by a usage limit looks
+# exactly like a worker that finished, and without a declared model there is
+# nothing to check the limit against. Falls back to the phase model from
+# flow.team, then to opus.
+resolve_worker_model() {
+  local phase="$1" model
+  model="$(jq -r --arg p "$phase" '
+    .company_mode.worker_model
+    // (if $p == "eval" then .flow.team.eval_model else .flow.team.gen_model end)
+    // empty' "$CONFIG" 2>/dev/null || true)"
+  [ -n "$model" ] && [ "$model" != "null" ] || model="opus"
+  printf '%s' "$model"
+}
+
 pipeline="$(jq -r '.pipeline // "FULLSTACK"' "$PROGRESS" 2>/dev/null || echo FULLSTACK)"
 ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 
 build_prompt() {
-  local team="$1" fid="$2" agent="$3" prompt_path="$4" log_path="$5"
+  local team="$1" fid="$2" agent="$3" prompt_path="$4" log_path="$5" model="${6:-}"
   cat > "$prompt_path" <<EOF
 You are running as walwal-harness company worker.
 
@@ -75,9 +91,10 @@ Agent: harness-${agent}
 Worker slot: ${team}
 Feature ID: ${fid}
 Project root: ${PROJECT_ROOT}
+Declared model: ${model:-unspecified}
 
 Follow these rules exactly:
-1. Read AGENTS.md, CONVENTIONS.md if present, .harness/conventions/shared.md, .harness/conventions/${agent}.md if present, .harness/gotchas/${agent}.md if present, .harness/memory.md, .harness/progress.json, .harness/actions/feature-list.json, .harness/actions/api-contract.json, and the relevant harness skill for ${agent}.
+1. Lessons before plan. FIRST — before any source edit and before any measurement — read AGENTS.md, CONVENTIONS.md if present, .harness/conventions/shared.md, .harness/conventions/${agent}.md if present, .harness/gotchas/shared.md, .harness/gotchas/${agent}.md if present, .harness/memory.md, .harness/progress.json, .harness/actions/feature-list.json, .harness/actions/api-contract.json, and the relevant harness skill for ${agent}. Then write down which convention/gotcha items apply to FEATURE_ID=${fid} and why, and only then start work.
 2. Work only on FEATURE_ID=${fid}. Do not broaden scope.
 3. Respect IA ownership and do not edit files outside your department.
 4. Write a report to .harness/actions/gen-report-${fid}.md if you are a generator, or .harness/actions/evaluation-${fid}.md if you are an evaluator.
@@ -85,6 +102,8 @@ Follow these rules exactly:
 6. On failure, write the reason and run: bash scripts/harness-queue-manager.sh fail ${fid} "<short reason>"
 7. Use partial progress updates only via scripts/harness-progress-set.sh.
 8. Append real timestamped progress to .harness/progress.log. Never write future timestamps.
+9. End the report with a one-line tally naming which of the convention/gotcha items from step 1 actually fired. \`0 fired\` is a valid tally and must be stated, not omitted.
+10. Write the report incrementally as the work happens — create the file with its sections present up front and fill them in. If this session is killed mid-round, the report must still be a valid partial report, never a stub.
 
 This worker log is: ${log_path#$PROJECT_ROOT/}
 EOF
@@ -138,7 +157,8 @@ while [ "$i" -lt "$count" ]; do
     continue
   fi
 
-  build_prompt "$team" "$fid" "$agent" "$prompt_path" "$log_path"
+  worker_model="$(resolve_worker_model "$phase")"
+  build_prompt "$team" "$fid" "$agent" "$prompt_path" "$log_path" "$worker_model"
 
   pid="null"
   tmux_session="null"
@@ -146,7 +166,7 @@ while [ "$i" -lt "$count" ]; do
   if [ "$spawn_mode" = "tmux" ] && command -v tmux >/dev/null 2>&1 && command -v claude >/dev/null 2>&1; then
     session_safe="$(basename "$PROJECT_ROOT" | tr -c '[:alnum:]_' '_')"
     session_name="walwal_${session_safe}_w${team}_${stamp}"
-    if tmux new-session -d -s "$session_name" "cd '$PROJECT_ROOT' && claude -p \"\$(cat '$prompt_path')\" > '$log_path' 2>&1"; then
+    if tmux new-session -d -s "$session_name" "cd '$PROJECT_ROOT' && claude --dangerously-skip-permissions --model '$worker_model' -p \"\$(cat '$prompt_path')\" > '$log_path' 2>&1"; then
       pane_pid="$(tmux list-panes -t "$session_name" -F '#{pane_pid}' 2>/dev/null | head -n1)"
       if [ -n "$pane_pid" ]; then
         pid="$pane_pid"
@@ -160,22 +180,23 @@ while [ "$i" -lt "$count" ]; do
     # tmux requested but unavailable: fall back to background claude spawn
     (
       cd "$PROJECT_ROOT" || exit 1
-      claude -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+      claude --dangerously-skip-permissions --model "$worker_model" -p "$(cat "$prompt_path")" > "$log_path" 2>&1
     ) &
     pid="$!"
     status="spawned tmux-fallback-claude"
   elif [ "$spawn_mode" = "claude" ] && command -v claude >/dev/null 2>&1; then
     (
       cd "$PROJECT_ROOT" || exit 1
-      claude -p "$(cat "$prompt_path")" > "$log_path" 2>&1
+      claude --dangerously-skip-permissions --model "$worker_model" -p "$(cat "$prompt_path")" > "$log_path" 2>&1
     ) &
     pid="$!"
     status="spawned"
   fi
 
   tmpq="${QUEUE}.tmp.$$.$i"
-  jq --arg tid "$team" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --argjson tmux_session "$tmux_session" --arg ts "$ts" '
+  jq --arg tid "$team" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --argjson tmux_session "$tmux_session" --arg ts "$ts" --arg model "$worker_model" '
     .teams[$tid].pid = $pid |
+    .teams[$tid].model = $model |
     .teams[$tid].tmux_session = $tmux_session |
     .teams[$tid].agent = $agent |
     .teams[$tid].phase = $phase |
@@ -184,6 +205,7 @@ while [ "$i" -lt "$count" ]; do
     .teams[$tid].spawn_status = $status |
     .teams[$tid].started_at = $ts |
     .queue.in_progress[.teams[$tid].feature].agent = $agent |
+    .queue.in_progress[.teams[$tid].feature].model = $model |
     .queue.in_progress[.teams[$tid].feature].phase = $phase |
     .queue.in_progress[.teams[$tid].feature].prompt = $prompt |
     .queue.in_progress[.teams[$tid].feature].log = $log |
@@ -191,15 +213,15 @@ while [ "$i" -lt "$count" ]; do
     .queue.in_progress[.teams[$tid].feature].tmux_session = $tmux_session
   ' "$QUEUE" > "$tmpq" && mv "$tmpq" "$QUEUE"
 
-  jq -n --argjson team "$team" --arg feature "$fid" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --argjson tmux_session "$tmux_session" \
-    '{team:$team, feature:$feature, agent:$agent, phase:$phase, prompt:$prompt, log:$log, status:$status, pid:$pid, tmux_session:$tmux_session}' >> "$dispatches_file"
-  echo "$ts | conductor | worker-dispatch | $status | T${team}/${fid} | $agent phase=$phase pid=$pid" >> "$PROJECT_ROOT/.harness/progress.log"
+  jq -n --argjson team "$team" --arg feature "$fid" --arg agent "$agent" --arg phase "$phase" --arg prompt "$prompt_rel" --arg log "$log_rel" --arg status "$status" --argjson pid "$pid" --argjson tmux_session "$tmux_session" --arg model "$worker_model" \
+    '{team:$team, feature:$feature, agent:$agent, phase:$phase, model:$model, prompt:$prompt, log:$log, status:$status, pid:$pid, tmux_session:$tmux_session}' >> "$dispatches_file"
+  echo "$ts | conductor | worker-dispatch | $status | T${team}/${fid} | $agent phase=$phase model=$worker_model pid=$pid" >> "$PROJECT_ROOT/.harness/progress.log"
   i=$((i + 1))
 done
 
 dispatches="$(jq -s '.' "$dispatches_file")"
 rm -f "$dispatches_file"
-active_workers="$(jq '[.teams | to_entries[] | select(.value.status == "busy") | {team:(.key|tonumber), feature:.value.feature, agent:.value.agent, pid:.value.pid, tmux_session:.value.tmux_session, phase:(.value.phase // "gen"), prompt:.value.prompt, log:.value.log, spawn_status:.value.spawn_status}]' "$QUEUE")"
+active_workers="$(jq '[.teams | to_entries[] | select(.value.status == "busy") | {team:(.key|tonumber), feature:.value.feature, agent:.value.agent, model:.value.model, pid:.value.pid, tmux_session:.value.tmux_session, phase:(.value.phase // "gen"), prompt:.value.prompt, log:.value.log, spawn_status:.value.spawn_status}]' "$QUEUE")"
 
 jq --arg ts "$ts" --argjson dispatches "$dispatches" --argjson workers "$active_workers" '
   .company_state.active_workers = ($workers | length) |

@@ -11,14 +11,21 @@ mode="${2:-text}"
 scope="${3:-all}"
 violations=()
 
+# Section-scoped reading (conventions/shared.md): match `^>?\s*#{1,6}` and take
+# every hit — blockquoted or plain, at any depth, with no content filter. A
+# heading anchored on `^#` alone misses the same heading quoted one level in,
+# which is how in-place retractions and continuation lines get written.
+HEADING2='^[[:space:]]*>?[[:space:]]*##[[:space:]]+'
+HEADING3='^[[:space:]]*>?[[:space:]]*###[[:space:]]+'
+
 has_implementation_notes() {
   local file="$1"
   [ -s "$file" ] || return 1
-  grep -Eq '^##[[:space:]]+Implementation Notes[[:space:]]*$' "$file" &&
-    grep -Eq '^###[[:space:]]+Design Decisions[[:space:]]*$' "$file" &&
-    grep -Eq '^###[[:space:]]+Deviations[[:space:]]*$' "$file" &&
-    grep -Eq '^###[[:space:]]+Tradeoffs[[:space:]]*$' "$file" &&
-    grep -Eq '^###[[:space:]]+Open Questions[[:space:]]*$' "$file"
+  grep -Eq "${HEADING2}Implementation Notes[[:space:]]*$" "$file" &&
+    grep -Eq "${HEADING3}Design Decisions[[:space:]]*$" "$file" &&
+    grep -Eq "${HEADING3}Deviations[[:space:]]*$" "$file" &&
+    grep -Eq "${HEADING3}Tradeoffs[[:space:]]*$" "$file" &&
+    grep -Eq "${HEADING3}Open Questions[[:space:]]*$" "$file"
 }
 
 has_worker_report() {
