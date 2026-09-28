@@ -22,7 +22,7 @@ Required flow:
 5. CEO summons CTO and CQO first; summon COO/CDO only when planning or UX decisions are involved. CEO must not ask the Owner whether to start the fix or which internal path to choose.
 6. CTO applies the smallest correct patch directly at S, or through hired implementation skills at M/L.
 7. CXX roles must start in a fresh session context. Do not let the default model impersonate a missing CXX or worker.
-8. At effective tier M/L, and for COO/CDO/OPS at every tier, delegate specialist execution to hired workers. At S, CTO implements directly and CQO directly runs verification in a separate session; no CTO/CQO hiring is needed.
+8. At effective tier M/L, and for COO/CDO deliverables at every tier, delegate specialist execution to hired workers. At S, CTO implements directly and CQO directly runs verification in a separate session; no CTO/CQO hiring is needed. At S/M, OPS observes directly. CQO starts only after CTO's CQO Handoff — never in parallel. A CXX writes a document only when summoned; a summoned COO/CDO/OPS with no work writes only `## Not Applicable` and one reason.
 9. If a required worker is missing, CEO or the responsible CXX must invoke the installed `harness-hiring` skill before assigning the work.
 10. For roles requiring workers, CEO must require a Worker Evidence Manifest and worker report paths under `.harness/documents/{goal_name}/hotfix-{hotfix_index}-{hotfix_name}/{owning-cxx}/workers/` before accepting CXX completion.
 11. At S/M, CQO registers a lesson when recurrence is plausible or the cause is non-obvious; otherwise write `none — <reason>` in cqo.md Recurrence Notes. L retains mandatory lesson registration.

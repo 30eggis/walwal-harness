@@ -90,10 +90,12 @@ CEO records `tier: "S"|"M"|"L"` in every new mission-state.json at intake and on
 | Tier | Criteria and routing |
 |---|---|
 | S | At most 3 expected changed files OR about 150 changed lines; no new dependency or external spec; no auth, payment, security, data migration, infrastructure, or new port; existing test commands suffice. CTO implements directly; CQO verifies in a separate session. No hiring for CTO/CQO. |
-| M | Remaining finite work: implementation worker(s), one evaluator worker. CQO may draft gates alongside CTO implementation, then test the finished change. |
+| M | Remaining finite work: implementation worker(s), one evaluator worker. CQO starts only after CTO's `## CQO Handoff` (serial gate, never parallel). |
 | L | Any new service/port, external spec integration, operating goal, production deployment, security, payment, or data change. Existing worker process. |
 
-L risk criteria take precedence over size. Invoke only relevant CXX; S normally needs CTO and CQO. COO/CDO/OPS, when needed, retain their worker and hiring requirements at every tier. OPS watches runnable verification at every tier; non-runnable verification records `OPS N/A: <reason>`.
+L risk criteria take precedence over size. Invoke only relevant CXX; S normally needs CTO and CQO.
+
+**Report only when summoned.** A CXX CEO does not summon writes no document. Summon COO/CDO only for planning/UX decisions, and OPS only when verification exercises a long-lived runtime (dev server, Docker, preview, cloud, device); for self-exiting tests and builds CQO records `OPS N/A: <reason>`. A summoned COO/CDO/OPS that finds no work files `{cxx}.md` with only `## Not Applicable` and one reason line — no worker, Lessons, or Notes. COO/CDO deliverables stay worker-backed at every tier; at S/M OPS observes directly without a worker.
 
 Effective tier is the highest rank among current `tier` and BOTH `from` and `to` in every `tier_history` entry: S=0, M=1, L=2; unknown or missing values rank 2. Never compare tier strings lexically. `behavior.mission_tiers=false` forces L (read null as true, preserve false). Missing tier means legacy: L procedure, without the new tiered completion checks.
 
@@ -103,7 +105,7 @@ For S→M/L, before changing the tier, run `bash scripts/harness-worker-evidence
 
 At effective tier S/M, role documents may replace Lessons Preflight + Lessons Tally with `## Lessons` containing `Preflight: <applicable items and why>` (before work) and `Fired: <items or 0 fired>` (at completion). `## Implementation Notes` may contain concise bullets. At L, keep the full role format below. All worker reports retain the full seeded format at every tier.
 
-Across tiers: keep implementation and verification separate, use executed commands with exit codes and output excerpts, run changed-scope tests and the available full suite, never use Owner as tester, end via runtime transition only, keep Playwright headed (`headless: false`, default `slowMo: 120`), and preserve OPS watch/worker evidence.
+Across tiers: keep implementation and verification separate, use executed commands with exit codes and output excerpts, run changed-scope tests and the available full suite, never use Owner as tester, end via runtime transition only, keep Playwright headed (`headless: false`, default `slowMo: 120`), and preserve OPS watch evidence when a long-lived runtime is tested.
 
 ## Mission Protocol
 
@@ -121,7 +123,7 @@ Across tiers: keep implementation and verification separate, use executed comman
 ## Hard Rules
 
 - Do not let a CXX or specialist task run as an unnamed default AI engine.
-- At M/L (and COO/CDO/OPS at every tier), CXX agents do not execute specialist work directly. They only define scope, choose workers, review outputs, resolve blockers, and report decisions.
+- At M/L (and COO/CDO deliverables at every tier), CXX agents do not execute specialist work directly. They only define scope, choose workers, review outputs, resolve blockers, and report decisions.
 - Effective tier determines procedural depth. Only S CTO/CQO may execute directly; the Mission Tier invariants always apply.
 - If a suitable hired worker is absent, invoke the `harness-hiring` skill before the CXX proceeds with that deliverable.
 - Except S CTO/CQO and frozen pre-upgrade CTO work, CEO must reject CXX reports that contain completed specialist deliverables without matching worker records under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`.
@@ -191,9 +193,11 @@ CEO communicates **only** with CXX agents. CEO must **never**:
 
 **Correct routing for every implementation mission:**
 ```
-Owner → CEO → CTO → [dev workers]
-                └─── CQO → [evaluator/tester workers]
+Owner → CEO → CTO → [dev workers] → CQO Handoff (tree frozen)
+                                      └→ CQO → [evaluator/tester workers] → verdict
 ```
+
+CTO and CQO never run at the same time on the same tree. CEO routes to CQO only after CTO exits with a CQO Handoff; on FAIL, CEO routes back to CTO, and CQO resumes only after the next handoff.
 
 If CEO needs implementation done, CEO routes to CTO. CTO implements directly at S, otherwise hires dev workers.
 If CEO needs QA done, CEO routes to CQO. CQO directly runs tests at S, otherwise hires evaluator/tester workers.

@@ -35,6 +35,14 @@ That read happens **before** the first source edit, the first measurement, and t
 
 Do not distill the corpus into a private checklist file and read that instead. A derived corpus must be re-synced whenever any source file changes, goes stale quietly, and becomes one more thing nobody reads before planning.
 
+## When OPS Reports
+
+OPS reports only when summoned, and CEO summons OPS only when a long-lived runtime is in play: dev server, Docker, preview, cloud, device, or production service. Unit tests, builds, linters, and other self-exiting commands need no OPS; CQO records `OPS N/A: <reason>` instead and no `ops.md` is written.
+
+- **Summoned, nothing to watch:** write `ops.md` with only `## Not Applicable` and one reason line. No worker, Lessons, or Implementation Notes. The completion gate accepts it.
+- **Effective S/M:** OPS records Environment Evidence and CQO Verification Watch directly from logs, health, ports, and processes, without hiring a worker. Hire only for recovery or monitoring setup. Lessons/Notes may be compact.
+- **L:** the full worker-backed format below.
+
 ## CEO-Approved Operations
 
 OPS must not ask the Owner to approve routine monitoring operations. OPS proposes a default to CEO, and CEO decides.

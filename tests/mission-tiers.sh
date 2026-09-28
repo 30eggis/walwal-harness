@@ -88,10 +88,26 @@ fresh; check pass
 fresh; sed -i.bak 's/Session: separate/Session: same-session/' "$M/cqo.md"; check pass
 grep -q 'WARNING: same-session' "$ROOT/output"
 grep -q 'warn | same-session-verification' "$ROOT/.harness/progress.log"
-for role in ops cdo coo; do
+for role in cdo coo; do
   fresh; cp "$M/ceo.md" "$M/$role.md"; check fail "$role.md"
   worker "$role"; check pass
 done
+# S/M OPS observes directly; L OPS stays worker-backed.
+for tier in S M; do fresh; state ".tier=\"$tier\""; [ "$tier" = S ] || { worker cto; worker cqo; }; cp "$M/ceo.md" "$M/ops.md"; check pass; done
+fresh; state '.tier="L"'; full_roles; worker cto; worker cqo; cp "$M/ceo.md" "$M/ops.md"; check fail ops.md
+# A summoned role with nothing to do completes with a one-reason N/A report, at any tier.
+for role in ops cdo coo; do
+  for tier in S L; do
+    fresh; state ".tier=\"$tier\""; [ "$tier" = S ] || { full_roles; worker cto; worker cqo; }
+    printf '## Not Applicable
+No long-lived runtime in this mission.
+' > "$M/$role.md"; check pass
+  done
+done
+# N/A is not an escape hatch for CTO/CQO.
+fresh; state '.tier="L"'; full_roles; worker cqo; printf '## Not Applicable
+x
+' >> "$M/cto.md"; check fail cto.md
 for change in '.tier_history=[{from:"L",to:"S"}]' '.tier_history=[{from:"M",to:"S"}]' '.tier_history=[{from:"S",to:"L"},{from:"L",to:"S"}]' '.tier_history=[{from:"X",to:"S"}]' '.tier="X"' '.tier=null'; do
   fresh; state "$change"; check fail
  done

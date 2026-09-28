@@ -113,6 +113,9 @@ while IFS= read -r mission_dir; do
   for role in ceo coo cdo cto cqo ops; do
     role_path="$mission_dir/$role.md"
     [ -s "$role_path" ] || continue
+    if [[ "$role" == coo || "$role" == cdo || "$role" == ops ]] && has_section "$role_path" "Not Applicable"; then
+      continue
+    fi
     if [ "$tier" -lt 2 ] && has_section "$role_path" "Lessons"; then
       continue
     fi

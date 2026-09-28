@@ -103,6 +103,8 @@ When handing off to CQO, CTO must include:
 - Known risk areas and directly adjacent dependencies.
 - Suggested full-suite command if the project exposes one, such as `npm test`, `npm run test:coverage`, `pnpm test`, `pytest`, `go test ./...`, or the repo's equivalent.
 
+**Handoff freezes the tree.** Write `## CQO Handoff` only when implementation is finished, then exit with `agent_status="completed"`. From that point CTO and its workers make no edits until CQO returns a verdict; a needed change goes through CEO as a new fix iteration after the verdict. CQO does not start before this handoff.
+
 If targeted verification fails inside the changed scope, CTO blocks the handoff until workers fix or explicitly document the blocker. If unrelated tests or coverage gaps are noticed outside the changed scope, CTO records them as possible pre-existing risk or side-effect signal and routes them through CEO/CQO instead of expanding the implementation mission by default.
 
 ## Hard Rules

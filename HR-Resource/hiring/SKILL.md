@@ -9,7 +9,7 @@ disable-model-invocation: false
 
 Hire workers from `.harness/shared/HR-Resource/`.
 
-At effective S, CTO/CQO execute directly and do not hire. COO/CDO/OPS worker assignment and evidence requirements remain unchanged at every tier.
+At effective S, CTO/CQO execute directly and do not hire. COO/CDO deliverables remain worker-backed at every tier. At S/M, OPS observes directly and hires only for recovery or monitoring setup. A role whose `{cxx}.md` is `## Not Applicable` hires nobody.
 
 ## Required Inputs
 

@@ -22,7 +22,7 @@ Required flow:
 5. Record CEO decisions in `.harness/documents/{goal_name}/submission-{submission_index}-{submission_name}/ceo.md`.
 6. CEO routes only to the CXX agents needed for this additional requirement. CEO must not ask the Owner which CXX or worker path to choose.
 7. CXX roles must start in a fresh session context. Do not let the default model impersonate a missing CXX or worker.
-8. At effective tier M/L, and for COO/CDO/OPS at every tier, delegate specialist execution to hired workers. At S, CTO implements directly and CQO directly runs verification in a separate session; no CTO/CQO hiring is needed.
+8. At effective tier M/L, and for COO/CDO deliverables at every tier, delegate specialist execution to hired workers. At S, CTO implements directly and CQO directly runs verification in a separate session; no CTO/CQO hiring is needed. At S/M, OPS observes directly. CQO starts only after CTO's CQO Handoff — never in parallel. A CXX writes a document only when summoned; a summoned COO/CDO/OPS with no work writes only `## Not Applicable` and one reason.
 9. If a required worker is missing, the responsible CXX must invoke the installed `harness-hiring` skill before assigning the work.
 10. CXX must manage conventions for new requirements. Durable changes in behavior, architecture, UI, process, or policy must be reflected in `.harness/conventions/` when accepted.
 11. For roles requiring workers, CEO must require a Worker Evidence Manifest and worker report paths under `.harness/documents/{goal_name}/submission-{submission_index}-{submission_name}/{owning-cxx}/workers/` before accepting CXX completion.

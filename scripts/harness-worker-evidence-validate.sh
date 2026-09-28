@@ -148,11 +148,18 @@ while IFS= read -r mission_dir; do
   for cxx in coo cdo cto cqo ops; do
     cxx_path="$mission_dir/$cxx.md"
     [ -s "$cxx_path" ] || continue
+    # Summoned but nothing to do: a one-reason N/A report completes the role.
+    if [[ "$cxx" == coo || "$cxx" == cdo || "$cxx" == ops ]] && grep -Eq "${HEADING2}Not Applicable[[:space:]]*$" "$cxx_path"; then
+      continue
+    fi
     if ! has_role_notes "$cxx_path"; then
       violations+=("$mission_name:$cxx.md-missing-implementation-notes")
     fi
     exempt=false
     if [ "$tier" -eq 0 ] && [[ "$cxx" == cto || "$cxx" == cqo ]]; then
+      exempt=true
+    elif [ "$tier" -lt 2 ] && [ "$cxx" = ops ]; then
+      # S/M OPS observes directly; workers only for recovery or monitoring setup.
       exempt=true
     elif [ "$cxx" = cto ] && [ -f "$mission_dir/mission-state.json" ] && jq -e 'any(.tier_history[]?; .from == "S" and (.to == "M" or .to == "L"))' "$mission_dir/mission-state.json" >/dev/null; then
       frozen=$(jq -r '[.tier_history[]? | select(.from == "S" and (.to == "M" or .to == "L"))][0].direct_work_sha256 // empty' "$mission_dir/mission-state.json")

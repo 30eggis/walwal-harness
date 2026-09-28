@@ -32,7 +32,16 @@ At effective S, execute changed-scope tests and the available full suite directl
 
 Prefer a genuinely separate CQO session (Claude Agent, Codex sub-agent, or `codex exec`) from implementation. Reading another role skill in the same session is only a role switch, not independent verification. If separate execution is unavailable, record `Verification Session: same-session` and disclose the limitation to Owner; the completion gate warns but permits it.
 
-OPS watch and OPS worker evidence remain mandatory for runnable verification at every tier. For non-runnable work write `OPS N/A: <reason>`. At M, draft gates in parallel with CTO implementation and use one evaluator worker for final verification; role Lessons/Notes may be compact. The worker workflow below applies to M/L.
+OPS watch is required only when verification exercises a long-lived runtime (dev server, Docker, preview, cloud, device). A test runner or build that exits by itself is not one: write `OPS N/A: <reason>` in cqo.md and do not request OPS. At M, use one evaluator worker after CTO handoff; role Lessons/Notes may be compact. The worker workflow below applies to M/L.
+
+## Gate, Not Parallel
+
+CQO is a pass gate, never a co-worker of CTO. A tree that is still being edited cannot be verified; every edit invalidates the fingerprint and restarts the suite.
+
+1. **Start condition.** CQO (and its evaluators) runs no test until `cto.md` has a `## CQO Handoff` (S: after `## Direct Work`) and CTO has exited with `agent_status="completed"`. Before that, CQO may only read context and write gate criteria in `cqo.md`.
+2. **Frozen tree.** If a run reports `tree changed during run` (exit 3) or the fingerprint moves while CQO is verifying, do not rerun. Record `Verdict: BLOCKED` with reason `tree-changed-during-verification` and route to CEO. CTO must finish and hand off again.
+3. **Fix loop.** After FAIL, CTO fixes and hands off again. Rerun only the failed tests plus the changed-scope tests for the new diff. The full suite runs once, on the final handed-off tree, immediately before PASS.
+4. **Parallel only in isolation.** If CQO must run concurrently for a real reason, it verifies a fixed worktree checkout of the handed-off commit, never the live tree.
 
 ## Workflow (M/L)
 
@@ -63,7 +72,7 @@ When the active goal is operating (perpetual, `mission-state.json` lifecycle `op
 CQO must verify the mission in two layers:
 
 1. Changed-scope verification: evaluator/tester workers inspect and test only the files, modules, APIs, flows, and adjacent dependencies identified in CTO's handoff.
-2. Final full-suite gate: CQO runs the project's full test/coverage command once valid for the final tree; rerun only when Evidence Reuse conditions fail, through normal project tooling (directly at S, through an evaluator/tester worker at M/L).
+2. Final full-suite gate: CQO runs the project's full test/coverage command once, on the final handed-off tree (see Gate, Not Parallel); rerun only when Evidence Reuse conditions fail, through normal project tooling (directly at S, through an evaluator/tester worker at M/L).
 
 CQO must not ask evaluator workers to manually perform full-project test coverage analysis by LLM inspection. The full gate must use fast executable tooling such as `npm test`, `npm run test:coverage`, `pnpm test`, `pytest`, `go test ./...`, CI-equivalent scripts, or the repository's documented command. If no full-suite command exists, CQO records that as a verification gap instead of inventing a manual full-coverage review.
 
@@ -130,7 +139,7 @@ Every evaluator/tester dispatched by CQO must write its report under `.harness/d
 
 **Owner is not the QA tester.** CQO must not approve a handoff that asks the Owner to verify basic functionality, regression safety, browser behavior, account setup, logs, or runtime health. CQO must collect executed evidence directly at S or through evaluator/tester workers at M/L, including E2E/Playwright/browser checks, regression commands, test-account or seeded-data validation, screenshots, logs, and risk notes when relevant. If evidence is missing, CQO verdict is BLOCKED or FAIL, not "ask Owner to check."
 
-**OPS must watch runnable verification.** When CQO evaluator workers run Playwright, E2E, API, visual, accessibility, performance, or regression checks against a local/dev/preview/Docker/cloud runtime, CQO must request OPS monitoring before issuing PASS. CQO must include OPS evidence in `cqo.md` or mark the verdict BLOCKED. A CQO PASS is invalid if OPS reports an open INCIDENT, missing runtime mapping, required log missing, service down, health mismatch, or unmonitored runtime that is part of the tested scenario.
+**OPS must watch long-lived runtime verification.** When CQO evaluator workers run Playwright, E2E, API, visual, accessibility, performance, or regression checks against a running local/dev/preview/Docker/cloud service (not a self-exiting test runner), CQO must request OPS monitoring before issuing PASS. CQO must include OPS evidence in `cqo.md` or mark the verdict BLOCKED. A CQO PASS is invalid if OPS reports an open INCIDENT, missing runtime mapping, required log missing, service down, health mismatch, or unmonitored runtime that is part of the tested scenario.
 
 If OPS reports an incident during verification:
 
@@ -145,7 +154,7 @@ Required output sections in `cqo.md`:
 2. Worker Task Briefs — gate, capability needed, selected evaluator or hiring request, declared model, acceptance criteria.
 3. Worker Evidence Manifest — worker name, declared model, report path, command or artifact evidence, status.
 4. Instrument Validity — for every negative claim: the instrument, its log level and filter (quoted from source when the instrument comes from a dependency), and the positive control that fired in the same run. Negative evidence with no control is BLOCKED, not PASS.
-5. OPS Watch Evidence — ops report path, monitored runtime mapping, incidents/warnings, and whether runtime evidence permits PASS.
+5. OPS Watch Evidence — ops report path, monitored runtime mapping, incidents/warnings, and whether runtime evidence permits PASS; or one line `OPS N/A: <reason>` when no long-lived runtime was tested.
 6. CQO Verdict — inside `## CQO Verdict`, write a dedicated `Verdict: PASS|ACCEPTED|FAIL|REJECTED|BLOCKED` line with exactly one uppercase value. The last verdict candidate across these sections decides: trailing commentary, empty value, bold decoration, or lowercase makes it invalid; no fallback to an older PASS. Use the canonical `## CQO Verdict` heading for re-evaluation too. The completion reader also includes nested headings and parenthesized headings such as `## CQO Verdict (Re-test)` until the next unrelated level-1/2 heading. Label decoration (`**Verdict**: FAIL`) or spacing before the colon (`Verdict : FAIL`) still counts as an attempted verdict but is rejected as invalid. Put reasons on the next line. Correct old verdicts using `~~Verdict: FAIL~~` and a new line. Cite executed evidence (worker manifest at M/L) plus required OPS evidence.
 7. Recurrence Notes — accepted gotchas, conventions, memories, or `none — <reason>` at S/M when recurrence is unlikely and the cause is obvious (L hot-fixes still register a lesson). Every entry registered here names **every role that should be able to find it** and is linked from each of those roles' indexes; `scripts/harness-corpus-reachability.sh` must pass.
 8. Lessons Tally — one line naming which preflight items actually fired. `0 fired` is valid and must be stated.
