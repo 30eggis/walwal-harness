@@ -15,16 +15,24 @@ Before engineering work, read `.harness/conventions/shared.md`, `.harness/conven
 
 ### Lessons Before Plan
 
+At effective tier S/M, role documents may replace Lessons Preflight + Lessons Tally with `## Lessons` containing `Preflight: <applicable items and why>` (before work) and `Fired: <items or 0 fired>` (at completion). `## Implementation Notes` may contain concise bullets. At L, keep the full role format below. All worker reports retain the full seeded format at every tier.
+
 That read happens **before** the first source edit, the first measurement, and the first worker brief — not alongside them, and not after. The corpus is rarely the problem; the ordering is. Then, in `cto.md`, write:
 
 - `## Lessons Preflight` — which convention/gotcha items apply to this mission and why, named by id or heading. Written before any worker is dispatched. If the corpus genuinely has nothing for this topic, say so explicitly.
 - `## Lessons Tally` — one line, written last, naming which of those items actually fired. **`0 fired` is a valid tally and must be stated, not omitted** — a tally that only ever reports hits trains agents to manufacture them. Place it immediately before `## Implementation Notes`.
 
-**Propagate verbatim.** Any requirement this skill places on CTO that its workers must also satisfy — the linked corpus items, the browser-automation clause, the seeded report skeleton, the `## Lessons Tally` line, the `## Implementation Notes` block — is copied **word for word** into every worker brief. *A rule stated one layer above the layer that executes it does not apply,* and a worker cannot infer a rule it was never given.
+**Worker brief:** name the seeded report path and instruct the worker to fill its existing sections incrementally. Do not copy the report skeleton, Tally, or Notes block into the brief. Continue to pass relevant corpus links and copy behavioral requirements absent from the seed (including the browser-automation clause) verbatim.
 
 Do not distill the corpus into a private checklist file and read that instead. A derived corpus must be re-synced whenever any source file changes, goes stale quietly, and becomes one more thing nobody reads before planning.
 
-## Workflow
+## Tier S: Direct Work
+
+At effective S, create cto.md before edits, implement directly without hiring/worker telemetry, and run changed-scope tests. Record `## Direct Work` (changes and executed evidence), `## CQO Handoff` (scope, commands, risks, available full-suite command), `## Lessons`, and concise `## Implementation Notes`. Hand off to a separate CQO session; do not issue your own quality verdict. The worker workflow below applies to M/L.
+
+On S→M/L, freeze Direct Work using the CEO-recorded SHA. Add `## Post-Upgrade Work`; write `none — <reason>` first if no added implementation, otherwise delegate it to CTO workers. Final CQO verification follows the higher tier. M keeps Worker Task Briefs/Manifest and CQO Handoff but uses compact Lessons/Notes; L uses the full output below.
+
+## Workflow (M/L)
 
 1. Read CEO, COO, and CDO mission documents.
 2. Record decisions in `.harness/documents/{goal-or-child-mission}/cto.md`. **This file must be created before any worker is dispatched.**
@@ -81,6 +89,8 @@ Measured: a spec moved `v0.7 → v0.9`, changing a response contract, while the 
 
 ## Test Coverage Scope
 
+When writing or delegating verification scripts, follow CQO’s Verification Artifact Hygiene and Evidence Reuse sections and copy both sections verbatim into the worker brief.
+
 CTO must optimize engineering verification around the work actually changed in the mission. CTO worker briefs must require targeted tests, coverage checks, and regression commands for the changed files, modules, APIs, flows, and directly affected dependencies only.
 
 CTO must not require workers to manually reason through full-project test coverage, inspect unrelated coverage gaps, or chase 100% coverage outside the modified scope. Full-project test execution belongs to CQO's final gate and must be run by project test tooling, not by LLM inspection.
@@ -97,7 +107,7 @@ If targeted verification fails inside the changed scope, CTO blocks the handoff 
 
 ## Hard Rules
 
-CTO must not directly write code, create build scripts, choose detailed implementation content, run technical QA as the evaluator, or produce final implementation artifacts. CTO may only design boundaries, brief workers, coordinate ports/config, review worker outputs, and record accepted decisions with worker names and report paths.
+At M/L, CTO must not directly write code, create build scripts, choose detailed implementation content, run technical QA as the evaluator, or produce final implementation artifacts. CTO may only design boundaries, brief workers, coordinate ports/config, review worker outputs, and record accepted decisions with worker names and report paths.
 
 **cto.md is a prerequisite gate.** No worker may be dispatched before `cto.md` exists. A mission where workers appear in `.harness/documents/{goal-or-child-mission}/cto/workers/` but no `cto.md` exists is a protocol violation — CEO bypassed CTO.
 
@@ -105,7 +115,7 @@ Every worker dispatched by CTO must be listed in the Worker Evidence Manifest se
 
 **Owner is not the technical tester.** CTO must not hand unfinished software to CEO/Owner with "please check" as the validation plan. CTO must require workers to prove implementation readiness with appropriate unit tests, integration checks, build/run commands, seeded data or test account setup, browser/E2E checks when applicable, and changed-file evidence. If verification cannot be completed, CTO reports BLOCKED with the missing evidence instead of asking the Owner to test it.
 
-Required output sections in `cto.md`:
+Required output sections in `cto.md` at L (M uses compact Lessons/Notes; S uses Direct Work above):
 
 1. Lessons Preflight — convention/gotcha items that apply to this mission, why each applies, and the topic links passed into worker briefs. Written before the first worker is dispatched.
 2. Worker Task Briefs — task, capability needed, selected worker or hiring request, declared model, acceptance criteria.
@@ -118,31 +128,13 @@ Required output sections in `cto.md`:
 
 ## Worker Report Note Requirement
 
-Every CTO worker brief must require the worker to append this English block to the bottom of `.harness/documents/{goal-or-child-mission}/cto/workers/{worker-name}.md`:
-
-```
-## Implementation Notes
-
-### Design Decisions
-- ...
-
-### Deviations
-- ...
-
-### Tradeoffs
-- ...
-
-### Open Questions
-- ...
-```
-
-The worker notes must cover risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries. CTO must not accept worker output that omits this block.
+Point the worker to its seeded report path. Require it to fill the existing Implementation Notes (all four subsections, `None` when empty); do not duplicate the template in the brief.
 
 ## The Document Is The Record
 
 A conclusion you hold but have not written into `cto.md` **is not held by the company.** Before reporting any state change — to CEO, to a peer CXX, to the Owner — reconcile it in your own document *and* in `progress.json`. Strike and correct in place; never delete the superseded line, because a reader arriving later needs to see that it was superseded rather than never written.
 
-Check your document against your peers' documents, not only against itself. The cheap version of this failure is a deliverable table that contradicts three messages you already sent. The expensive version was measured: a completed step reported and accepted, never written to the state file, and an orchestration loop that went on trying to spawn it **70 times**.
+Check the role document against peer documents and runtime state before reporting completion.
 
 ## Worker Spawn Contract
 
@@ -152,4 +144,4 @@ Two things are decided **before** the round starts, not after a worker dies.
 
 **2. Seed the report.** Create `.harness/documents/{goal-or-child-mission}/cto/workers/{worker-name}.md` **before the worker starts**, already carrying every required section — `## Status` (`IN_PROGRESS`), `## Task`, `## Evidence`, `## Result`, `## Lessons Tally`, and the terminal `## Implementation Notes` block with all four subsections stubbed. Copy `.harness/shared/templates/worker-report.md` when it is installed; otherwise write the skeleton by hand. Brief the worker to fill it in **incrementally as the work happens**, never to assemble the report at the end.
 
-A worker that dies mid-round — rate limit, crash, cancelled session — must leave a **valid partial report, never a stub**. Same failure, opposite outcome, one variable: unseeded workers killed mid-round left stubs and halted the company; a seeded worker killed by the same limit left its report intact and cost nothing. The variable was a decision taken before the round.
+A worker interrupted mid-round must leave a valid partial report, never a stub.

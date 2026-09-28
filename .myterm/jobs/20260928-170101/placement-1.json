@@ -1,0 +1,45 @@
+{
+  "createdAt" : "2026-09-28T08:01:01Z",
+  "flow" : "request",
+  "jiraAnalysisFallback" : true,
+  "revision" : 3,
+  "steps" : [
+    {
+      "agent" : "claude",
+      "extraWriteDirs" : [
+
+      ],
+      "model" : "opus[1m]",
+      "permission" : "readOnly",
+      "role" : "design"
+    },
+    {
+      "agent" : "codex",
+      "extraWriteDirs" : [
+
+      ],
+      "model" : "gpt-6-astra",
+      "permission" : "readOnly",
+      "role" : "designReview"
+    },
+    {
+      "agent" : "codex",
+      "extraWriteDirs" : [
+
+      ],
+      "model" : "gpt-6-astra",
+      "permission" : "workspaceWrite",
+      "role" : "work"
+    },
+    {
+      "agent" : "claude",
+      "extraWriteDirs" : [
+
+      ],
+      "model" : "opus[1m]",
+      "permission" : "readOnly",
+      "role" : "workReview"
+    }
+  ],
+  "version" : 2
+}

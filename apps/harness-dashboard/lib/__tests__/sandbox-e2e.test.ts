@@ -178,7 +178,9 @@ gate("walwal-harness sandbox e2e — two usage modes", () => {
     const roster = JSON.parse(readFileSync(rosterPath, "utf8"));
     expect(roster.hired[0].skillPaths.codex).toContain(".codex/skills/");
     expect(roster.hired[0].skillPaths.source).toBe(".harness/shared/HR-Resource/react-ui-worker/SKILL.md");
-    expect(readFileSync(path.join(sbx, ".harness", ".bundle-version"), "utf8")).toBe("7.1.48\n");
+    expect(readFileSync(path.join(sbx, ".harness", ".bundle-version"), "utf8").trim()).toBe(
+      JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")).version
+    );
   });
 
   it("gitignore management untracks runtime state without untracking shared harness files", () => {

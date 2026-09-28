@@ -60,3 +60,5 @@ Thumbs.db
 tmp/
 .worktrees/
 .superpowers/
+# CocoIndex Code (ccc)
+/.cocoindex_code/

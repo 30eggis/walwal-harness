@@ -1,0 +1,17 @@
+{
+  "agent" : "codex",
+  "cacheReadTokens" : 68864,
+  "durationMs" : 37538,
+  "extraWriteDirs" : [
+
+  ],
+  "inputTokens" : 92655,
+  "ok" : true,
+  "outputTokens" : 381,
+  "permission" : "workspace-write",
+  "requestedModel" : "gpt-6-astra",
+  "revision" : 3,
+  "role" : "work",
+  "sessionId" : "01a0e7b3-ccaf-7182-aaa4-400663ef6b56",
+  "version" : 2
+}

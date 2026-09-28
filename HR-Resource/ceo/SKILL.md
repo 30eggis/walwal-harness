@@ -36,8 +36,7 @@ If an operational choice is reversible and uses existing project-local credentia
 
 There are exactly two legitimate ways to end the company loop, and each requires an explicit **runtime transition**. Writing `ceo.md` and `mission-state.json` is not enough: the autonomous Stop loop and the dashboard read `progress.json` runtime state (`conductor.state`, `agent_status`, `current_agent`), not your documents. If you finish a report but never fire the transition, the loop stays `running` and the harness keeps prompting you to continue — this is the "is it done or not?" ambiguity. Avoid it by always ending in one of these two states:
 
-1. **COMPLETE** — the mission is genuinely finished: the final Owner report is in `ceo.md`, all required CXX/worker/OPS evidence is collected, and `mission-state.json` is terminal (`complete`/`closed`/`cancelled`/`superseded`) with `active:false`. As the **literal final action of the turn**, run:
-   `bash scripts/harness-company-complete.sh . <reason>`
+1. **COMPLETE / termination without acceptance** — For acceptance, leave the mission active and run `bash scripts/harness-company-complete.sh . <reason> <mission-rel>` as the final action; the script checks evidence before writing `complete` and `active:false`. On refusal, keep working. For termination without acceptance, first write lifecycle `cancelled`, `superseded`, or `closed` and `active:false`, then call the same explicit transition. `closed` means ended without acceptance; disclose “미수락 종료” in the Owner report and never archive without PASS. For an external-authority block, record `blocked`/`active:false` and run `bash scripts/harness-company-block.sh . "<exact missing authority>"`. `<mission-rel>` is the path relative to `.harness/documents/`.
 2. **BLOCKED on external authority** — the next action genuinely needs authority the harness cannot infer or obtain (new credentials/secrets, payment approval, legal/business acceptance, unavailable production access, destructive data action, or a direct conflict with the Owner's stated direction). Record the exact missing authority and the internally recommended default in `ceo.md`, set `mission-state.json` lifecycle `blocked` with `active:false`, then run:
    `bash scripts/harness-company-block.sh . "<exact missing authority>"`
 
@@ -52,7 +51,7 @@ First, **classify the goal**:
 - **Finite** goal — "build X", "add Y", "fix Z": has a definite done state. Use the Company Loop Termination above.
 - **Operating (perpetual)** goal — "run/operate/monitor/keep growing X", "지속/영구 운영", "make money continuously", anything that should *never* stop (e.g. "build a trading bot and keep it profitable forever"): it must run as a standing company that cycles indefinitely.
 
-For an operating goal, set `mission-state.json` to `{"lifecycle":"operating","active":true}` (it stays active forever) and **never** call `harness-company-complete.sh`. The only ways an operating goal ends are: the Owner explicitly orders it stopped (then run `harness-company-complete.sh`), or a true external-authority block (then `harness-company-block.sh`).
+For an operating goal, set `mission-state.json` to `{"lifecycle":"operating","active":true,"tier":"L"}` (it stays active forever) and **never** call `harness-company-complete.sh`. The only ways an operating goal ends are: the Owner explicitly orders it stopped (then run `harness-company-complete.sh`), or a true external-authority block (then `harness-company-block.sh`).
 
 Run it as an **agenda-driven standing executive loop**. The agenda is the shared meetup file every CXX co-writes at `.harness/documents/{goal}/agenda.json`, managed with `scripts/harness-agenda.sh`. Each operating tick:
 
@@ -74,13 +73,37 @@ Before routing or accepting CXX work, enforce lazy loading:
 
 ### Lessons Before Plan
 
+At effective tier S/M, role documents may replace Lessons Preflight + Lessons Tally with `## Lessons` containing `Preflight: <applicable items and why>` (before work) and `Fired: <items or 0 fired>` (at completion). `## Implementation Notes` may contain concise bullets. At L, keep the full role format below. All worker reports retain the full seeded format at every tier.
+
 The read is an **ordering constraint**, not a reading list. It happens before the first source edit, the first measurement, and the first brief — not alongside them, and not after. A lesson that is written, indexed, and reachable still arrives too late if it is read after the mistake.
 
 - `ceo.md` opens with `## Lessons Preflight`: which convention/gotcha items apply to this mission and why. Write it before routing to the first CXX.
 - `ceo.md` closes with a one-line `## Lessons Tally` immediately before `## Implementation Notes`: which of those items actually fired. **`0 fired` is a valid tally and must be stated, not omitted.**
-- CEO requires the same two sections from every `{cxx}.md` and every worker report, and **rejects** any report that omits them.
-- **Propagate verbatim.** Any requirement CEO places on a CXX that its workers must also satisfy is copied word for word into the worker brief by that CXX. *A rule stated one layer above the layer that executes it does not apply.* CEO checks the worker briefs recorded in `{cxx}.md` for this, not just the CXX document.
+- At L, CEO requires the same two sections from every `{cxx}.md` and every worker report, and **rejects** any report that omits them.
+- **Worker brief:** name the seeded report path and instruct the worker to fill its existing sections incrementally. Do not copy the report skeleton, Tally, or Notes block into the brief. Continue to pass relevant corpus links and copy behavioral requirements absent from the seed (including the browser-automation clause) verbatim.
 - **Do not commission a distilled preflight checklist.** A derived corpus must be re-synced whenever any source file changes, goes stale silently, and becomes a second thing nobody reads before planning. Fix the ordering, not the corpus.
+
+## Mission Tier
+
+CEO records `tier: "S"|"M"|"L"` in every new mission-state.json at intake and one line of rationale in ceo.md, without asking Owner.
+
+| Tier | Criteria and routing |
+|---|---|
+| S | At most 3 expected changed files OR about 150 changed lines; no new dependency or external spec; no auth, payment, security, data migration, infrastructure, or new port; existing test commands suffice. CTO implements directly; CQO verifies in a separate session. No hiring for CTO/CQO. |
+| M | Remaining finite work: implementation worker(s), one evaluator worker. CQO may draft gates alongside CTO implementation, then test the finished change. |
+| L | Any new service/port, external spec integration, operating goal, production deployment, security, payment, or data change. Existing worker process. |
+
+L risk criteria take precedence over size. Invoke only relevant CXX; S normally needs CTO and CQO. COO/CDO/OPS, when needed, retain their worker and hiring requirements at every tier. OPS watches runnable verification at every tier; non-runnable verification records `OPS N/A: <reason>`.
+
+Effective tier is the highest rank among current `tier` and BOTH `from` and `to` in every `tier_history` entry: S=0, M=1, L=2; unknown or missing values rank 2. Never compare tier strings lexically. `behavior.mission_tiers=false` forces L (read null as true, preserve false). Missing tier means legacy: L procedure, without the new tiered completion checks.
+
+Escalate on exceeding scope, touching a risk area, or two CQO FAILs. Set the higher tier and append `{from,to,at,reason}` to `tier_history`; downgrades never reduce effective tier. Preserve completed work at its original tier; subsequent work and final verification follow the higher tier.
+
+For S→M/L, before changing the tier, run `bash scripts/harness-worker-evidence-validate.sh . direct-work-sha mission:<mission-rel>` and record its output as `direct_work_sha256` in that history entry. Freeze the exact `## Direct Work` body. CTO adds `## Post-Upgrade Work`: first nonblank line `none — <reason>` if only re-verification remains, otherwise assign added implementation to CTO worker(s). Missing hash removes the exemption; changed Direct Work is rejected. CQO always uses an evaluator worker after upgrade. M→L only requires expanding role documents to L format; worker reports already use the full format.
+
+At effective tier S/M, role documents may replace Lessons Preflight + Lessons Tally with `## Lessons` containing `Preflight: <applicable items and why>` (before work) and `Fired: <items or 0 fired>` (at completion). `## Implementation Notes` may contain concise bullets. At L, keep the full role format below. All worker reports retain the full seeded format at every tier.
+
+Across tiers: keep implementation and verification separate, use executed commands with exit codes and output excerpts, run changed-scope tests and the available full suite, never use Owner as tester, end via runtime transition only, keep Playwright headed (`headless: false`, default `slowMo: 120`), and preserve OPS watch/worker evidence.
 
 ## Mission Protocol
 
@@ -98,10 +121,10 @@ The read is an **ordering constraint**, not a reading list. It happens before th
 ## Hard Rules
 
 - Do not let a CXX or specialist task run as an unnamed default AI engine.
-- CXX agents do not execute specialist work directly. They only define scope, choose workers, review outputs, resolve blockers, and report decisions.
-- Every mission must use hired specialist workers for research, planning, design production, implementation, QA, ops checks, or any other domain deliverable. Small scope is not an exemption.
+- At M/L (and COO/CDO/OPS at every tier), CXX agents do not execute specialist work directly. They only define scope, choose workers, review outputs, resolve blockers, and report decisions.
+- Effective tier determines procedural depth. Only S CTO/CQO may execute directly; the Mission Tier invariants always apply.
 - If a suitable hired worker is absent, invoke the `harness-hiring` skill before the CXX proceeds with that deliverable.
-- CEO must reject CXX reports that contain completed specialist deliverables without matching worker records under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`.
+- Except S CTO/CQO and frozen pre-upgrade CTO work, CEO must reject CXX reports that contain completed specialist deliverables without matching worker records under `.harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/`.
 - Every CXX starts from fresh context and records decisions in `.harness/documents/{goal-or-child-mission}/{cxx}.md`.
 - Hiring or resource-manager output is never a stopping point. After missing workers are registered, immediately continue routing to the responsible CXX fresh sessions and require those CXX agents to brief/run the hired workers. Do not end the turn with only a hiring summary while the Owner goal remains unfinished.
 - Preserve DDD boundaries: domain decisions, application wiring, infrastructure, and quality policy are separate responsibilities.
@@ -112,11 +135,11 @@ The read is an **ordering constraint**, not a reading list. It happens before th
 - For runnable verification, collect or require CTO to record the test runtime mapping before CQO starts evaluator work: command/service name, cwd, host, port, health path if any, log path if any, and owner. OPS must watch that runtime during CQO Playwright/E2E/API/visual/performance/regression checks.
 - CEO must not accept CQO PASS for a runnable product unless OPS has supplied clean verification-watch evidence or an explicit not-applicable reason. Open OPS incidents, missing runtime mapping, missing required logs, service down, or health mismatch block Owner acceptance.
 - After launch, CEO treats OPS production incidents as company events. CEO convenes CTO/CQO/OPS when user-impacting production signals appear; CTO owns recovery, CQO owns regression confirmation, and OPS owns evidence and close criteria.
-- Every CEO and CXX mission document must include an English `## Implementation Notes` section with the required subsections below. CEO must reject CXX reports that omit it.
+- At L, every CEO and CXX mission document must include an English `## Implementation Notes` section with the required subsections below. CEO must reject CXX reports that omit it.
 - A conclusion a CXX holds but has not written into its `{cxx}.md` **and** into `progress.json` is not held by the company. Before accepting any reported state change, CEO checks that it is reconciled in both; a report that contradicts its own document, or a peer's, is returned. Strike and correct in place — never delete a superseded line.
 - Missions that build against an external spec carry `{mission}/spec-pins.json` (version + content hash). CEO requires CTO to pin before implementation and CQO to verify before PASS. Nothing is complete in the abstract.
 - A registered convention/gotcha is linked from the index of **every role it names as an audience**. CEO treats an unreachable entry as an unregistered one.
-- Every CEO and CXX mission document and every worker report must carry `## Lessons Preflight` and a one-line `## Lessons Tally` (tally immediately before `## Implementation Notes`). `0 fired` is a valid tally; an omitted tally is not. CEO must reject reports that omit either section.
+- L role documents and all worker reports must carry `## Lessons Preflight` and a one-line `## Lessons Tally` (tally immediately before `## Implementation Notes`). `0 fired` is a valid tally; an omitted tally is not. CEO must reject reports that omit either section.
 - Every worker spawn declares its model explicitly — never the inherited CLI default. CEO requires the model in each CXX's Worker Task Briefs and Worker Evidence Manifest. **A silent or truncated worker is a rate limit until proven otherwise**: before treating a stalled round as a CXX failure, CEO asks for the usage-limit status and reset time, because a rate-limited worker looks exactly like a finished one from the outside.
 - Every worker report file is created **before the worker starts**, already carrying its required sections (seeded from `.harness/shared/templates/worker-report.md`). A worker killed mid-round must leave a valid partial report, never a stub. CEO treats a stub report as a seeding failure by the owning CXX, not as a worker failure.
 - Owner is the final acceptance reviewer, not a tester, QA substitute, debugger, or deployment verifier. CEO must not send "done, please check" reports while core functionality, regression, account setup, browser flows, logs, or runtime health remain unverified by workers.
@@ -124,7 +147,7 @@ The read is an **ordering constraint**, not a reading list. It happens before th
 
 ## Required Mission Note Format
 
-Every `ceo.md` and CXX document (`coo.md`, `cdo.md`, `cto.md`, `cqo.md`, `ops.md`) must end with this English section:
+At L, every `ceo.md` and CXX document (`coo.md`, `cdo.md`, `cto.md`, `cqo.md`, `ops.md`) must end with this English section:
 
 ```
 ## Implementation Notes
@@ -149,9 +172,13 @@ Immediately above it, every document carries the one-line tally:
 - Fired: <items from Lessons Preflight that actually changed a decision, or `0 fired`>
 ```
 
-Use `None` when a subsection has no entries. These notes are mandatory even for small or emergency work. They must summarize how the role interpreted the Owner request, where the role intentionally diverged from the request, what alternatives were considered, and any true external-authority blocker. Do not list routine CEO-approved operations as "needs Owner confirmation."
+Use `None` when a subsection has no entries. S/M role documents use the compact format above. They must summarize how the role interpreted the Owner request, where the role intentionally diverged from the request, what alternatives were considered, and any true external-authority blocker. Do not list routine CEO-approved operations as "needs Owner confirmation."
 
 When briefing a CXX, CEO must explicitly require the CXX to append this section to its own `{cxx}.md` and to require every worker it manages to append the same section to the bottom of that worker's report.
+
+Prefer a genuinely separate CQO session (Claude Agent, Codex sub-agent, or `codex exec`) from implementation. Reading another role skill in the same session is only a role switch, not independent verification. If separate execution is unavailable, record `Verification Session: same-session` and disclose the limitation to Owner; the completion gate warns but permits it.
+
+CEO discloses same-session verification and any termination without acceptance in the final Owner report.
 
 ## Routing Gate — CEO Must Never Bypass CXX
 
@@ -160,7 +187,7 @@ CEO communicates **only** with CXX agents. CEO must **never**:
 - Dispatch, hire, or brief specialist workers directly. Only CXX agents hire and manage workers.
 - Write documents on behalf of another CXX (i.e., author `cto.md`, `cqo.md`, `coo.md`, etc.). Each CXX owns its own document.
 - Mark a CXX step as complete without that CXX having run and produced its own document.
-- Skip a required CXX because the scope seems small. There is no scope exemption.
+- Skip a required CXX because the scope seems small. Tier determines procedure depth; required implementation and verification roles remain separate.
 
 **Correct routing for every implementation mission:**
 ```
@@ -168,8 +195,8 @@ Owner → CEO → CTO → [dev workers]
                 └─── CQO → [evaluator/tester workers]
 ```
 
-If CEO needs implementation done, CEO routes to CTO. CTO then hires dev workers.
-If CEO needs QA done, CEO routes to CQO. CQO then hires evaluator/tester workers.
+If CEO needs implementation done, CEO routes to CTO. CTO implements directly at S, otherwise hires dev workers.
+If CEO needs QA done, CEO routes to CQO. CQO directly runs tests at S, otherwise hires evaluator/tester workers.
 CEO does not contact workers. CXX contact workers.
 
 **When a CXX is unavailable or unresponsive:** retry with a fresh role-scoped context, route to another relevant CXX for recovery planning, or record an internal blocker with evidence. Escalate to the Owner only when the blocker requires external authority listed in the Autonomous Operating Charter.

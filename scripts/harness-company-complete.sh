@@ -2,11 +2,11 @@
 # harness-company-complete.sh — mark the current v7 company mission complete.
 #
 # Usage:
-#   bash scripts/harness-company-complete.sh <project-root> [reason]
+#   bash scripts/harness-company-complete.sh <project-root> [reason] [mission-rel]
 #
 # This is the explicit running -> idle/done transition used by dashboard,
 # runner, hooks, and final CEO handoff paths. It intentionally only updates
-# runtime state; it does not archive or rewrite mission documents.
+# runtime state and mission lifecycle; it does not archive mission documents.
 
 set -uo pipefail
 
@@ -25,44 +25,6 @@ command -v jq >/dev/null 2>&1 || {
   echo "[company-complete] jq is required" >&2
   exit 1
 }
-
-# Lessons-before-plan gate (AGENTS.md Hard Rule 20). The Stop hook cannot see
-# this path: once this script sets conductor.state=completed, harness-stop.sh
-# short-circuits at the top, so a mission could complete having never read the
-# corpus simply by firing the transition. Refuse the terminal transition here —
-# this is the transition P6 names, and it is the last point at which refusing
-# still means anything.
-#
-# Safe against deadlock: the gate is scoped to the latest ACTIVE mission, so the
-# stop-hook backstop (which fires only when no mission is active) always passes.
-# Opt out per project with .harness/config.json behavior.lessons_gate=false, or
-# override a single call with HARNESS_SKIP_LESSONS_GATE=1.
-if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-lessons-gate.sh" ]; then
-  if ! gate_out="$(bash "$SCRIPT_DIR/harness-lessons-gate.sh" "$PROJECT_ROOT" text latest-active 2>/dev/null)"; then
-    {
-      echo "[company-complete] REFUSED: the active mission has not recorded what it read before planning."
-      echo "$gate_out"
-      echo "  Add the two sections to each role document, then re-run this transition."
-      echo "  (override: HARNESS_SKIP_LESSONS_GATE=1, or behavior.lessons_gate=false in .harness/config.json)"
-    } >&2
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | refused | lessons-gate (Hard Rule 20)" >> "$PROJECT_ROOT/.harness/progress.log" 2>/dev/null || true
-    exit 1
-  fi
-fi
-
-# Corpus reachability (Hard Rule 11) and spec pins (Hard Rule 4) are re-checked
-# at the same point, for the same reason: both are promises that decay silently
-# between when they are made and when the mission claims to be done.
-if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-corpus-reachability.sh" ]; then
-  if ! reach_out="$(bash "$SCRIPT_DIR/harness-corpus-reachability.sh" "$PROJECT_ROOT" text 2>/dev/null)"; then
-    {
-      echo "[company-complete] REFUSED: corpus entries are unreachable by roles they name as an audience."
-      echo "$reach_out"
-    } >&2
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | refused | corpus-reachability (Hard Rule 11)" >> "$PROJECT_ROOT/.harness/progress.log" 2>/dev/null || true
-    exit 1
-  fi
-fi
 
 state_mtime() {
   stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0
@@ -87,22 +49,115 @@ pick_transition_mission_state() {
   [ -n "$best" ] && printf '%s\n' "$best"
 }
 
+refuse() {
+  echo "[company-complete] REFUSED: $1" >&2
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | refused | $1" >> "$PROJECT_ROOT/.harness/progress.log"
+  if [ -n "${target_state:-}" ] && jq -e '.lifecycle == "complete" or .lifecycle == "completed"' "$target_state" >/dev/null; then
+    echo 'Restore active:true and lifecycle:active, then retry.' >&2
+  fi
+  exit 1
+}
+
+target_state=""
+if [ "$#" -ge 3 ]; then
+  mission_rel="$3"
+  case "$mission_rel" in ""|/*|*..*) refuse invalid-mission-path ;; esac
+  target_dir="$(cd "$DOCS/$mission_rel" 2>/dev/null && pwd -P)" || refuse invalid-mission-path
+  case "$target_dir/" in "$(cd "$DOCS" && pwd -P)/"*) ;; *) refuse invalid-mission-path ;; esac
+  target_state="$target_dir/mission-state.json"
+  [ -f "$target_state" ] || refuse missing-mission-state
+else
+  target_state="$(pick_transition_mission_state)"
+fi
+ended=false
+tiered=false
+gate_scope=latest-active
+# Explicit targets scope the existing lessons gate even for legacy missions.
+if [ "$#" -ge 3 ]; then gate_scope="mission:$3"; fi
+if [ -n "$target_state" ]; then
+  lifecycle=$(jq -r '.lifecycle // .status // "unknown"' "$target_state") || refuse invalid-mission-state
+  case "$lifecycle" in cancelled|superseded|closed) ended=true ;; esac
+  if jq -e 'has("tier")' "$target_state" >/dev/null; then
+    tiered=true
+    mission_rel="${target_state#"$DOCS"/}"
+    # Explicit targets were canonicalized; retain the caller's relative path.
+    if [ "$#" -ge 3 ]; then mission_rel="$3/mission-state.json"; fi
+    mission_rel="${mission_rel%/mission-state.json}"
+    gate_scope="mission:$mission_rel"
+  fi
+fi
+
+if [ "$ended" = false ]; then
+  if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != 1 ] && [ -x "$SCRIPT_DIR/harness-lessons-gate.sh" ]; then
+    gate_out=$(bash "$SCRIPT_DIR/harness-lessons-gate.sh" "$PROJECT_ROOT" text "$gate_scope") || refuse "lessons-gate: $gate_out"
+  fi
+  if [ "$tiered" = true ]; then
+    evidence=$(bash "$SCRIPT_DIR/harness-worker-evidence-validate.sh" "$PROJECT_ROOT" text "$gate_scope") || refuse "worker-evidence: $evidence"
+    mission_dir="$(dirname "$target_state")"
+    [ -f "$mission_dir/cqo.md" ] || refuse missing-verdict
+    verdict=$(awk '
+      /^[[:space:]]*>?[[:space:]]*##[[:space:]]+CQO Verdict([[:space:]]+\([^)]*\))?[[:space:]]*$/ { inb=1; next }
+      /^[[:space:]]*>?[[:space:]]*#{1,2}[[:space:]]/ { inb=0 }
+      inb { candidate=$0; sub(/^[[:space:]>*_-]*/, "", candidate)
+        if (tolower(candidate) ~ /^verdict[*_[:space:]]*:/) last=$0 }
+      END {
+        if (last == "") print "missing"
+        else if (last ~ /^[[:space:]]*>?[[:space:]]*Verdict:[[:space:]]*(PASS|ACCEPTED|FAIL|REJECTED|BLOCKED)[[:space:]]*$/) {
+          sub(/^[[:space:]]*>?[[:space:]]*Verdict:[[:space:]]*/, "", last)
+          sub(/[[:space:]]*$/, "", last); print last
+        } else print "invalid"
+      }
+    ' "$mission_dir/cqo.md") || refuse invalid-final-verdict
+    case "$verdict" in
+      PASS|ACCEPTED) ;;
+      missing) refuse missing-verdict ;;
+      invalid) refuse invalid-final-verdict ;;
+      *) refuse verdict-not-pass ;;
+    esac
+    tier=$(jq -r 'def r: if . == "S" then 0 elif . == "M" then 1 else 2 end;
+      [.tier, (.tier_history[]? | .from, .to)] | map(r) | max' "$target_state") || refuse invalid-tier-state
+    if [ -f "$PROJECT_ROOT/.harness/config.json" ]; then
+      enabled=$(jq -r 'if .behavior.mission_tiers == null then true else .behavior.mission_tiers end' "$PROJECT_ROOT/.harness/config.json") || refuse invalid-config
+      [ "$enabled" != false ] || tier=2
+    fi
+    if [ "$tier" -eq 0 ]; then
+      grep -Eq '^[[:space:]]*>?[[:space:]]*##[[:space:]]+Direct Work[[:space:]]*$' "$mission_dir/cto.md" || refuse missing-direct-work
+      grep -Eq '^[[:space:]]*>?[[:space:]]*##[[:space:]]+Verification Commands[[:space:]]*$' "$mission_dir/cqo.md" || refuse missing-verification-commands
+      session=$(sed -nE 's/^[[:space:]]*Verification Session: (separate|same-session)[[:space:]]*$/\1/p' "$mission_dir/cqo.md" | tail -1)
+      [ -n "$session" ] || refuse missing-verification-session
+      if [ "$session" = same-session ]; then
+        echo '[company-complete] WARNING: same-session-verification; disclose to Owner.' >&2
+        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | warn | same-session-verification" >> "$PROJECT_ROOT/.harness/progress.log"
+      fi
+    fi
+  fi
+fi
+
+# Corpus reachability (Hard Rule 11) and spec pins (Hard Rule 4) are re-checked
+# at the same point, for the same reason: both are promises that decay silently
+# between when they are made and when the mission claims to be done.
+if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-corpus-reachability.sh" ]; then
+  if ! reach_out="$(bash "$SCRIPT_DIR/harness-corpus-reachability.sh" "$PROJECT_ROOT" text 2>/dev/null)"; then
+    refuse "corpus-reachability: $reach_out"
+  fi
+fi
+
 # Spec pins are verified against the mission this transition would close. This
 # sits BEFORE the runtime transition on purpose: a refusal that runs after
 # progress.json is already `completed` has refused nothing.
-if [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-spec-pin.sh" ] && [ -d "$DOCS" ]; then
-  pin_target="$(pick_transition_mission_state)"
+if [ "$ended" = false ] && [ "${HARNESS_SKIP_LESSONS_GATE:-0}" != "1" ] && [ -x "$SCRIPT_DIR/harness-spec-pin.sh" ] && [ -d "$DOCS" ]; then
+  pin_target="$target_state"
   if [ -n "$pin_target" ]; then
     mission_rel="${pin_target#"$DOCS"/}"; mission_rel="${mission_rel%/mission-state.json}"
+    if [ "$#" -ge 3 ]; then mission_rel="$3"; fi
     if ! pin_out="$(bash "$SCRIPT_DIR/harness-spec-pin.sh" "$PROJECT_ROOT" "$mission_rel" verify text 2>/dev/null)"; then
-      {
-        echo "[company-complete] REFUSED: this mission was built against a spec that has since moved."
-        echo "$pin_out"
-      } >&2
-      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | refused | spec-pin drift (Hard Rule 4)" >> "$PROJECT_ROOT/.harness/progress.log" 2>/dev/null || true
-      exit 1
+      refuse "spec-pin drift: $pin_out"
     fi
   fi
+fi
+
+if [ "$ended" = true ]; then
+  echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) | company-complete | ended-without-acceptance | $lifecycle" >> "$PROJECT_ROOT/.harness/progress.log"
 fi
 
 if ! bash "$SCRIPT_DIR/harness-progress-set.sh" "$PROJECT_ROOT" \
@@ -143,11 +198,10 @@ if [ -f "$TODOS" ]; then
 fi
 
 if [ -d "$DOCS" ]; then
-  target_state="$(pick_transition_mission_state)"
   if [ -n "$target_state" ]; then
     lifecycle="$(jq -r '.lifecycle // .status // "unknown"' "$target_state" 2>/dev/null || echo unknown)"
     case "$lifecycle" in
-      closed|cancelled|superseded|complete|completed) ;;
+      closed|cancelled|superseded) ;;
       *)
         tmp="$(mktemp)"
         jq '.lifecycle = "complete" | .active = false | .completed_at = (now | todate) | del(.blocked_reason) | del(.blocked_at)' "$target_state" > "$tmp" && mv "$tmp" "$target_state"

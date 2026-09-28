@@ -1,0 +1,38 @@
+{
+  "agent" : "claude",
+  "cacheCreationTokens" : 116737,
+  "cacheReadTokens" : 866573,
+  "costUSD" : 1.4398426,
+  "durationMs" : 172661,
+  "extraWriteDirs" : [
+
+  ],
+  "inputTokens" : 18,
+  "model" : "claude-opus-5-5[1m]",
+  "ok" : true,
+  "outputTokens" : 16628,
+  "permission" : "plan",
+  "rateLimit" : {
+    "isUsingOverage" : false,
+    "overageDisabledReason" : "org_level_disabled",
+    "overageStatus" : "rejected",
+    "rateLimitType" : "five_hour",
+    "resetsAt" : 1790606400,
+    "status" : "allowed",
+    "unifiedWindows" : {
+      "five_hour" : {
+        "resetsAt" : 1790606400,
+        "utilization" : 0.33000000000000002
+      },
+      "seven_day" : {
+        "resetsAt" : 1790946000,
+        "utilization" : 0.37
+      }
+    }
+  },
+  "requestedModel" : "opus[1m]",
+  "revision" : 3,
+  "role" : "plan",
+  "sessionId" : "6c2a0b1b-8aed-45e4-8e08-d6f9b74509ff",
+  "version" : 2
+}

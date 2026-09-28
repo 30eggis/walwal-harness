@@ -1,0 +1,8 @@
+{
+  "agent" : "claude",
+  "error" : "사용자가 중단했어요",
+  "ok" : false,
+  "requestedModel" : "opus[1m]",
+  "role" : "plan",
+  "version" : 2
+}

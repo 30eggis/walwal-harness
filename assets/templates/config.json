@@ -18,7 +18,7 @@
   },
   "flow": {
     "sequence": ["ceo", "coo", "cdo", "cto", "cqo", "ops"],
-    "worker_gate": "CXX agents must use harness-resource-manager and harness-hiring before specialist deliverables.",
+    "worker_gate": "M/L CXX and S COO/CDO/OPS use harness-resource-manager and harness-hiring; S CTO/CQO execute directly.",
     "worker_reports_required": ".harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/{worker-name}.md",
     "retry_on_fail": true,
     "max_retries_per_sprint": 5,
@@ -166,6 +166,7 @@
     }
   },
   "behavior": {
+    "mission_tiers": true,
     "comment": "하네스 동작 플래그. UserPromptSubmit 훅이 이 값을 읽어 v7 CEO/CXX 라우팅 안내를 결정한다.",
     "auto_route_ceo": true,
     "auto_route_ceo_description": "true 이면 /goal 또는 /hot-fix 이후 Owner 입력을 v7 CEO/CXX mission flow 기준으로 안내한다. 사용자가 'harness skip' 등을 말하면 단일 메시지 한정으로 건너뛴다.",

@@ -24,12 +24,14 @@ OPS must not directly perform DevOps implementation, service fixes, config rewri
 
 ### Lessons Before Plan
 
+At effective tier S/M, role documents may replace Lessons Preflight + Lessons Tally with `## Lessons` containing `Preflight: <applicable items and why>` (before work) and `Fired: <items or 0 fired>` (at completion). `## Implementation Notes` may contain concise bullets. At L, keep the full role format below. All worker reports retain the full seeded format at every tier.
+
 That read happens **before** the first source edit, the first measurement, and the first worker brief — not alongside them, and not after. The corpus is rarely the problem; the ordering is. Then, in `ops.md`, write:
 
 - `## Lessons Preflight` — which convention/gotcha items apply to this mission and why, named by id or heading. Written before any worker is dispatched. If the corpus genuinely has nothing for this topic, say so explicitly.
 - `## Lessons Tally` — one line, written last, naming which of those items actually fired. **`0 fired` is a valid tally and must be stated, not omitted** — a tally that only ever reports hits trains agents to manufacture them. Place it immediately before `## Implementation Notes`.
 
-**Propagate verbatim.** Any requirement this skill places on OPS that its workers must also satisfy — the linked corpus items, the browser-automation clause, the seeded report skeleton, the `## Lessons Tally` line, the `## Implementation Notes` block — is copied **word for word** into every worker brief. *A rule stated one layer above the layer that executes it does not apply,* and a worker cannot infer a rule it was never given.
+**Worker brief:** name the seeded report path and instruct the worker to fill its existing sections incrementally. Do not copy the report skeleton, Tally, or Notes block into the brief. Continue to pass relevant corpus links and copy behavioral requirements absent from the seed (including the browser-automation clause) verbatim.
 
 Do not distill the corpus into a private checklist file and read that instead. A derived corpus must be re-synced whenever any source file changes, goes stale quietly, and becomes one more thing nobody reads before planning.
 
@@ -150,7 +152,7 @@ OPS must not accept worker plans or reports that omit this requirement when brow
 8. Lessons Tally — one line naming which preflight items actually fired. `0 fired` is valid and must be stated.
 9. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
 
-Every OPS worker brief must require the worker to append the same English `## Implementation Notes` block to the bottom of `.harness/documents/{mission_name}/ops/workers/{worker-name}.md`, covering risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.
+Every OPS worker brief must point to the seeded report and require filling its existing English `## Implementation Notes` block to the bottom of `.harness/documents/{mission_name}/ops/workers/{worker-name}.md`, covering risks, self-corrections, chosen direction, and unresolved questions. Use `None` for empty subsections.
 
 ## The Document Is The Record
 

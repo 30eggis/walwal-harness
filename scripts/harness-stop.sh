@@ -160,10 +160,10 @@ if [ -x "$SCRIPT_DIR/harness-worker-evidence-validate.sh" ]; then
   WORKER_EVIDENCE_OK=$(echo "$WORKER_EVIDENCE_JSON" | jq -r 'if has("ok") then .ok else true end' 2>/dev/null || echo true)
   if [ "$WORKER_EVIDENCE_OK" != "true" ]; then
     REASON=$(echo "$WORKER_EVIDENCE_JSON" | jq -r '
-      "CXX 직접 실행 차단: " +
-      ([.violations[] | "\(.mission) has CXX docs without worker reports: \(.docs | join(","))"] | join("; ")) +
-      ". harness-hiring/resource-manager로 전문 worker를 고용 또는 배정하고 .harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/{worker-name}.md 를 남긴 뒤 계속하라."
-    ' 2>/dev/null || echo "CXX 직접 실행 차단: worker report가 없는 active mission이 있습니다. hired worker 보고서를 먼저 생성하세요.")
+      "등급별 worker/문서 증거 차단: " +
+      ([.violations[] | "\(.mission) has evidence violations: \(.docs | join(","))"] | join("; ")) +
+      ". S의 CTO/CQO만 worker 면제이며 S/M 역할 Notes는 축약 가능하다. 나머지는 harness-hiring/resource-manager로 전문 worker를 고용 또는 배정하고 .harness/documents/{goal-or-child-mission}/{owning-cxx}/workers/{worker-name}.md 를 남긴 뒤 계속하라."
+    ' 2>/dev/null || echo "등급별 worker/문서 증거 차단: worker report가 없는 active mission이 있습니다. hired worker 보고서를 먼저 생성하세요.")
     jq -nc --arg reason "$REASON" '{decision:"block", reason:$reason}'
     exit 0
   fi
@@ -184,7 +184,7 @@ if [ -x "$SCRIPT_DIR/harness-lessons-gate.sh" ]; then
       ([.violations[] | "\(.mission) → \(.docs | join(","))"] | join("; ")) +
       ". 각 role 문서에 `## Lessons Preflight`(이 미션에 적용되는 conventions/gotchas 항목과 이유)와 " +
       "그 아래 `## Implementation Notes` 바로 앞에 한 줄짜리 `## Lessons Tally`(실제로 발동한 항목; `0 fired` 도 유효하며 생략은 불가)를 " +
-      "추가한 뒤 계속하라. 코퍼스를 다시 요약한 별도 체크리스트 파일을 만들지 말 것 — 읽는 순서를 고치는 규칙이다."
+      "추가한 뒤 계속하라. S/M 역할 문서는 ## Lessons (Preflight/Fired) 한 섹션으로 대체 가능하다. 코퍼스를 다시 요약한 별도 체크리스트 파일을 만들지 말 것 — 읽는 순서를 고치는 규칙이다."
     ' 2>/dev/null || echo "교훈 선행 게이트(Hard Rule 20): active mission 의 role 문서에 ## Lessons Preflight / ## Lessons Tally 가 없습니다. 먼저 추가하세요.")
     jq -nc --arg reason "$REASON" '{decision:"block", reason:$reason}'
     exit 0

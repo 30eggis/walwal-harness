@@ -11,17 +11,19 @@
 #   ## Lessons Preflight   — which convention/gotcha items apply, and why
 #   ## Lessons Tally       — one line: which of them actually fired ("0 fired" is valid)
 #
-# Usage: harness-lessons-gate.sh <project-root> [text|json] [all|latest-active]
+# Usage: harness-lessons-gate.sh <project-root> [text|json] [all|latest-active|mission:<rel>]
 set -euo pipefail
 
 PROJECT_ROOT="${1:-.}"
 DOC_ROOT="$PROJECT_ROOT/.harness/documents"
 CONFIG="$PROJECT_ROOT/.harness/config.json"
 
-[ -d "$DOC_ROOT" ] || exit 0
-
 mode="${2:-text}"
 scope="${3:-all}"
+if [ ! -d "$DOC_ROOT" ]; then
+  [[ "$scope" != mission:* && "$mode" != direct-work-sha ]] || exit 1
+  exit 0
+fi
 
 # Opt-out for projects that have not adopted the sections yet.
 if command -v jq >/dev/null 2>&1 && [ -f "$CONFIG" ]; then
@@ -57,7 +59,10 @@ mission_mtime() {
   stat -f '%m' "$1" 2>/dev/null || stat -c '%Y' "$1" 2>/dev/null || echo 0
 }
 
-mission_dirs=$(find "$DOC_ROOT" -type f \( -name 'ceo.md' -o -name 'coo.md' -o -name 'cdo.md' -o -name 'cto.md' -o -name 'cqo.md' -o -name 'ops.md' \) -exec dirname {} \; 2>/dev/null | sort -u)
+mission_dirs=""
+if [[ "$scope" != mission:* ]]; then
+  mission_dirs=$(find "$DOC_ROOT" -type f \( -name 'ceo.md' -o -name 'coo.md' -o -name 'cdo.md' -o -name 'cto.md' -o -name 'cqo.md' -o -name 'ops.md' \) -exec dirname {} \; 2>/dev/null | sort -u)
+fi
 
 if [ "$scope" = "latest-active" ]; then
   latest_active_mission=""
@@ -83,14 +88,34 @@ EOF
   mission_dirs="$latest_active_mission"
 fi
 
+if [[ "$scope" == mission:* ]]; then
+  mission_rel="${scope#mission:}"
+  case "$mission_rel" in ""|/*|*..*) echo "invalid mission path" >&2; exit 1 ;; esac
+  mission_dirs="$(cd "$DOC_ROOT/$mission_rel" 2>/dev/null && pwd -P)" || exit 1
+  case "$mission_dirs/" in "$(cd "$DOC_ROOT" && pwd -P)/"*) ;; *) exit 1 ;; esac
+  [ -f "$mission_dirs/mission-state.json" ] || exit 1
+fi
+
 while IFS= read -r mission_dir; do
   [ -n "$mission_dir" ] || continue
   [ -d "$mission_dir" ] || continue
   mission_name="${mission_dir#"$DOC_ROOT"/}"
+  tier=2
+  if [ -f "$mission_dir/mission-state.json" ]; then
+    tier=$(jq -r 'def r: if . == "S" then 0 elif . == "M" then 1 else 2 end;
+      [.tier, (.tier_history[]? | .from, .to)] | map(r) | max' "$mission_dir/mission-state.json")
+  fi
+  if [ -f "$PROJECT_ROOT/.harness/config.json" ]; then
+    enabled=$(jq -r 'if .behavior.mission_tiers == null then true else .behavior.mission_tiers end' "$PROJECT_ROOT/.harness/config.json")
+    [ "$enabled" != false ] || tier=2
+  fi
 
   for role in ceo coo cdo cto cqo ops; do
     role_path="$mission_dir/$role.md"
     [ -s "$role_path" ] || continue
+    if [ "$tier" -lt 2 ] && has_section "$role_path" "Lessons"; then
+      continue
+    fi
     if ! has_section "$role_path" "Lessons Preflight"; then
       violations+=("$mission_name:$role.md-missing-lessons-preflight")
     fi
@@ -116,12 +141,13 @@ if [ "$mode" = "json" ]; then
     | {ok:false, violations:.}
   '
 else
-  echo "Lessons-before-plan violation (AGENTS.md Hard Rule 20):"
+  echo "Lessons-before-plan violation (AGENTS.md Hard Rule 20; unknown tier → L):"
   for violation in "${violations[@]}"; do
     mission="${violation%%:*}"
     docs="${violation#*:}"
     echo "- mission: $mission"
     echo "  issue: $docs"
+    echo "  S/M role documents may instead use ## Lessons (Preflight/Fired)."
     echo "  required: '## Lessons Preflight' (which convention/gotcha items apply, and why)"
     echo "            '## Lessons Tally' (one line: which fired; '0 fired' is valid and must be stated)"
   done

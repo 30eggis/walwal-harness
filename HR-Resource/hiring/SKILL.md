@@ -9,6 +9,8 @@ disable-model-invocation: false
 
 Hire workers from `.harness/shared/HR-Resource/`.
 
+At effective S, CTO/CQO execute directly and do not hire. COO/CDO/OPS worker assignment and evidence requirements remain unchanged at every tier.
+
 ## Required Inputs
 
 - requester
@@ -27,13 +29,13 @@ Hire workers from `.harness/shared/HR-Resource/`.
 5. Update `.harness/shared/hr-roster.json` without deleting existing hired entries. Record `owner` as the owning CXX, `skillPath` as `.harness/shared/HR-Resource/{name}/SKILL.md`, and `skillPaths.claude` / `skillPaths.codex` as tool-specific hierarchical installed paths.
 6. The owning CXX must write worker reports under `.harness/documents/{mission}/{owning-cxx}/workers/{name}.md`. Do not write flat `.harness/documents/{mission}/workers/{name}.md` except when migrating legacy missions.
 7. Ask the `harness-resource-manager` skill to update trigger wording.
-8. Return worker name, owner, declared model, source skill path, installed paths, mission report path, invocation wording, related convention/gotcha links supplied by the owning CXX, and the mandatory report appendix below.
+8. Return worker name, owner, declared model, source skill path, installed paths, mission report path, invocation wording, related convention/gotcha links supplied by the owning CXX, and the instruction to fill the seeded report.
 
 ## Worker Rule Links
 
 Every hired worker receives the owning CXX's relevant convention/gotcha links in the worker brief. Workers read those linked topic files only when they match the assigned task.
 
-Requirements the owning CXX must satisfy and that its worker must also satisfy are copied into the brief **verbatim** — the browser-automation clause, the report skeleton, the `## Lessons Tally` line, the `## Implementation Notes` block. A rule stated one layer above the layer that executes it does not apply. Reject a hire request whose brief omits them.
+**Worker brief:** name the seeded report path and instruct the worker to fill its existing sections incrementally. Do not copy the report skeleton, Tally, or Notes block into the brief. Continue to pass relevant corpus links and copy behavioral requirements absent from the seed (including the browser-automation clause) verbatim. Reject briefs missing the seeded report path or applicable behavioral requirements.
 
 ## Declared Model
 
@@ -47,24 +49,6 @@ The owning CXX creates `.harness/documents/{mission}/{owning-cxx}/workers/{name}
 
 ## Mandatory Worker Report Appendix
 
-Every hired worker must append this English section to the bottom of its existing report:
-
-```
-## Implementation Notes
-
-### Design Decisions
-- ...
-
-### Deviations
-- ...
-
-### Tradeoffs
-- ...
-
-### Open Questions
-- ...
-```
-
-The appendix must summarize risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries.
+The mandatory appendix already exists in the seed template. Return its report path and require the worker to fill risks, self-corrections, chosen direction, and unresolved questions in the existing four Notes subsections (`None` when empty). Do not copy the template into the assignment.
 
 Never mark a missing worker as available.

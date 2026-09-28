@@ -15,16 +15,26 @@ Before quality work, read `.harness/conventions/shared.md`, `.harness/convention
 
 ### Lessons Before Plan
 
+At effective tier S/M, role documents may replace Lessons Preflight + Lessons Tally with `## Lessons` containing `Preflight: <applicable items and why>` (before work) and `Fired: <items or 0 fired>` (at completion). `## Implementation Notes` may contain concise bullets. At L, keep the full role format below. All worker reports retain the full seeded format at every tier.
+
 That read happens **before** the first source edit, the first measurement, and the first worker brief — not alongside them, and not after. The corpus is rarely the problem; the ordering is. Then, in `cqo.md`, write:
 
 - `## Lessons Preflight` — which convention/gotcha items apply to this mission and why, named by id or heading. Written before any worker is dispatched. If the corpus genuinely has nothing for this topic, say so explicitly.
 - `## Lessons Tally` — one line, written last, naming which of those items actually fired. **`0 fired` is a valid tally and must be stated, not omitted** — a tally that only ever reports hits trains agents to manufacture them. Place it immediately before `## Implementation Notes`.
 
-**Propagate verbatim.** Any requirement this skill places on CQO that its workers must also satisfy — the linked corpus items, the browser-automation clause, the seeded report skeleton, the `## Lessons Tally` line, the `## Implementation Notes` block — is copied **word for word** into every worker brief. *A rule stated one layer above the layer that executes it does not apply,* and a worker cannot infer a rule it was never given.
+**Worker brief:** name the seeded report path and instruct the worker to fill its existing sections incrementally. Do not copy the report skeleton, Tally, or Notes block into the brief. Continue to pass relevant corpus links and copy behavioral requirements absent from the seed (including the browser-automation clause) verbatim.
 
 Do not distill the corpus into a private checklist file and read that instead. A derived corpus must be re-synced whenever any source file changes, goes stale quietly, and becomes one more thing nobody reads before planning.
 
-## Workflow
+## Tier S: Direct Verification
+
+At effective S, execute changed-scope tests and the available full suite directly (or cite a still-valid run under Evidence Reuse below), without hiring an evaluator. LLM-only inspection is not verification evidence. In cqo.md write `## Verification Commands` with each command, exit code, and output excerpt, and exactly one `Verification Session: separate|same-session` line (select the actual value). Also keep Lessons, Instrument Validity when relevant, OPS Watch Evidence, CQO Verdict, Recurrence Notes, and concise Implementation Notes.
+
+Prefer a genuinely separate CQO session (Claude Agent, Codex sub-agent, or `codex exec`) from implementation. Reading another role skill in the same session is only a role switch, not independent verification. If separate execution is unavailable, record `Verification Session: same-session` and disclose the limitation to Owner; the completion gate warns but permits it.
+
+OPS watch and OPS worker evidence remain mandatory for runnable verification at every tier. For non-runnable work write `OPS N/A: <reason>`. At M, draft gates in parallel with CTO implementation and use one evaluator worker for final verification; role Lessons/Notes may be compact. The worker workflow below applies to M/L.
+
+## Workflow (M/L)
 
 1. Read CEO and CTO mission context.
 2. Record decisions in `.harness/documents/{goal-or-child-mission}/cqo.md`.
@@ -53,7 +63,7 @@ When the active goal is operating (perpetual, `mission-state.json` lifecycle `op
 CQO must verify the mission in two layers:
 
 1. Changed-scope verification: evaluator/tester workers inspect and test only the files, modules, APIs, flows, and adjacent dependencies identified in CTO's handoff.
-2. Final full-suite gate: CQO runs the project's full test/coverage command once, near the end, through an evaluator/tester worker and normal project tooling.
+2. Final full-suite gate: CQO runs the project's full test/coverage command once valid for the final tree; rerun only when Evidence Reuse conditions fail, through normal project tooling (directly at S, through an evaluator/tester worker at M/L).
 
 CQO must not ask evaluator workers to manually perform full-project test coverage analysis by LLM inspection. The full gate must use fast executable tooling such as `npm test`, `npm run test:coverage`, `pnpm test`, `pytest`, `go test ./...`, CI-equivalent scripts, or the repository's documented command. If no full-suite command exists, CQO records that as a verification gap instead of inventing a manual full-coverage review.
 
@@ -64,6 +74,30 @@ If changed-scope tests or changed-scope coverage fail, CQO returns FAIL or BLOCK
 - Inconclusive: insufficient evidence to distinguish side effect from pre-existing state.
 
 CQO must report any out-of-scope full-suite failure or coverage deficit to CEO and CTO with command output, affected paths, and the classification above. CQO must not expand the mission into broad unrelated test-writing work unless CEO explicitly routes that as a new task.
+
+## Evidence Reuse
+
+These rules apply at S/M/L. A source fingerprint is necessary, not sufficient, for reuse.
+
+1. Run full-suite and E2E commands through `bash scripts/harness-verify-fingerprint.sh run --log <ignored-log-path> [--root DIR] [--include FILE]... -- CMD...`. Copy its emitted `Baseline:` line verbatim into `## Verification Commands`, adding `runtime=` (e.g. `node -v`) and `criteria=` (acceptance-criteria reference). For E2E also record `target=` (host/device/account/build) and `preconditions=` (data/config/session). Commands must take credentials from environment variables, never literal arguments. Log only sanitized output. Relative log/include paths and CMD resolve from the repository root; keep logs gitignored and outside the include set.
+2. Reuse requires a retained log and script-produced `Baseline:` with `exit=0`; a fresh fingerprint command must exit 0 and match that baseline using the same `--include` inputs. `cmd` (including options), `runtime`, and `criteria` must also match. Record `Reused: <baseline document#item> fingerprint=<fp>` only after checking all conditions. A handwritten baseline or a run without a `Baseline:` line cannot be reused. Exit 3 alone is ambiguous: the command itself may return 3.
+3. Non-zero commands, including failures from pre-existing out-of-scope coverage thresholds, cannot supply reusable baselines. Use a command whose exit status matches the acceptance criteria (e.g. full tests separately from the existing changed-scope coverage gate); do not waive failed criteria.
+4. Include ignored environment input files and external E2E scripts with `--include`. Reinstalling dependencies or changing environment files invalidates the baseline. If unchanged dependencies/environment cannot be established, rerun the affected checks. E2E additionally requires identical verified target and preconditions; unknown live server data/session state requires rerunning it.
+5. A defect in verification logic (fail-open, unasserted controls, etc.) invalidates every piece of evidence relying on that logic.
+6. Wait until parallel product edits stop before recording a baseline, or verify in a fixed worktree checkout. Before/after hashes cannot detect a change that is reverted during execution (ABA). A changed tree emits no baseline and exits 3.
+7. At M/L, the evaluator worker decides reuse and CQO cites that report. Reuse has no fixed execution-count cap: valid evidence for the final tree is required, and unchanged conditions do not require another run.
+
+## Verification Artifact Hygiene
+
+Pass this section and Evidence Reuse verbatim to workers writing or delegating verification scripts.
+
+- **Existing tools first:** use the project's scenario runner, test runner, or Playwright configuration before writing a new script.
+- **Secrets:** read credentials only from environment variables and fail non-zero before opening a browser if they are missing. Never put secret values in command arguments, logs, tool output, temporary files, or pattern files. Scan with `bash scripts/harness-secret-scan.sh <VAR_NAME>... -- <artifact-path>...`, never `grep "$VAR"`. Only exit 0 together with `leaks=0` means no leak; exit 2 is an incomplete scan, not a clean result. Do not enable shell tracing for secret handling.
+- **Sanitization:** record URL paths without query strings. Do not record authentication headers, cookies, tickets, or raw request/response bodies; retain only safe key names, counts, and identifiers. Check forbidden patterns immediately before saving results and fail if found.
+- **Captures:** capture only the element under verification or mask sensitive regions. Do not take full-screen captures containing personal information or faces.
+- **Fail closed:** assert required steps instead of hiding them behind `if`; assert exact request counts rather than trusting `every()` on an empty array. Assert both positive and negative controls. Exceptions must exit non-zero; set `pass=true` only after every required check succeeds.
+- **Prove failure paths:** record non-zero exits for missing credentials, missing target or zero requests, failed controls, and exceptions.
+- **Retention:** keep artifacts in gitignored paths, preserve sanitized evidence referenced by a baseline, and delete unsanitized intermediate artifacts after judgment.
 
 ## Reachability, Not Just Reading
 
@@ -86,15 +120,15 @@ Evidence about what did **not** happen is worth exactly as much as the instrumen
 
 ## Hard Rules
 
-CQO must not directly execute QA, visual review, security review, performance testing, or regression checks. CQO may only define gates, select evaluators, review evidence, decide archive eligibility, and document worker names and report paths.
+At M/L, CQO must not directly execute QA, visual review, security review, performance testing, or regression checks. CQO may only define gates, select evaluators, review evidence, decide archive eligibility, and document worker names and report paths.
 
-**A verdict with no Worker Evidence Manifest is invalid.** CQO cannot issue ACCEPTED or REJECTED without at least one evaluator/tester worker record in `cqo.md`. Self-verification by CQO — where CQO writes a verdict based on its own inspection rather than worker-provided evidence — is a protocol violation. If no evaluator workers exist, use `harness-hiring` first.
+**At M/L, a verdict with no Worker Evidence Manifest is invalid.** At M/L, CQO cannot issue ACCEPTED or REJECTED without at least one evaluator/tester worker record in `cqo.md`. LLM-only inspection is invalid at every tier; direct executed tests are permitted only at S. If no evaluator workers exist, use `harness-hiring` first.
 
 **CQO does not communicate with dev workers.** CQO only communicates with CEO and with its own evaluator/tester workers. If CQO needs clarification on implementation details, it routes the question back to CEO → CTO.
 
 Every evaluator/tester dispatched by CQO must write its report under `.harness/documents/{goal-or-child-mission}/cqo/workers/{worker-name}.md`.
 
-**Owner is not the QA tester.** CQO must not approve a handoff that asks the Owner to verify basic functionality, regression safety, browser behavior, account setup, logs, or runtime health. CQO must use evaluator/tester workers to collect the evidence, including E2E/Playwright/browser checks, regression commands, test-account or seeded-data validation, screenshots, logs, and risk notes when relevant. If evidence is missing, CQO verdict is BLOCKED or FAIL, not "ask Owner to check."
+**Owner is not the QA tester.** CQO must not approve a handoff that asks the Owner to verify basic functionality, regression safety, browser behavior, account setup, logs, or runtime health. CQO must collect executed evidence directly at S or through evaluator/tester workers at M/L, including E2E/Playwright/browser checks, regression commands, test-account or seeded-data validation, screenshots, logs, and risk notes when relevant. If evidence is missing, CQO verdict is BLOCKED or FAIL, not "ask Owner to check."
 
 **OPS must watch runnable verification.** When CQO evaluator workers run Playwright, E2E, API, visual, accessibility, performance, or regression checks against a local/dev/preview/Docker/cloud runtime, CQO must request OPS monitoring before issuing PASS. CQO must include OPS evidence in `cqo.md` or mark the verdict BLOCKED. A CQO PASS is invalid if OPS reports an open INCIDENT, missing runtime mapping, required log missing, service down, health mismatch, or unmonitored runtime that is part of the tested scenario.
 
@@ -112,38 +146,20 @@ Required output sections in `cqo.md`:
 3. Worker Evidence Manifest — worker name, declared model, report path, command or artifact evidence, status.
 4. Instrument Validity — for every negative claim: the instrument, its log level and filter (quoted from source when the instrument comes from a dependency), and the positive control that fired in the same run. Negative evidence with no control is BLOCKED, not PASS.
 5. OPS Watch Evidence — ops report path, monitored runtime mapping, incidents/warnings, and whether runtime evidence permits PASS.
-6. CQO Verdict — PASS, FAIL, or BLOCKED based only on worker evidence plus required OPS watch evidence. Must reference Worker Evidence Manifest entries.
-7. Recurrence Notes — accepted gotchas, conventions, memories, or none. Every entry registered here names **every role that should be able to find it** and is linked from each of those roles' indexes; `scripts/harness-corpus-reachability.sh` must pass.
+6. CQO Verdict — inside `## CQO Verdict`, write a dedicated `Verdict: PASS|ACCEPTED|FAIL|REJECTED|BLOCKED` line with exactly one uppercase value. The last verdict candidate across these sections decides: trailing commentary, empty value, bold decoration, or lowercase makes it invalid; no fallback to an older PASS. Use the canonical `## CQO Verdict` heading for re-evaluation too. The completion reader also includes nested headings and parenthesized headings such as `## CQO Verdict (Re-test)` until the next unrelated level-1/2 heading. Label decoration (`**Verdict**: FAIL`) or spacing before the colon (`Verdict : FAIL`) still counts as an attempted verdict but is rejected as invalid. Put reasons on the next line. Correct old verdicts using `~~Verdict: FAIL~~` and a new line. Cite executed evidence (worker manifest at M/L) plus required OPS evidence.
+7. Recurrence Notes — accepted gotchas, conventions, memories, or `none — <reason>` at S/M when recurrence is unlikely and the cause is obvious (L hot-fixes still register a lesson). Every entry registered here names **every role that should be able to find it** and is linked from each of those roles' indexes; `scripts/harness-corpus-reachability.sh` must pass.
 8. Lessons Tally — one line naming which preflight items actually fired. `0 fired` is valid and must be stated.
 9. Implementation Notes — in English, with `Design Decisions`, `Deviations`, `Tradeoffs`, and `Open Questions`.
 
 ## Worker Report Note Requirement
 
-Every CQO evaluator/tester brief must require the worker to append this English block to the bottom of `.harness/documents/{goal-or-child-mission}/cqo/workers/{worker-name}.md`:
-
-```
-## Implementation Notes
-
-### Design Decisions
-- ...
-
-### Deviations
-- ...
-
-### Tradeoffs
-- ...
-
-### Open Questions
-- ...
-```
-
-The worker notes must cover risks, self-corrections, and chosen direction. Use `None` when a subsection has no entries. CQO must not accept evaluator output that omits this block.
+Point the worker to its seeded report path. Require it to fill the existing Implementation Notes (all four subsections, `None` when empty); do not duplicate the template in the brief.
 
 ## The Document Is The Record
 
 A conclusion you hold but have not written into `cqo.md` **is not held by the company.** Before reporting any state change — to CEO, to a peer CXX, to the Owner — reconcile it in your own document *and* in `progress.json`. Strike and correct in place; never delete the superseded line, because a reader arriving later needs to see that it was superseded rather than never written.
 
-Check your document against your peers' documents, not only against itself. The cheap version of this failure is a deliverable table that contradicts three messages you already sent. The expensive version was measured: a completed step reported and accepted, never written to the state file, and an orchestration loop that went on trying to spawn it **70 times**.
+Check the role document against peer documents and runtime state before reporting completion.
 
 ## Worker Spawn Contract
 
@@ -153,4 +169,4 @@ Two things are decided **before** the round starts, not after a worker dies.
 
 **2. Seed the report.** Create `.harness/documents/{goal-or-child-mission}/cqo/workers/{worker-name}.md` **before the worker starts**, already carrying every required section — `## Status` (`IN_PROGRESS`), `## Task`, `## Evidence`, `## Result`, `## Lessons Tally`, and the terminal `## Implementation Notes` block with all four subsections stubbed. Copy `.harness/shared/templates/worker-report.md` when it is installed; otherwise write the skeleton by hand. Brief the worker to fill it in **incrementally as the work happens**, never to assemble the report at the end.
 
-A worker that dies mid-round — rate limit, crash, cancelled session — must leave a **valid partial report, never a stub**. Same failure, opposite outcome, one variable: unseeded workers killed mid-round left stubs and halted the company; a seeded worker killed by the same limit left its report intact and cost nothing. The variable was a decision taken before the round.
+A worker interrupted mid-round must leave a valid partial report, never a stub.

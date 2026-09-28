@@ -1,0 +1,6 @@
+{
+  "agent" : "codex",
+  "mode" : "llm",
+  "reason" : "Codex 는 \/goal 를 쓸 수 없어요 (없음: .codex\/commands\/goal.md, .codex\/skills\/harness-ceo\/SKILL.md) — LLM 으로 해요",
+  "source" : "fallback"
+}

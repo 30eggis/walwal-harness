@@ -31,6 +31,19 @@ docmeta:
 
 ## Unreleased
 
+## 7.1.58 — Mission tiers and evidence-safe completion (2026-09-28)
+
+- Added before/after source fingerprints for verification evidence reuse, conditional on successful baselines and unchanged commands, runtime, criteria, and environment inputs.
+- Added verification artifact hygiene and a secret scanner that accepts environment variable names, emits no matched values, and distinguishes leaks from incomplete scans.
+
+- Added S/M/L routing: S CTO implements and CQO runs tests directly in a separate session; M keeps workers with compact role reports; L retains the full procedure. COO/CDO/OPS workers and runnable verification watch remain required.
+- S/M role documents can use compact Lessons and Implementation Notes. Worker briefs reference seeded reports instead of copying their templates; hot-fix lessons are signal-based at S/M.
+- Review hardening: decorated verdict labels and whitespace before the colon are invalid final candidates; nested re-evaluation and parenthesized CQO Verdict sections are included. Explicit legacy completion checks the selected mission’s lessons rather than latest-active.
+- Completion accepts an explicit mission path and checks evidence before state changes. Only the last verdict candidate counts; malformed final verdicts cannot resurrect an earlier PASS. Cancelled/superseded/closed missions end without acceptance and retain their lifecycle.
+- Effective tiers use numeric history ranks, including both endpoints. S upgrade exemptions require an unchanged Direct Work SHA and declared post-upgrade work. Legacy completion and the mission_tiers=false opt-out remain supported.
+- Validation: 91 transition/lessons cases plus SHA/Stop/backstop checks pass; dashboard unit/company-flow tests (25) and installed sandbox tests (9) pass. Syntax checks, install-contract checks, and npm pack dry-run pass. `bash tests/mission-tiers.sh` covers verdicts, unchanged state on refusal, non-acceptance endings, OPS evidence, upgrades, legacy behavior and Stop integration. The sandbox migration test now compares the installed bundle version with package.json instead of stale 7.1.48.
+- Performance comparison: the design targets 2–3 S sessions (plus OPS when applicable), versus the previous estimated 7–9. These are routing estimates, not measured results. A paired live LLM `/hot-fix` benchmark (same function bug + test, calls/time/document count and command/exit-code evidence) was not run in this implementation session; no wall-clock speedup is claimed.
+
 ## 7.1.57 — Reading is not reaching: corpus reachability, spec pins, the document is the record (2026-09-01)
 Applies the field-trial revision of the change proposal. Its P1/P4/P5/P6/P9 shipped in 7.1.55–56 and the trial marks them **field-tested** — briefed verbatim into two agents that were not told they were observed, scored on instruments fixed in advance: correct ordering, 4 real citations, 0 fabrications, and a published not-read list. **Three proposals are new, and one claim was corrected.**
 

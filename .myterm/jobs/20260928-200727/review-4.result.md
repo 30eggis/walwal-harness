@@ -1,0 +1,31 @@
+# Claude 리뷰 (4차)
+
+**판정:** 승인
+
+요약에 적힌 변경은 합의된 4차 설계와 코드가 일치합니다. 대상은 신규 스크립트 두 개(`harness-verify-fingerprint.sh`, `harness-secret-scan.sh`), CQO·CTO 스킬, 두 템플릿의 괄호 문구, CHANGELOG, 회귀 테스트입니다. 설계리뷰에서 반영하기로 한 두 지적도 코드에서 확인했습니다. 첫째, 누출 검사에서 grep rc≥2이면 `leaks=0`을 출력하지 않고 exit 2로 끝납니다. 둘째, 과거 기록은 재사용 불가로, 가상 적용은 전제로 분리돼 있습니다. 이 세션은 명령 실행 권한이 막혀 테스트를 직접 돌리지 못했습니다. 대신 work-4 trace에서 `PASS: 62 evidence checks`, `PASS: 91`, npm pack 실행, init 실행 기록을 확인했습니다. 고쳐야 할 결함은 없고, 지문 입력과 누출 검사가 다루지 못하는 경계에 관한 낮은 등급 지적만 남깁니다.
+
+## 확인한 것
+
+- git status --short: 신규 파일 `scripts/harness-verify-fingerprint.sh`, `scripts/harness-secret-scan.sh`(둘 다 실행 권한 있음), `tests/verify-evidence.sh`를 확인했습니다. 다른 작업 파일(tier 관련 변경 등)은 리뷰 대상에서 뺐습니다
+- harness-verify-fingerprint.sh 전체를 읽었습니다. `--root`는 `.`이 기본값입니다. git 저장소가 아니면 fail로 exit 2이고 stdout은 비어 있습니다. shasum을 먼저 쓰고 없으면 sha256sum을 쓰며, 둘 다 없으면 exit 2입니다. 지문 입력은 HEAD, `.harness`·`.myterm`을 뺀 `git diff HEAD --binary`, 비추적 파일 해시, `--include` 해시이고, 파일이 없으면 MISSING 표지를 넣습니다. run 모드는 전후 지문이 다르면 exit 3이고 Baseline 줄이 없으며, 같으면 Baseline 줄을 출력하고 CMD의 rc로 끝납니다. ponytail ABA 주석도 있습니다. 모두 설계의 변경 파일·검증 규칙과 일치합니다
+- 파이프라인 안의 `return 2`와 `exit 2`가 pipefail로 전파돼 `|| return 2`로 이어지는 실패 경로를 정적으로 추적했습니다. 로그를 BEFORE 지문을 계산한 뒤에 만들기 때문에, gitignore되지 않은 로그는 exit 3이 됩니다(안전 쪽이며 테스트로 고정돼 있습니다)
+- harness-secret-scan.sh 전체를 읽었습니다. 변수 이름의 정규식 검증, 비었거나 설정되지 않은 값과 없는 경로는 exit 2이고, `${!1}`로 값을 읽습니다. 프로세스 치환 `<(printf)`로 `grep -f`에 패턴을 넘기므로 값이 argv에 실리지 않습니다. rc 0이면 leak 줄과 `leaks=N`을 내고 exit 1, rc 1이면 `leaks=0`과 exit 0, rc 2 이상이면 leak 줄만 내고 stderr에 'scan incomplete'를 쓴 뒤 exit 2입니다. 어느 경로에서도 값을 출력하지 않습니다. 설계리뷰의 MEDIUM 반영을 코드로 확인했습니다
+- HR-Resource/cqo/SKILL.md: 31행 Tier S 괄호 문구, 66행 'once valid for the final tree', 78~88행 Evidence Reuse 1~7번, 90~100행 Verification Artifact Hygiene(기존 도구 우선, 비밀정보, 정제, 캡처, fail-closed, 실패 경로 입증, 보관)이 설계 항목과 모두 대응합니다
+- HR-Resource/cto/SKILL.md:92에서 Test Coverage Scope에 두 절을 워커 브리프로 그대로 옮기라는 한 줄을 확인했습니다
+- assets/templates/AGENTS.md.template:109와 AGENTS-ko.md.template:95에서 재사용 괄호 문구를 확인했습니다
+- CHANGELOG.md의 7.1.58 항목에서 새 줄 두 개(지문 기반 재사용, 위생·누출 검사)를 확인했습니다
+- tests/verify-evidence.sh 전체를 읽었습니다. 설계 테스트 계획의 모든 사례를 assert합니다: 지문 불변과 변경, staged 변경, .harness·.myterm, gitignore된 산출물, `--include`의 생성·변경·삭제, 저장소가 아닐 때와 경로가 없을 때, run 모드의 true·false·exit 3·트리 변경, 누출 검사의 누출·깨끗함·설정 안 됨·빈 값·잘못된 이름·경로 없음, 읽기 오류 단독, 누출과 읽기 오류 동시 발생(root면 SKIP). 출력에 값이 없는지도 검사합니다
+- bin/init.js:110-111에서 `.sh` 파일에 chmod 755를 하는 것과 package.json files의 `scripts/`를 확인했습니다. 신규 스크립트의 설치 경로와 패키지 포함 근거입니다
+- 직접 실행한 `bash tests/verify-evidence.sh`, `bash -n`, 지문 계산 명령은 권한 거부(don't ask mode)로 돌리지 못했습니다. 대신 `.myterm/jobs/20260928-200727/work-4.trace.jsonl`에서 'PASS: 62 evidence checks', 'PASS: 91', npm pack 실행, walwal-v7-init-test 실행 기록을 확인했습니다
+- verification-analysis.md를 읽었습니다. 시간 재측정 결과(시나리오 작업 237.3분·105.9분으로 정정), 위생 대조표 10건과 미연결 0건, 과거 기록의 재사용 불가와 가상 적용의 분리가 요약의 주장과 일치합니다
+- 설계리뷰 4차는 지적 없이 합의로 끝났습니다. 이전 MEDIUM(누출 검사 실패 구분)과 LOW(과거 재사용 판정 모순)의 반영을 코드와 문서에서 확인했습니다
+
+## 지적 사항
+
+### [LOW] 누출 검사가 압축·인코딩된 산출물 안의 값은 찾지 못하는데, 규칙은 exit 0이면 누출 없음이라고 적습니다
+
+`scripts/harness-secret-scan.sh`는 `grep -rlF`로 평문만 비교합니다. 그래서 Playwright `trace.zip`, 영상, HAR·스크린샷 속 base64나 URL 인코딩된 값은 찾지 못하고 `leaks=0`과 exit 0으로 끝납니다. 그런데 `HR-Resource/cqo/SKILL.md:95`는 'exit 0과 leaks=0이면 누출 없음'이라고만 적고 있어, 압축 산출물에 대해 잘못된 안심을 줄 수 있습니다. 고치는 방법: 위생 조항에 '평문 파일에만 유효하다. 압축(zip·trace) 산출물은 풀어서 검사하거나 보관 대상에서 뺀다'는 한 줄을 추가합니다.
+
+### [LOW] gitignore되지 않은 비추적 디렉터리나 깨진 심볼릭 링크가 하나라도 있으면 지문 계산 전체가 exit 2로 끝납니다
+
+`scripts/harness-verify-fingerprint.sh`의 `file_input`은 경로가 존재하지만 일반 파일이 아니면(`[ -f ]` 실패) return 2를 돌려줍니다. `git ls-files --others`는 중첩된 git 저장소를 `dir/` 항목으로 내놓고, 대상이 없는 심볼릭 링크도 비추적 항목으로 내놓습니다. 어느 쪽이든 run 모드는 CMD를 실행하기도 전에 'cannot fingerprint inputs'로 끝납니다. 동작은 fail-closed라 안전하지만, 이런 저장소에서는 기준 실행을 아예 만들 수 없습니다. 고치는 방법(선택): 디렉터리 항목은 경로와 `DIR` 표지를, 심볼릭 링크는 `readlink` 결과를 해시하게 합니다. 또는 스킬에 이 제약을 한 줄로 적습니다.

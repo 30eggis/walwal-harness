@@ -74,6 +74,26 @@
 
 ## 5. 진입점
 
+### 미션 등급
+
+CEO는 intake에서 `mission-state.json`에 `tier: "S"|"M"|"L"`을 기록하고 `ceo.md`에 근거 한 줄을 남긴다. Owner에게 분류를 묻지 않는다.
+
+| 등급 | 기준과 실행 |
+|---|---|
+| S | 예상 변경 파일 3개 이하 또는 약 150줄 이하. 새 의존성·외부 스펙 및 auth·결제·보안·데이터 마이그레이션·인프라·새 포트가 없고 기존 테스트로 검증 가능. CTO 직접 구현, 별도 CQO 세션에서 직접 검증. CTO/CQO용 hiring 생략. |
+| M | 나머지 유한 작업. 구현 worker와 평가 worker 1명. CQO는 CTO 구현과 병렬로 게이트 초안을 작성할 수 있다. |
+| L | 새 서비스·포트, 외부 스펙, 영구 운영, production 배포, 보안·결제·데이터 변경. 기존 worker 절차 유지. |
+
+L 위험 기준이 규모보다 우선한다. 필요한 CXX만 호출한다. COO/CDO/OPS가 참여하면 등급과 무관하게 기존 worker 규칙을 따른다. 러너블 검증의 OPS watch도 유지한다. 비러너블이면 `OPS N/A: <이유>`를 기록한다.
+
+유효 등급은 현재 tier와 `tier_history[]`의 `from`·`to` 모두의 최대 순위다(S=0, M=1, L=2; 미지 값·누락=2). 문자열 순서로 비교하지 않는다. `behavior.mission_tiers=false`는 L을 강제하며 null만 기본 true로 읽는다. tier 필드가 없는 legacy는 L 절차를 따르되 새 완료 검사는 적용하지 않는다.
+
+규모 초과·위험 영역 접촉·CQO FAIL 2회면 상향한다. 현재 tier를 올리고 `{from,to,at,reason}`을 이력에 추가한다. 하향 이력은 유효 등급을 낮추지 않는다. S→M/L에서는 상향 전에 `bash scripts/harness-worker-evidence-validate.sh . direct-work-sha mission:<mission-rel>` 출력값을 `direct_work_sha256`으로 이력에 기록하고 CTO의 `## Direct Work` 본문을 동결한다. 해시가 없으면 면제되지 않고, 본문이 바뀌면 거부된다. 상향 후 CTO는 `## Post-Upgrade Work`에 추가 구현을 기록하고 worker에게 맡긴다. 추가 구현이 없으면 첫 비공백 줄에 `none — <이유>`를 쓴다. CQO 최종 검증은 새 등급의 평가 worker가 수행한다. M→L은 역할 보고서만 전체 형식으로 보강한다.
+
+S/M 역할 보고서는 `## Lessons`에 `Preflight: <항목과 이유>`와 `Fired: <항목 또는 0 fired>`를 쓰고, `## Implementation Notes`는 bullet 요약으로 쓴다. L 역할 및 모든 worker 보고서는 기존 전체 형식을 유지한다. 브리프에는 seed된 보고서 경로와 기존 섹션 작성 지시를 넣고 골격·Tally·Notes 블록을 복사하지 않는다. seed에 없는 행동 규칙(브라우저 자동화 등)은 원문으로 전달한다.
+
+모든 등급에서 구현·검증 분리, 실행 명령·exit code·출력 증거, 변경 범위 및 제공된 전체 테스트 실행(이전 실행은 CQO 증거 재사용 조건을 충족할 때만 재사용), Owner 테스터 금지, runtime 전이 종료, headed Playwright, OPS 검증 증거를 유지한다.
+
 Owner가 회사에 접근하는 명령은 세 개뿐이다. 그 외의 경로는 없다.
 
 | 명령 | 사용 시점 |
@@ -101,10 +121,14 @@ Owner
 각 CXX는:
 - **독립된 fresh session 컨텍스트**에서 실행된다 — CEO 세션과 메모리를 공유하지 않는다
 - 결정을 `.harness/documents/{goal-or-child-mission}/{cxx}.md`에 기록한다
-- 모든 전문 작업을 hired worker에게 위임한다 — 직접 실행하지 않는다
+- M/L에서는 전문 작업을 worker에게 위임한다. S에서는 CTO가 직접 구현하고 CQO가 별도 세션에서 검증한다. COO/CDO/OPS는 모든 등급에서 worker를 사용한다.
 - 필요한 worker가 없으면 `harness-hiring`을 먼저 호출한다
 
-CEO는 worker 기록 없이 완료된 산출물을 포함한 CXX 보고서를 거부한다.
+CEO는 S의 CTO/CQO 및 동결된 상향 전 CTO 작업 외에는 worker 증거를 요구한다.
+
+Prefer a genuinely separate CQO session (Claude Agent, Codex sub-agent, or `codex exec`) from implementation. Reading another role skill in the same session is only a role switch, not independent verification. If separate execution is unavailable, record `Verification Session: same-session` and disclose the limitation to Owner; the completion gate warns but permits it.
+
+For acceptance, leave the mission active and run `bash scripts/harness-company-complete.sh . <reason> <mission-rel>` as the final action; the script checks evidence before writing `complete` and `active:false`. On refusal, keep working. For termination without acceptance, first write lifecycle `cancelled`, `superseded`, or `closed` and `active:false`, then call the same explicit transition. `closed` means ended without acceptance; disclose “미수락 종료” in the Owner report and never archive without PASS. For an external-authority block, record `blocked`/`active:false` and run `bash scripts/harness-company-block.sh . "<exact missing authority>"`. `<mission-rel>` is the path relative to `.harness/documents/`.
 
 ## 7. Owner 역할
 
@@ -128,7 +152,7 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 
 1. CEO가 Owner 요청을 읽고 판단한다: 브레인스토밍 먼저, 또는 즉시 실행.
 2. CEO가 관련 CXX에게만 범위를 한정한 질문을 전달한다.
-3. 각 CXX가 worker를 고용하고, 위임하고, 결과를 수집하여 `{cxx}.md`에 기록한다.
+3. 각 CXX가 유효 등급에 따라 직접 실행하거나 worker에게 위임하고, 결과를 수집하여 `{cxx}.md`에 기록한다.
 4. CEO가 CXX 산출물을 종합하여 다음 CXX에 라우팅하거나 Owner에게 보고한다.
 5. 실행 가능한 local, preview, Docker, production-like 환경이 포함된 mission이면, CQO evaluator worker가 Playwright/E2E/API/visual/performance/regression 검수를 수행하는 동안 OPS가 해당 runtime을 관제한다.
 
@@ -147,12 +171,12 @@ Owner는 최종 검수자다. Tester, QA worker, debugger, 배포 확인 담당�
 ### Hot Fix
 
 1. CEO가 긴급 요청을 받고 즉시 CTO와 CQO를 소집한다.
-2. CTO가 최소 패치 경로를 설계하고 구현 worker를 고용한다.
-3. Worker가 구현한다. CTO가 worker 증거를 검증하고 `cto.md`를 작성한다.
-4. CQO가 회귀 게이트를 실행한다. `.harness/gotchas/` 또는 `.harness/conventions/`에 교훈을 등록하고 `cqo.md`를 작성한다.
+2. CTO가 최소 패치 경로를 설계하고 S는 직접 구현하고 M/L은 구현 worker를 고용한다.
+3. 등급에 따라 CTO 또는 worker가 구현한다. CTO가 worker 증거를 검증하고 `cto.md`를 작성한다.
+4. CQO가 회귀 게이트를 실행한다. 등급과 재발 신호에 따라 교훈을 기록하고 `cqo.md`를 작성한다.
 5. CQO 판정 **PASS** 이후에만 archive한다.
 
-**완료 기준:** `cto.md`, `cqo.md`, 그리고 최소 하나의 신규 gotcha 또는 convention 항목이 존재한다.
+**완료 기준:** `cto.md`, `cqo.md`, 그리고 재발 가능성에 따른 교훈 또는 `none — <이유>` 기록이 존재한다.
 
 주의: harness 문서(ceo.md, cto.md, cqo.md, worker 보고서)에 대한 docmeta skip 판단은 미션 프로토콜 단계를 건너뛸 권한을 부여하지 않는다. 이 파일들은 분석 산출물이 아니라 미션 기록이다.
 
@@ -188,14 +212,14 @@ CEO, CXX, hired worker의 모든 Playwright 사용은 실제로 보이는 브라
 
 1. **`{mission}/cto.md` 없이 소스 코드 편집 금지** — CTO의 범위 승인이 있어야 소스 파일을 수정할 수 있다.
 2. **CXX 사칭 금지** — 현재 모델이 CEO/CTO/CQO를 인라인으로 대행하지 않는다. 설치된 harness skill을 fresh session에서 사용한다.
-3. **이름 없는 worker 금지** — 모든 전문 작업은 `harness-hiring` → `harness-resource-manager`를 거친다.
-4. **CQO 판정 없이 archive 금지** — 명시적 PASS가 담긴 `{mission}/cqo.md`가 존재해야 한다.
-5. **gotcha 등록 생략 금지** — 모든 hot-fix는 `.harness/gotchas/` 또는 `.harness/conventions/`에 최소 하나의 항목을 만든다.
+3. **이름 없는 worker 금지** — S CTO/CQO 직접 실행을 제외한 전문 작업은 `harness-hiring` → `harness-resource-manager`를 거친다.
+4. **CQO 판정 없이 archive 금지** — CQO Verdict 섹션들의 마지막 `Verdict:` 후보가 유효한 대문자 PASS/ACCEPTED여야 한다. 마지막 후보가 무효이면 이전 PASS로 돌아가지 않는다. 사유는 다음 줄에 쓴다.
+5. **신호 기반 교훈 등록** — S/M은 재발 가능하거나 원인이 비자명할 때 등록하고, 아니면 Recurrence Notes에 `none — <이유>`를 쓴다. L은 기존 등록 의무를 유지한다.
 6. **미션 중 이 파일 편집 금지** — AGENTS.md를 수정하려면 별도 `/goal`을 제출한다.
 7. **Owner는 최종 검수만 수행** — Owner는 tester나 QA 대체자가 아니다. CEO/CXX는 worker-backed verification으로 goal 완료 가능성을 증명하기 전까지 "완료했습니다, 확인해 주세요"라고 보고하지 않는다.
 8. **OPS는 CQO 검수 중 관제한다** — 실행 가능한 제품에서 CQO PASS는 OPS가 검수 runtime을 관제했거나 OPS watch가 불필요한 이유를 기록했을 때만 유효하다. 열린 OPS incident, runtime mapping 누락, 필수 로그 누락, service down, health mismatch, 검수 대상 service 미관제는 Owner acceptance를 막는다.
 9. **Production incident는 회사 이벤트다** — 오픈 후 사용자 영향 OPS signal은 CEO를 통해 CTO/CQO/OPS로 라우팅된다. CTO는 복구, CQO는 회귀 검증, OPS는 증거와 close criteria를 책임진다.
-10. **Implementation Notes는 같은 보고서 하단에 작성** — `ceo.md`, 모든 `{cxx}.md`, 모든 worker report는 하나의 English `## Implementation Notes` 섹션으로 끝나야 한다. 별도 sidecar notes 파일을 만들지 않는다. 결정/증거를 만든 동일한 role 또는 worker report 하단에 `Design Decisions`, `Deviations`, `Tradeoffs`, `Open Questions`를 작성하고 빈 항목은 `None`을 사용한다.
+10. **Implementation Notes는 같은 보고서 하단에 작성** — S/M 역할 문서는 `## Lessons`(Preflight/Fired 두 줄)와 Notes bullet 요약을 허용한다. 아래 전체 형식은 L 역할 및 모든 worker 보고서에 적용한다. `ceo.md`, 모든 `{cxx}.md`, 모든 worker report는 하나의 English `## Implementation Notes` 섹션으로 끝나야 한다. 별도 sidecar notes 파일을 만들지 않는다. 결정/증거를 만든 동일한 role 또는 worker report 하단에 `Design Decisions`, `Deviations`, `Tradeoffs`, `Open Questions`를 작성하고 빈 항목은 `None`을 사용한다.
 11. **Playwright는 visible이 기본값이다** — 모든 Playwright/browser automation은 headed/visible mode(`headless: false` 또는 동등한 설정)를 사용한다. Headless Playwright는 mission에 기록된 Owner의 명시적 승인이 필요하다.
 
 ---
